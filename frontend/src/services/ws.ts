@@ -1,0 +1,134 @@
+import { TimelineEvent } from '../types';
+
+export interface WebSocketMessage {
+  type: string;
+  run_id?: string;
+  frame_jpeg_base64?: string;
+  event_name?: string;
+  state?: string;
+  message?: string;
+  stats?: {
+    discovered: number;
+    matched: number;
+    applied: number;
+  };
+  payload?: any;
+  timestamp?: string;
+  command?: string;
+  status?: string;
+  challenge_type?: string;
+}
+
+export type FrameListener = (base64Jpeg: string) => void;
+export type EventListener = (event: TimelineEvent) => void;
+export type MessageListener = (msg: WebSocketMessage) => void;
+
+class WebSocketClient {
+  private socket: WebSocket | null = null;
+  private frameListeners: Set<FrameListener> = new Set();
+  private eventListeners: Set<EventListener> = new Set();
+  private messageListeners: Set<MessageListener> = new Set();
+  private reconnectTimeout: any = null;
+  private isExplicitClose = false;
+
+  connect() {
+    this.isExplicitClose = false;
+    const token = localStorage.getItem('auth_token');
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/ws${token ? `?token=${token}` : ''}`;
+
+    try {
+      this.socket = new WebSocket(wsUrl);
+
+      this.socket.onopen = () => {
+        console.log('[WebSocket] Connected to ApplyFlow Live Stream.');
+        if (this.reconnectTimeout) {
+          clearTimeout(this.reconnectTimeout);
+          this.reconnectTimeout = null;
+        }
+      };
+
+      this.socket.onmessage = (event) => {
+        try {
+          const msg: WebSocketMessage = JSON.parse(event.data);
+
+          // 1. Visual Frame
+          if (msg.type === 'BROWSER_FRAME' && msg.frame_jpeg_base64) {
+            this.frameListeners.forEach((listener) => listener(msg.frame_jpeg_base64!));
+          }
+
+          // 2. Automation Timeline Event
+          if (msg.type === 'AUTOMATION_TIMELINE_EVENT' || msg.type === 'APPLICATION_EVENT') {
+            const timelineEvt: TimelineEvent = {
+              run_id: msg.run_id || '',
+              event_name: msg.event_name || msg.type,
+              state: msg.state || 'ACTIVE',
+              message: msg.message || '',
+              stats: msg.stats,
+              payload: msg.payload,
+              timestamp: msg.timestamp || new Date().toISOString(),
+            };
+            this.eventListeners.forEach((listener) => listener(timelineEvt));
+          }
+
+          // 3. Generic Message Dispatch
+          this.messageListeners.forEach((listener) => listener(msg));
+        } catch (err) {
+          console.error('[WebSocket] Error parsing message:', err);
+        }
+      };
+
+      this.socket.onclose = () => {
+        if (!this.isExplicitClose) {
+          this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
+        }
+      };
+
+      this.socket.onerror = (err) => {
+        console.warn('[WebSocket] Connection error:', err);
+      };
+    } catch (e) {
+      console.error('[WebSocket] Failed to connect:', e);
+    }
+  }
+
+  disconnect() {
+    this.isExplicitClose = true;
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+  }
+
+  sendCommand(command: string, runId?: string, input?: string) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(
+        JSON.stringify({
+          command,
+          run_id: runId,
+          input,
+        })
+      );
+    } else {
+      console.warn('[WebSocket] Cannot send command; socket not connected.');
+    }
+  }
+
+  onFrame(listener: FrameListener) {
+    this.frameListeners.add(listener);
+    return () => this.frameListeners.delete(listener);
+  }
+
+  onEvent(listener: EventListener) {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
+  }
+
+  onMessage(listener: MessageListener) {
+    this.messageListeners.add(listener);
+    return () => this.messageListeners.delete(listener);
+  }
+}
+
+export const wsClient = new WebSocketClient();

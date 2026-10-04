@@ -1,0 +1,43 @@
+# Python virtual environment & cache
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment Variables & Secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+
+# Databases & local storage
+*.db
+*.sqlite3
+app.db
+backend/app.db
+storage/
+backend/storage/
+backend/app/storage/
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.npm
+npm-debug.log*
+
+# Playwright & Browser Sessions
+.playwright/
+browser_profiles/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
