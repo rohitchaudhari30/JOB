@@ -33,6 +33,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             )
             for q in (model.questions or [])
         ]
+        job_title = model.job.title if getattr(model, "job", None) else None
+        company = model.job.company if getattr(model, "job", None) else None
         return Application(
             id=model.id,
             user_id=model.user_id,
@@ -46,6 +48,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             screenshot_file_path=model.screenshot_file_path,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            job_title=job_title,
+            company=company,
             questions=questions,
         )
 
@@ -53,7 +57,10 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
         stmt = (
             select(ApplicationModel)
             .where(ApplicationModel.id == application_id)
-            .options(selectinload(ApplicationModel.questions))
+            .options(
+                selectinload(ApplicationModel.questions),
+                selectinload(ApplicationModel.job),
+            )
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
@@ -66,7 +73,10 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                 ApplicationModel.user_id == user_id,
                 ApplicationModel.job_id == job_id,
             )
-            .options(selectinload(ApplicationModel.questions))
+            .options(
+                selectinload(ApplicationModel.questions),
+                selectinload(ApplicationModel.job),
+            )
         )
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
@@ -136,7 +146,10 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
         stmt = (
             select(ApplicationModel)
             .where(ApplicationModel.user_id == user_id)
-            .options(selectinload(ApplicationModel.questions))
+            .options(
+                selectinload(ApplicationModel.questions),
+                selectinload(ApplicationModel.job),
+            )
         )
         if state:
             stmt = stmt.where(ApplicationModel.workflow_state == state)

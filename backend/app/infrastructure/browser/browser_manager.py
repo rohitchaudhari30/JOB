@@ -54,6 +54,7 @@ class PlaywrightBrowserManager:
     async def _start_playwright_instance(self):
         if not self._playwright:
             self._playwright = await async_playwright().start()
+        if not self._browser:
             launch_args = [
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",

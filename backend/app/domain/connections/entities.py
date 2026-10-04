@@ -51,6 +51,7 @@ class BrowserSession(BaseModel):
     id: str
     connection_id: str
     user_id: str
+    source_id: Optional[str] = None
     encrypted_storage_state: str  # AES-256-GCM ciphertext
     status: str = "ACTIVE"
     expires_at: Optional[datetime] = None

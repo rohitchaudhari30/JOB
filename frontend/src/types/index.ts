@@ -153,6 +153,8 @@ export interface Application {
   updated_at?: string;
   questions: ApplicationQuestion[];
   job?: Job;
+  job_title?: string;
+  company?: string;
 }
 
 export interface ApplicationStats {

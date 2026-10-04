@@ -72,7 +72,7 @@ export const ScheduleManager: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 animate-fadeIn max-w-5xl">
+    <div className="space-y-8 animate-fadeIn w-full">
       <div className="flex items-center justify-between p-6 rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 shadow-sm">
         <div className="flex items-center space-x-2">
           <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />

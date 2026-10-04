@@ -179,7 +179,7 @@ export const PlatformConnections: React.FC = () => {
   const connectedCount = connections.filter((c) => c.status === 'CONNECTED').length;
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto animate-fadeIn pb-12">
+    <div className="space-y-6 w-full animate-fadeIn pb-12">
       {/* Toast Notification */}
       {toast && (
         <div

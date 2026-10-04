@@ -171,11 +171,13 @@ class ConnectionManager(ConnectionManagerInterface):
                     id=str(uuid.uuid4()),
                     connection_id=saved_conn.id,
                     user_id=user_id,
+                    source_id=platform,
                     encrypted_storage_state=encrypted_state,
                     status="ACTIVE",
                     last_used_at=now,
                 )
             else:
+                sess.source_id = platform
                 sess.encrypted_storage_state = encrypted_state
                 sess.status = "ACTIVE"
                 sess.last_used_at = now

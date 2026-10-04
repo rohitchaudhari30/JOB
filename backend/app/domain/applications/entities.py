@@ -65,4 +65,6 @@ class Application:
     screenshot_file_path: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    job_title: str | None = None
+    company: str | None = None
     questions: List[ApplicationQuestion] = field(default_factory=list)

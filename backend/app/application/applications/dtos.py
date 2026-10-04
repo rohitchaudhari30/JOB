@@ -28,6 +28,8 @@ class ApplicationResponseDTO(BaseModel):
     failure_reason: Optional[str] = None
     trace_file_path: Optional[str] = None
     screenshot_file_path: Optional[str] = None
+    job_title: Optional[str] = None
+    company: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     questions: List[ApplicationQuestionDTO] = []

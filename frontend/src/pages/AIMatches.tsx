@@ -175,10 +175,10 @@ export const AIMatches: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                AI Job Matches &amp; Nuance Breakdown
+                AI Job Matches
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Multi-stage cascade evaluation: Hard Filters <span className="text-indigo-600 dark:text-indigo-400">→</span> Structured Skills <span className="text-indigo-600 dark:text-indigo-400">→</span> Semantic Embeddings <span className="text-indigo-600 dark:text-indigo-400">→</span> Groq Llama-3 <span className="text-indigo-600 dark:text-indigo-400">→</span> Gemini
+                Compatibility scoring and skill alignment based on your profile and preferences.
               </p>
             </div>
           </div>
@@ -419,7 +419,7 @@ export const AIMatches: React.FC = () => {
                 className="p-6 rounded-3xl bg-white border border-slate-200/80 hover:border-indigo-300 dark:bg-slate-900/80 dark:border-slate-800 dark:hover:border-indigo-500/40 transition-all flex flex-col justify-between space-y-5 shadow-sm hover:shadow-md group"
               >
                 <div className="space-y-4">
-                  {/* Card Header: Decision badge + Job ID + Score */}
+                  {/* Card Header: Decision badge + Score */}
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1.5 flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -428,15 +428,6 @@ export const AIMatches: React.FC = () => {
                         >
                           {decisionInfo.icon}
                           <span>{decisionInfo.label}</span>
-                        </span>
-
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          ID: #{m.job_id ? m.job_id.slice(-6) : 'N/A'}
-                        </span>
-
-                        <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800/80 text-[10px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/40">
-                          <Brain className="w-2.5 h-2.5 text-indigo-500" />
-                          <span>{m.ai_provider_used || 'groq'}</span>
                         </span>
                       </div>
 
@@ -473,7 +464,7 @@ export const AIMatches: React.FC = () => {
                       >
                         {m.overall_score.toFixed(0)}%
                       </div>
-                      <span className="text-[10px] text-slate-400 font-semibold block mt-1">Cascade Match</span>
+                      <span className="text-[10px] text-slate-400 font-semibold block mt-1">Match Score</span>
                     </div>
                   </div>
 
@@ -514,7 +505,7 @@ export const AIMatches: React.FC = () => {
                     <div className="flex items-center justify-between text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
                       <div className="flex items-center space-x-1.5">
                         <Brain className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                        <span>AI Match Reasoning ({m.ai_provider_used || 'groq'}):</span>
+                        <span>AI Match Analysis:</span>
                       </div>
                     </div>
                     <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans">
@@ -525,9 +516,9 @@ export const AIMatches: React.FC = () => {
                   {/* Skill Gap & Overlap Analysis */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      <span>Skills Breakdown:</span>
-                      <span className="text-[10px] font-normal font-mono">
-                        {m.matched_skills?.length || 0} matched · {m.missing_skills?.length || 0} missing
+                      <span>Skill Alignment:</span>
+                      <span className="text-[10px] font-medium font-sans text-slate-500 dark:text-slate-400">
+                        {m.matched_skills?.length || 0} Matched · {m.missing_skills?.length || 0} Missing
                       </span>
                     </div>
 

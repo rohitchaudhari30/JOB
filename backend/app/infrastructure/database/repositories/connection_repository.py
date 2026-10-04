@@ -3,7 +3,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.connections.entities import BrowserSession, ConnectionStatus, ConnectionType, PlatformConnection
 from app.domain.connections.repositories import BrowserSessionRepository, PlatformConnectionRepository
-from app.infrastructure.database.models.models import BrowserSessionModel, PlatformConnectionModel
+from app.infrastructure.database.models.models import BrowserSessionModel, PlatformConnectionModel, JobSourceModel
 
 
 class SqlAlchemyConnectionRepository(PlatformConnectionRepository):
@@ -112,10 +112,30 @@ class SqlAlchemyBrowserSessionRepository(BrowserSessionRepository):
             )
 
         if not model:
+            # Resolve source_id from session.source_id or platform_connection
+            resolved_source_id = session.source_id
+            target_platform = None
+            if session.connection_id:
+                pc = await self._session.get(PlatformConnectionModel, session.connection_id)
+                if pc:
+                    target_platform = pc.platform
+            if not target_platform and resolved_source_id:
+                target_platform = resolved_source_id
+
+            if target_platform:
+                js = await self._session.scalar(
+                    select(JobSourceModel).where(JobSourceModel.source_type == target_platform)
+                )
+                if js:
+                    resolved_source_id = js.id
+                elif not resolved_source_id:
+                    resolved_source_id = target_platform
+
             model = BrowserSessionModel(
                 id=session.id,
                 connection_id=session.connection_id,
                 user_id=session.user_id,
+                source_id=resolved_source_id or "default",
                 encrypted_storage_state=session.encrypted_storage_state,
                 status=session.status,
                 expires_at=session.expires_at,
@@ -129,6 +149,8 @@ class SqlAlchemyBrowserSessionRepository(BrowserSessionRepository):
             model.last_used_at = session.last_used_at
             if session.connection_id:
                 model.connection_id = session.connection_id
+            if session.source_id:
+                model.source_id = session.source_id
 
         await self._session.flush()
         await self._session.refresh(model)
@@ -145,6 +167,7 @@ class SqlAlchemyBrowserSessionRepository(BrowserSessionRepository):
             id=m.id,
             connection_id=m.connection_id or "",
             user_id=m.user_id,
+            source_id=m.source_id,
             encrypted_storage_state=m.encrypted_storage_state,
             status=m.status,
             expires_at=m.expires_at,

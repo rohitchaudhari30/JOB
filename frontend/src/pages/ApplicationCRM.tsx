@@ -126,52 +126,75 @@ export const ApplicationCRM: React.FC = () => {
                         </div>
 
                         <div>
-                          <div className="text-xs font-bold text-slate-900 dark:text-white leading-tight">Job #{app.job_id.slice(-6)}</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                            {app.applied_at ? `Applied ${new Date(app.applied_at).toLocaleDateString()}` : `Created ${new Date(app.created_at).toLocaleDateString()}`}
+                          <div className="text-xs font-bold text-slate-900 dark:text-white leading-snug line-clamp-2">
+                            {app.job_title || app.job?.title || `Position #${app.job_id.slice(-6)}`}
+                          </div>
+                          <div className="flex items-center space-x-2 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            {(app.company || app.job?.company) && (
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {app.company || app.job?.company}
+                              </span>
+                            )}
+                            {(app.company || app.job?.company) && <span>•</span>}
+                            <span>
+                              {app.applied_at
+                                ? `Applied ${new Date(app.applied_at).toLocaleDateString()}`
+                                : `Added ${new Date(app.created_at).toLocaleDateString()}`}
+                            </span>
                           </div>
                         </div>
 
                         {/* Questions count */}
                         {app.questions.length > 0 && (
-                          <div className="text-[10px] text-indigo-700 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-950/40 px-2 py-1 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
-                            {app.questions.length} Screening Q&amp;A answered
+                          <div className="text-[10px] text-indigo-700 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-950/40 px-2.5 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40 font-medium">
+                            ✓ {app.questions.length} Screening Q&amp;A answered
                           </div>
                         )}
 
-                        {/* Failure reason if any */}
+                        {/* Clean Friendly Failure reason if any */}
                         {app.failure_reason && (
-                          <div className="text-[10px] text-rose-700 bg-rose-50 dark:text-rose-400 dark:bg-rose-950/40 p-2 rounded-lg border border-rose-200 dark:border-rose-900/40 line-clamp-2">
-                            {app.failure_reason}
+                          <div className="text-[11px] text-rose-700 dark:text-rose-300 bg-rose-50/80 dark:bg-rose-950/40 p-2.5 rounded-xl border border-rose-200/80 dark:border-rose-900/40 space-y-1">
+                            <div className="font-bold flex items-center space-x-1 text-rose-800 dark:text-rose-200 text-[10px] uppercase tracking-wider">
+                              <span>⚠️ Error Diagnostics</span>
+                            </div>
+                            <div className="font-normal leading-relaxed break-words text-[10px] opacity-90 line-clamp-3" title={app.failure_reason}>
+                              {app.failure_reason.includes('ERR_NAME_NOT_RESOLVED')
+                                ? 'DNS resolution failed: portal URL could not be resolved.'
+                                : app.failure_reason.includes('Target page, context or browser has been closed')
+                                ? 'Browser session closed unexpectedly during application run.'
+                                : app.failure_reason.split('\n')[0].replace(/^Page\.goto:\s*/i, '')}
+                            </div>
                           </div>
                         )}
 
                         {/* Actions & Artifacts */}
-                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                           {app.workflow_state === 'APPROVAL_REQUIRED' && (
                             <button
                               onClick={() => handleApprove(app.id)}
-                              className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] shadow-sm transition-transform active:scale-95 cursor-pointer"
+                              className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] shadow-sm transition-transform active:scale-95 cursor-pointer"
                             >
-                              Approve
+                              Approve &amp; Submit
                             </button>
                           )}
 
-                          {app.screenshot_file_path && (
-                            <button
-                              onClick={() => setSelectedScreenshot(app.screenshot_file_path!)}
-                              className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
-                              title="View Failure Screenshot"
-                            >
-                              <Camera className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <div className="flex items-center space-x-2">
+                            {app.screenshot_file_path && (
+                              <button
+                                onClick={() => setSelectedScreenshot(app.screenshot_file_path!)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                                title="View Step Screenshot"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
-                          {app.trace_file_path && (
-                            <span className="text-[10px] text-slate-400 font-mono" title={app.trace_file_path}>
-                              trace.zip
-                            </span>
-                          )}
+                            {app.trace_file_path && (
+                              <span className="text-[10px] text-slate-400 font-mono px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700" title={app.trace_file_path}>
+                                trace.zip
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))

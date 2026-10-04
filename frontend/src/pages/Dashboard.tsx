@@ -54,7 +54,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun }) =
             Automate Your Career Search With Precision AI
           </h1>
           <p className="text-indigo-100 dark:text-slate-300 text-sm leading-relaxed mb-6 font-normal">
-            Multi-portal scraping across Naukri, LinkedIn & direct ATS boards. Scored with 5-Stage Groq & Gemini reasoning and applied automatically via human-in-the-loop Playwright automation.
+            Automated job discovery across Naukri, LinkedIn, and corporate ATS portals. Precision-scored with multi-tier talent matching and submitted seamlessly with safe automation.
           </p>
 
           <div className="flex flex-wrap gap-3">

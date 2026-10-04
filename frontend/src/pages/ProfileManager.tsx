@@ -262,7 +262,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-fadeIn pb-12">
+    <div className="space-y-6 w-full animate-fadeIn pb-12">
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 shadow-sm">
         <div className="flex items-center space-x-3.5">

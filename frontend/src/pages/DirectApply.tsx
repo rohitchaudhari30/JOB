@@ -184,7 +184,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate }) => {
   const connectedSourcesCount = connections.filter((c) => c.status === 'CONNECTED').length;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-fadeIn pb-12">
+    <div className="space-y-6 w-full animate-fadeIn pb-12">
       {/* Hero Action Header */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-800 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-900 p-7 text-white shadow-xl shadow-indigo-600/15 border border-indigo-500/20">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -515,7 +515,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate }) => {
         {/* Big Action CTA */}
         <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800">
           <div className="text-xs text-slate-500 dark:text-slate-400">
-            Clicking <strong>START APPLY</strong> initiates discovery, AI matching cascade, and Playwright automated form filling.
+            Clicking <strong>START APPLY</strong> initiates discovery, AI matching, and autonomous form submission.
           </div>
 
           <button

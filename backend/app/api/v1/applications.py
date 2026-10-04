@@ -52,6 +52,8 @@ def _to_response_dto(app: Application) -> ApplicationResponseDTO:
         failure_reason=app.failure_reason,
         trace_file_path=app.trace_file_path,
         screenshot_file_path=app.screenshot_file_path,
+        job_title=app.job_title,
+        company=app.company,
         created_at=app.created_at,
         updated_at=app.updated_at,
         questions=[

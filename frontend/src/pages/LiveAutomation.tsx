@@ -271,7 +271,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({ activeRun, onRef
               <span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
               <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
               <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-              <span className="text-xs font-bold text-slate-300 pl-2">Playwright Live Viewport</span>
+              <span className="text-xs font-bold text-slate-300 pl-2">Live Automation Viewport</span>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -289,7 +289,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({ activeRun, onRef
             {frameBase64 ? (
               <img
                 src={frameBase64}
-                alt="Live Playwright Browser Frame"
+                alt="Live Automation Browser Frame"
                 className="w-full h-full object-contain rounded-xl border border-slate-800 shadow-inner"
               />
             ) : (

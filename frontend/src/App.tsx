@@ -246,7 +246,7 @@ export const App: React.FC = () => {
           }}
         />
 
-        <main className="flex-1 overflow-y-auto p-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8 w-full">
           {activeTab === 'dashboard' && (
             <Dashboard onNavigate={setActiveTab} activeRun={activeRun} />
           )}
