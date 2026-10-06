@@ -14,7 +14,7 @@ class Base(DeclarativeBase):
 # Connect arguments for SQLite WAL mode & busy timeout
 connect_args = {}
 if "sqlite" in settings.DATABASE_URL:
-    connect_args = {"check_same_thread": False, "timeout": 15}
+    connect_args = {"check_same_thread": False, "timeout": 30}
 
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -30,8 +30,10 @@ if "sqlite" in settings.DATABASE_URL:
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL;")
-        cursor.execute("PRAGMA busy_timeout=5000;")
+        cursor.execute("PRAGMA busy_timeout=30000;")
         cursor.execute("PRAGMA synchronous=NORMAL;")
+        cursor.execute("PRAGMA temp_store=MEMORY;")
+        cursor.execute("PRAGMA cache_size=-64000;")
         cursor.close()
 
 

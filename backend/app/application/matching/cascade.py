@@ -148,14 +148,25 @@ class MatchingCascadeEngine:
         # =========================================================================
         # Stage 4 & 5: AI Nuanced Reasoning (Groq primary + Gemini fallback)
         # =========================================================================
-        ai_eval = await self._ai_gateway.match_job(
-            candidate_summary=candidate_summary,
-            job_summary=f"Title: {job.title}\nCompany: {job.company}\nDescription: {job.raw_description[:1500]}",
-        )
-
-        # Merge matched/missing skills
-        combined_matched = list(set(matched_skills + ai_eval.matched_skills))
-        combined_missing = [s for s in (missing_skills + ai_eval.missing_skills) if s not in combined_matched]
+        try:
+            ai_eval = await self._ai_gateway.match_job(
+                candidate_summary=candidate_summary,
+                job_summary=f"Title: {job.title}\nCompany: {job.company}\nDescription: {job.raw_description[:1500]}",
+            )
+            combined_matched = list(set(matched_skills + ai_eval.matched_skills))
+            combined_missing = [s for s in (missing_skills + ai_eval.missing_skills) if s not in combined_matched]
+            ai_score = ai_eval.score
+            ai_reasoning = ai_eval.reasoning
+            ai_provider_used = getattr(ai_eval, "provider_used", "groq") or "groq"
+        except Exception as e:
+            logger.warning(
+                f"AI reasoning unavailable ({e}). Falling back to deterministic cascade (skill overlap + semantic similarity)."
+            )
+            combined_matched = matched_skills
+            combined_missing = missing_skills
+            ai_score = (skill_score * 0.6) + (semantic_score * 0.4)
+            ai_reasoning = f"Evaluated via structured skill overlap ({skill_score:.0f}%) and profile similarity ({semantic_score:.0f}%)."
+            ai_provider_used = "local_heuristic"
 
         # =========================================================================
         # Freshness Score Calculation
@@ -182,7 +193,7 @@ class MatchingCascadeEngine:
             + (role_score * rule.role_title_weight)
             + (location_score * rule.location_weight)
             + (freshness_score * rule.freshness_weight)
-            + (ai_eval.score * 0.15)  # AI reasoning contribution
+            + (ai_score * 0.15)  # AI reasoning contribution
         )
         overall_score = round(min(100.0, max(0.0, overall_score)), 1)
 
@@ -208,9 +219,9 @@ class MatchingCascadeEngine:
             skill_match_score=round(skill_score, 1),
             semantic_score=round(semantic_score, 1),
             freshness_score=round(freshness_score, 1),
-            reasoning_summary=ai_eval.reasoning,
+            reasoning_summary=ai_reasoning,
             matched_skills=combined_matched,
             missing_skills=combined_missing,
             decision=decision,
-            ai_provider_used="groq",
+            ai_provider_used=ai_provider_used,
         )

@@ -15,13 +15,15 @@ import {
   X,
   ChevronRight,
 } from 'lucide-react';
-import { User } from '../types';
+import { User, AutomationRunStatus } from '../types';
 import { ThemeToggle } from './ThemeToggle';
 
 interface NavbarProps {
   user: User | null;
   onLogout: () => void;
   onNavigate?: (tab: any) => void;
+  activeRun?: AutomationRunStatus | null;
+  onOpenLiveConsole?: () => void;
 }
 
 interface NotificationItem {
@@ -42,7 +44,7 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
     time: 'Just now',
     type: 'match',
     read: false,
-    tabLink: 'ai-matches',
+    tabLink: 'matches',
   },
   {
     id: '2',
@@ -51,7 +53,7 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
     time: '15m ago',
     type: 'discovery',
     read: false,
-    tabLink: 'job-discovery',
+    tabLink: 'discovery',
   },
   {
     id: '3',
@@ -69,11 +71,17 @@ const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
     time: '2h ago',
     type: 'automation',
     read: true,
-    tabLink: 'live-automation',
+    tabLink: 'live_console',
   },
 ];
 
-export const Navbar: React.FC<NavbarProps> = ({ user, onLogout, onNavigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  user,
+  onLogout,
+  onNavigate,
+  activeRun = null,
+  onOpenLiveConsole,
+}) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
@@ -186,7 +194,36 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout, onNavigate }) =>
         </div>
       </div>
 
-      <div className="flex items-center space-x-3 sm:space-x-4">
+      <div className="flex items-center space-x-2.5 sm:space-x-3">
+        {/* Live Run Active Global Pill */}
+        {activeRun && (activeRun.status === 'RUNNING' || activeRun.status === 'PAUSED') && (
+          <button
+            onClick={() => {
+              if (onOpenLiveConsole) {
+                onOpenLiveConsole();
+              } else if (onNavigate) {
+                onNavigate('live_console');
+              }
+            }}
+            className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200/90 text-xs text-indigo-700 font-bold dark:bg-indigo-950/70 dark:border-indigo-800 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition-all cursor-pointer shadow-2xs group active:scale-95"
+            title="Live Automation in progress. Click to view console."
+          >
+            <span className="relative flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${activeRun.status === 'PAUSED' ? 'bg-amber-400' : 'bg-emerald-400'} opacity-75`}></span>
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${activeRun.status === 'PAUSED' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+            </span>
+            <span className="font-extrabold uppercase tracking-wider text-[10px] bg-indigo-200/60 dark:bg-indigo-900 px-1.5 py-0.5 rounded">
+              LIVE
+            </span>
+            <span className="hidden md:inline truncate max-w-[140px]">
+              {activeRun.current_job_title ? activeRun.current_job_title : `${activeRun.applications_submitted_count} Applied`}
+            </span>
+            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono hidden sm:inline">
+              ({activeRun.applications_submitted_count} submitted)
+            </span>
+          </button>
+        )}
+
         {/* Stealth badge */}
         <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-xs text-emerald-700 font-semibold dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
           <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -374,11 +411,11 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout, onNavigate }) =>
 
                   <button
                     type="button"
-                    onClick={() => handleNav('schedules')}
+                    onClick={() => handleNav('direct_apply')}
                     className="w-full px-4 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white flex items-center space-x-2.5 transition-colors cursor-pointer"
                   >
                     <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-                    <span>Rules &amp; Automation Schedules</span>
+                    <span>Autopilot Campaigns &amp; 24/7 Schedules</span>
                   </button>
                 </div>
 

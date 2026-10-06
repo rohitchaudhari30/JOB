@@ -30,6 +30,7 @@ class MatchEvaluationDTO:
     missing_skills: List[str]
     reasoning: str
     confidence: float  # 0.0 to 1.0
+    provider_used: str = "groq"
 
 
 @dataclass

@@ -21,6 +21,13 @@ logger = logging.getLogger("app.ai.gateway")
 
 
 class MultiTierAIGateway(AIGateway):
+    # Shared Circuit Breaker state:
+    # When Groq hits rate limit (429 / TPM / RPM exceeded), all ongoing and upcoming
+    # calls immediately route to Gemini without waiting or failing repeatedly.
+    _circuit_open_until: float = 0.0
+    _consecutive_rate_limits: int = 0
+    _last_rate_limit_reason: str | None = None
+
     def __init__(
         self,
         primary_provider: AIProvider | None = None,
@@ -31,6 +38,35 @@ class MultiTierAIGateway(AIGateway):
         self._fallback = fallback_provider or GeminiProvider()
         self._session = session
 
+    @classmethod
+    def is_rate_limit_active(cls) -> bool:
+        return time.time() < cls._circuit_open_until
+
+    @classmethod
+    def get_remaining_cooldown(cls) -> int:
+        return max(0, int(cls._circuit_open_until - time.time()))
+
+    @staticmethod
+    def _is_rate_limit_or_quota(error: Exception) -> bool:
+        err_str = str(error).lower()
+        err_cls = type(error).__name__.lower()
+        return any(
+            indicator in err_str or indicator in err_cls
+            for indicator in (
+                "429",
+                "rate_limit",
+                "ratelimit",
+                "quota",
+                "resource_exhausted",
+                "tokens per minute",
+                "requests per minute",
+                "too many requests",
+                "limit exceeded",
+                "tpm",
+                "rpm",
+            )
+        )
+
     async def _execute_with_fallback(
         self,
         operation: str,
@@ -40,30 +76,64 @@ class MultiTierAIGateway(AIGateway):
         **kwargs
     ) -> Any:
         start_time = time.time()
-        provider_used = self._primary.provider_name
+        now = time.time()
         is_success = False
         error_msg = None
+        provider_used = self._primary.provider_name
 
-        try:
-            # Try Primary Provider (Groq)
-            func = getattr(self._primary, func_name)
-            result = await func(*args, **kwargs)
-            is_success = True
-            return result
-        except Exception as primary_error:
-            logger.warning(
-                f"Primary AI Provider ({self._primary.provider_name}) failed for {operation}: {primary_error}. "
-                f"Attempting fallback to {self._fallback.provider_name}..."
+        # If Groq is currently in rate-limit cooldown, directly execute on Gemini (zero wait time!)
+        if now < MultiTierAIGateway._circuit_open_until:
+            rem = int(MultiTierAIGateway._circuit_open_until - now)
+            logger.info(
+                f"[AI AUTO-SWITCH] Groq rate-limited ({rem}s cooldown remaining). "
+                f"Directly executing {operation} on Google Gemini..."
             )
             provider_used = self._fallback.provider_name
             try:
-                # Try Fallback Provider (Gemini)
                 func = getattr(self._fallback, func_name)
                 result = await func(*args, **kwargs)
                 is_success = True
                 return result
             except Exception as fallback_error:
-                error_msg = f"Primary: {primary_error} | Fallback: {fallback_error}"
+                # If Gemini also fails during Groq cooldown, clear circuit breaker so Groq can be retried
+                MultiTierAIGateway._circuit_open_until = 0.0
+                error_msg = f"Gemini (during Groq cooldown): {fallback_error}"
+                logger.error(f"Fallback Gemini failed during Groq cooldown for {operation}: {fallback_error}")
+                raise AIProviderException("all_providers", error_msg)
+
+        # Primary is healthy: Try Groq first
+        try:
+            func = getattr(self._primary, func_name)
+            result = await func(*args, **kwargs)
+            is_success = True
+            MultiTierAIGateway._consecutive_rate_limits = 0
+            return result
+        except Exception as primary_error:
+            if self._is_rate_limit_or_quota(primary_error):
+                MultiTierAIGateway._consecutive_rate_limits += 1
+                cooldown_sec = min(300, 60 * MultiTierAIGateway._consecutive_rate_limits)
+                MultiTierAIGateway._circuit_open_until = time.time() + cooldown_sec
+                MultiTierAIGateway._last_rate_limit_reason = str(primary_error)
+                logger.warning(
+                    f"⚠️ [GROQ RATE LIMIT DETECTED] {primary_error}. "
+                    f"⚡ AUTOMATICALLY SWITCHING to Google Gemini for the next {cooldown_sec} seconds!"
+                )
+            else:
+                logger.warning(
+                    f"Primary AI Provider ({self._primary.provider_name}) failed for {operation}: {primary_error}. "
+                    f"Attempting immediate fallback to {self._fallback.provider_name}..."
+                )
+
+            # Route immediately to Gemini
+            provider_used = self._fallback.provider_name
+            try:
+                func = getattr(self._fallback, func_name)
+                result = await func(*args, **kwargs)
+                is_success = True
+                logger.info(f"✅ Fallback to {self._fallback.provider_name} succeeded for {operation}.")
+                return result
+            except Exception as fallback_error:
+                error_msg = f"Groq: {primary_error} | Gemini: {fallback_error}"
                 logger.error(f"All AI Providers failed for {operation}: {error_msg}")
                 raise AIProviderException("all_providers", error_msg)
         finally:

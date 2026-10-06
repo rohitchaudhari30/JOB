@@ -14,12 +14,23 @@ from app.domain.ai.contracts import (
     QuestionIntentDTO,
 )
 
+import os
+
 logger = logging.getLogger("app.ai.gemini")
 
 
 class GeminiProvider(AIProvider):
     def __init__(self, api_key: str | None = None, model_name: str | None = None):
-        self._api_key = api_key or settings.GEMINI_API_KEY
+        raw_key = (
+            api_key
+            or settings.GEMINI_API_KEY
+            or os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+        )
+        if raw_key and raw_key.strip().lower() in ("your_gemini_api_key_here", "placeholder", "none", "test", ""):
+            self._api_key = None
+        else:
+            self._api_key = raw_key
         self._model = model_name or settings.GEMINI_DEFAULT_MODEL
         self._client = genai.Client(api_key=self._api_key) if self._api_key else None
 
@@ -93,6 +104,7 @@ class GeminiProvider(AIProvider):
             missing_skills=data.get("missing_skills", []),
             reasoning=data.get("reasoning", "Gemini evaluation completed."),
             confidence=float(data.get("confidence", 0.95)),
+            provider_used="gemini",
         )
 
     async def classify_question(self, question_text: str, options: List[str] | None = None) -> QuestionIntentDTO:

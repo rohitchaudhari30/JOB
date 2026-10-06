@@ -20,7 +20,11 @@ import {
   WeightTuningRecommendation,
 } from '../types';
 
-export const Analytics: React.FC = () => {
+interface AnalyticsProps {
+  onNavigate?: (tab: any) => void;
+}
+
+export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
   const [funnel, setFunnel] = useState<FunnelOverview | null>(null);
   const [resumes, setResumes] = useState<ResumePerformanceMetric[]>([]);
   const [sources, setSources] = useState<SourcePerformanceMetric[]>([]);
@@ -111,17 +115,33 @@ export const Analytics: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          {funnel?.stages.map((stage, idx) => (
-            <div
-              key={stage.stage_name}
-              className="relative p-5 rounded-2xl bg-slate-50 border border-slate-200/80 dark:bg-slate-950/60 dark:border-slate-800 flex flex-col justify-between overflow-hidden shadow-xs"
-            >
-              <div className="space-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Stage {idx + 1}
-                </span>
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm">{stage.stage_name}</h3>
-              </div>
+          {funnel?.stages.map((stage, idx) => {
+            const targetTab =
+              stage.stage_name === 'Discovered'
+                ? 'discovery'
+                : stage.stage_name === 'Matched'
+                ? 'matches'
+                : 'crm';
+
+            return (
+              <div
+                key={stage.stage_name}
+                onClick={() => onNavigate?.(targetTab)}
+                className="relative p-5 rounded-2xl bg-slate-50 hover:bg-slate-100/90 border border-slate-200/80 hover:border-indigo-400 dark:bg-slate-950/60 dark:hover:bg-slate-900/80 dark:border-slate-800 dark:hover:border-indigo-500/70 flex flex-col justify-between overflow-hidden shadow-xs cursor-pointer transition-all group"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Stage {idx + 1}
+                    </span>
+                    <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                      View →
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    {stage.stage_name}
+                  </h3>
+                </div>
 
               <div className="mt-4 flex items-baseline justify-between">
                 <span className="text-2xl font-black text-indigo-600 dark:text-indigo-300 font-mono">{stage.count}</span>
@@ -138,7 +158,8 @@ export const Analytics: React.FC = () => {
                 />
               </div>
             </div>
-          ))}
+          );
+        })}
         </div>
       </div>
 

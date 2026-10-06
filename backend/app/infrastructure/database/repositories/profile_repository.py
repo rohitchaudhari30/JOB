@@ -1,5 +1,5 @@
 from typing import List
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.domain.profile.entities import (
@@ -238,6 +238,13 @@ class SqlAlchemyResumeRepository(ResumeRepository):
         return [self._to_entity(m) for m in models]
 
     async def save(self, resume: Resume) -> Resume:
+        if resume.is_default:
+            await self._session.execute(
+                update(ResumeModel)
+                .where(ResumeModel.user_id == resume.user_id, ResumeModel.id != resume.id)
+                .values(is_default=False)
+            )
+
         stmt = select(ResumeModel).where(ResumeModel.id == resume.id)
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
@@ -267,10 +274,41 @@ class SqlAlchemyResumeRepository(ResumeRepository):
         return self._to_entity(model)
 
     async def delete(self, resume_id: str, user_id: str) -> bool:
+        target = await self.get_by_id(resume_id)
+        was_default = target.is_default if target else False
+
         stmt = delete(ResumeModel).where(ResumeModel.id == resume_id, ResumeModel.user_id == user_id)
         result = await self._session.execute(stmt)
         await self._session.flush()
+
+        # If deleted resume was default, assign default to the latest remaining resume
+        if was_default:
+            remaining = await self.list_by_user_id(user_id)
+            if remaining:
+                await self.set_default(remaining[0].id, user_id)
+
         return result.rowcount > 0
+
+    async def set_default(self, resume_id: str, user_id: str) -> Resume | None:
+        target = await self.get_by_id(resume_id)
+        if not target or target.user_id != user_id:
+            return None
+
+        # Reset all resumes for this user
+        await self._session.execute(
+            update(ResumeModel)
+            .where(ResumeModel.user_id == user_id)
+            .values(is_default=False)
+        )
+
+        # Set target as default
+        await self._session.execute(
+            update(ResumeModel)
+            .where(ResumeModel.id == resume_id, ResumeModel.user_id == user_id)
+            .values(is_default=True)
+        )
+        await self._session.flush()
+        return await self.get_by_id(resume_id)
 
 
 class SqlAlchemySavedAnswerRepository(SavedAnswerRepository):

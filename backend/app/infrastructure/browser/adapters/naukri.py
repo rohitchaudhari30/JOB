@@ -108,7 +108,8 @@ class NaukriAdapter(BaseJobSourceAdapter):
         page: Optional[Page] = None
         streamer = None
         try:
-            page = await context.new_page()
+            pages = getattr(context, "pages", None)
+            page = pages[0] if (isinstance(pages, list) and len(pages) > 0) else await context.new_page()
             if user_id and run_id:
                 from app.infrastructure.browser.screenshot_streamer import ScreenshotStreamer
                 streamer = ScreenshotStreamer(page=page, user_id=user_id, run_id=run_id, fps=5)
@@ -128,17 +129,74 @@ class NaukriAdapter(BaseJobSourceAdapter):
             except Exception:
                 pass
 
-            await asyncio.sleep(2)  # Natural settle delay
+            # Dismiss any open search autocomplete dropdowns or backdrops
+            try:
+                await page.evaluate("""() => {
+                    document.querySelectorAll('.nI-gNb-backdrop, .drawer-wrapper').forEach(el => el.remove());
+                    if (document.activeElement && document.activeElement.blur) {
+                        document.activeElement.blur();
+                    }
+                }""")
+            except Exception:
+                pass
 
-            # Extract job cards
-            cards = await page.query_selector_all(
-                ".srp-jobtuple-wrapper, article.jobTuple, .cust-job-tuple, div[data-job-id], div[class*='srp-jobtuple'], div.tuple"
-            )
-            logger.info(f"Found {len(cards)} raw job cards on Naukri page 1.")
+            # Natural smooth visual scan with dynamic scrolling across listings
+            for _ in range(3):
+                await page.evaluate("window.scrollBy({ top: 450, behavior: 'smooth' })")
+                await asyncio.sleep(0.35)
 
-            for card in cards:
+            # Single high-performance in-browser extraction of all job cards
+            raw_cards_data = await page.evaluate("""
+                () => {
+                    const selectors = [
+                        ".srp-jobtuple-wrapper",
+                        "article.jobTuple",
+                        ".cust-job-tuple",
+                        "div[data-job-id]",
+                        "div[class*='srp-jobtuple']",
+                        "div.tuple",
+                        "div[class*='styles_job-tuple']",
+                        "div[class*='jobTuple']",
+                        "div.cust-job-tuple"
+                    ];
+                    const cards = document.querySelectorAll(selectors.join(", "));
+                    const results = [];
+                    cards.forEach(card => {
+                        try {
+                            card.style.transition = 'box-shadow 0.2s ease';
+                            card.style.boxShadow = '0 0 0 2px rgba(99, 102, 241, 0.6)';
+                        } catch (e) {}
+
+                        const titleEl = card.querySelector("a.title, .title a, a[title]");
+                        if (!titleEl) return;
+                        const compEl = card.querySelector("a.comp-name, .subTitle a, .comp-name");
+                        const expEl = card.querySelector(".exp-wrap, .experience, span[class*='exp'], li[class*='experience']");
+                        const salEl = card.querySelector(".sal-wrap, .salary, span[class*='sal']");
+                        const locEl = card.querySelector(".loc-wrap, .location, span[class*='loc']");
+                        const descEl = card.querySelector(".job-desc, .job-description, .row6");
+                        const dateEl = card.querySelector(".job-post-day, span.job-post-day, span.date, span.posted-date, span.fright, span[class*='styles_date'], span[class*='job-post-day'], span[class*='posted-by'], span[class*='date'], .tuple-footer span, .styles_jhc__desc__p_Gg5 span, .job-desc-date, .nI-gNb-timestamp, .type, .tags-gt span, span.styles_post-date");
+                        
+                        results.push({
+                            title: (titleEl.innerText || "").trim(),
+                            href: titleEl.getAttribute("href") || "",
+                            cardJobId: card.getAttribute("data-job-id") || "",
+                            company: compEl ? (compEl.innerText || "").trim() : "Confidential Company",
+                            location: locEl ? (locEl.innerText || "").trim() : "Any Location",
+                            description: descEl ? (descEl.innerText || "").trim() : "",
+                            postedText: dateEl ? (dateEl.innerText || "").trim() : "",
+                            cardText: card.innerText || "",
+                            expText: expEl ? (expEl.innerText || "").trim() : "",
+                            salText: salEl ? (salEl.innerText || "").trim() : ""
+                        });
+                    });
+                    return results;
+                }
+            """)
+            logger.info(f"Extracted {len(raw_cards_data)} raw job cards from Naukri in one pass.")
+
+            for item in raw_cards_data:
                 try:
-                    job = await self._parse_job_card(card, page)
+                    job = self._build_job_from_dict(item)
                     if job:
                         yield job
                 except Exception as card_err:
@@ -152,66 +210,48 @@ class NaukriAdapter(BaseJobSourceAdapter):
             if page and not page.is_closed():
                 await page.close()
 
-    async def _parse_job_card(self, card, page: Page) -> Optional[Job]:
-        """Extracts attributes from a single Naukri job card element."""
-        title_el = await card.query_selector("a.title, .title a, a[title]")
-        company_el = await card.query_selector("a.comp-name, .subTitle a, .comp-name")
-        exp_el = await card.query_selector(".exp-wrap, .experience, span[class*='exp'], li[class*='experience']")
-        sal_el = await card.query_selector(".sal-wrap, .salary, span[class*='sal']")
-        loc_el = await card.query_selector(".loc-wrap, .location, span[class*='loc']")
-        desc_el = await card.query_selector(".job-desc, .job-description, .row6")
-        date_el = await card.query_selector(
-            ".job-post-day, span.job-post-day, span.date, span.posted-date, span.fright, "
-            "span[class*='styles_date'], span[class*='job-post-day'], span[class*='posted-by'], "
-            "span[class*='date'], .tuple-footer span, .styles_jhc__desc__p_Gg5 span, "
-            ".job-desc-date, .nI-gNb-timestamp, .type, .tags-gt span, span.styles_post-date"
-        )
-
-        if not title_el:
+    def _build_job_from_dict(self, item: dict) -> Optional[Job]:
+        """Fast memory-only builder from in-browser extracted dictionary."""
+        title = item.get("title", "").strip()
+        if not title:
             return None
 
-        title = (await title_el.inner_text()).strip()
-        apply_url = await title_el.get_attribute("href") or ""
+        apply_url = item.get("href", "")
         if apply_url and not apply_url.startswith("http"):
             apply_url = f"{self.BASE_URL}{apply_url}"
 
         # Extract external job ID from URL or card dataset
-        job_id_attr = await card.get_attribute("data-job-id")
+        job_id_attr = item.get("cardJobId")
         if not job_id_attr:
-            # Fallback extract from URL path (e.g. jobId-12345)
             match = re.search(r"(\d{8,14})", apply_url)
             external_job_id = match.group(1) if match else str(uuid.uuid5(uuid.NAMESPACE_URL, apply_url))
         else:
             external_job_id = job_id_attr
 
-        company = (await company_el.inner_text()).strip() if company_el else "Confidential Company"
-        location = (await loc_el.inner_text()).strip() if loc_el else "Any Location"
-        raw_description = (await desc_el.inner_text()).strip() if desc_el else f"{title} at {company}"
-        
-        raw_posted_text = (await date_el.inner_text()).strip() if date_el else None
-        if not raw_posted_text:
-            try:
-                card_text = await card.inner_text()
-                date_match = re.search(
-                    r"(just now|few (?:seconds|mins?|minutes|hours?) ago|\d+\+?\s*(?:day|days|hour|hours|min|mins|minute|minutes|week|weeks|month|months)\s*ago|posted today|posted yesterday|today|yesterday|\d+\s*days?\s*ago)",
-                    card_text,
-                    re.IGNORECASE,
-                )
-                if date_match:
-                    raw_posted_text = date_match.group(1).strip()
-            except Exception:
-                pass
+        company = item.get("company", "Confidential Company")
+        location = item.get("location", "Any Location")
+        raw_description = item.get("description") or f"{title} at {company}"
 
-        # Parse posted date & compute freshness metrics
+        raw_posted_text = item.get("postedText")
+        if not raw_posted_text:
+            card_text = item.get("cardText", "")
+            date_match = re.search(
+                r"(just now|few (?:seconds|mins?|minutes|hours?) ago|\d+\+?\s*(?:day|days|hour|hours|min|mins|minute|minutes|week|weeks|month|months)\s*ago|posted today|posted yesterday|today|yesterday|\d+\s*days?\s*ago)",
+                card_text,
+                re.IGNORECASE,
+            )
+            if date_match:
+                raw_posted_text = date_match.group(1).strip()
+
         from app.domain.jobs.freshness import FreshnessCalculator, PostedDateParser
         posted_at, precision, _ = PostedDateParser.parse(raw_posted_text)
         freshness_bucket = FreshnessCalculator.calculate_bucket(posted_at).value if posted_at else "UNKNOWN"
         freshness_score = FreshnessCalculator.calculate_score(posted_at) if posted_at else 50.0
 
-        # Parse experience string (e.g. '3-6 Yrs', '2+ Yrs')
+        # Parse experience string
         min_exp, max_exp = 0.0, 10.0
-        if exp_el:
-            exp_text = await exp_el.inner_text()
+        exp_text = item.get("expText", "")
+        if exp_text:
             exp_range_match = re.search(r"(\d+)\s*-\s*(\d+)", exp_text)
             if exp_range_match:
                 min_exp = float(exp_range_match.group(1))
@@ -222,13 +262,12 @@ class NaukriAdapter(BaseJobSourceAdapter):
                     min_exp = float(single_exp_match.group(1))
                     max_exp = min_exp + 3.0
 
-        # Parse salary string (e.g. '12-18 Lacs PA' or 'Not disclosed')
+        # Parse salary string
         min_sal, max_sal = None, None
-        if sal_el:
-            sal_text = await sal_el.inner_text()
+        sal_text = item.get("salText", "")
+        if sal_text:
             sal_match = re.search(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)", sal_text)
             if sal_match:
-                # Assuming Lacs in INR
                 min_sal = float(sal_match.group(1)) * 100000
                 max_sal = float(sal_match.group(2)) * 100000
 

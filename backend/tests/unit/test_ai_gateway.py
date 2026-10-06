@@ -123,3 +123,22 @@ async def test_ai_gateway_fallback_to_gemini_on_primary_failure():
     result = await gateway.match_job("Candidate Profile", "Job Description")
     assert result.score == 88.0
     assert "Gemini fallback" in result.reasoning
+
+
+@pytest.mark.asyncio
+async def test_ai_gateway_circuit_breaker_on_rate_limit():
+    MultiTierAIGateway._circuit_open_until = 0.0
+    groq_rate_limited = MockGroqProvider(should_fail=True)
+    gemini_mock = MockGeminiProvider()
+    gateway = MultiTierAIGateway(primary_provider=groq_rate_limited, fallback_provider=gemini_mock)
+
+    # 1st call: Groq fails with 429 -> switches to Gemini and trips circuit breaker
+    res1 = await gateway.analyze_resume("Resume Text")
+    assert res1.headline == "Gemini Parsed Data Engineer"
+    assert MultiTierAIGateway.is_rate_limit_active() is True
+    assert MultiTierAIGateway.get_remaining_cooldown() > 0
+
+    # 2nd call: During cooldown, directly routes to Gemini with zero wait
+    res2 = await gateway.analyze_job("Job Description")
+    assert "Python" in res2.mandatory_skills
+    MultiTierAIGateway._circuit_open_until = 0.0

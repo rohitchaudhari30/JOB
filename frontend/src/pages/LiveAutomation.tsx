@@ -7,6 +7,14 @@ import {
   KeyRound,
   Terminal,
   Activity,
+  Compass,
+  Rocket,
+  CheckCircle2,
+  Clock,
+  Sparkles,
+  Lock,
+  Monitor,
+  Layers,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { wsClient } from '../services/ws';
@@ -16,39 +24,147 @@ import { useToast } from '../context/ToastContext';
 interface LiveAutomationProps {
   activeRun: AutomationRunStatus | null;
   onRefreshStatus: () => void;
+  onNavigate?: (tab: any) => void;
 }
 
-export const LiveAutomation: React.FC<LiveAutomationProps> = ({ activeRun, onRefreshStatus }) => {
+export const LiveAutomation: React.FC<LiveAutomationProps> = ({
+  activeRun,
+  onRefreshStatus,
+  onNavigate,
+}) => {
   const { showError, showSuccess } = useToast();
-  const [frameBase64, setFrameBase64] = useState<string | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [otpModalOpen, setOtpModalOpen] = useState(false);
   const [otpValue, setOtpValue] = useState('');
-  const [rolesInput, setRolesInput] = useState('Senior Backend Engineer, Lead Python Engineer');
-  const [locationsInput, setLocationsInput] = useState('Bengaluru, Remote');
   const [sourceType, setSourceType] = useState('naukri');
-  const [autoApply, setAutoApply] = useState(true);
-  const [maxJobAgeHours, setMaxJobAgeHours] = useState<string>('24');
-  const [preferFresh, setPreferFresh] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
+  const [showDesktopBrowser, setShowDesktopBrowser] = useState<boolean>(() => {
+    return localStorage.getItem('show_desktop_browser') !== 'false';
+  });
 
+  const handleToggleDesktopBrowser = (val: boolean) => {
+    setShowDesktopBrowser(val);
+    localStorage.setItem('show_desktop_browser', val ? 'true' : 'false');
+    if (val) {
+      showSuccess('Visible Desktop Mode active — Chromium window will open on screen');
+    } else {
+      showSuccess('Background Mode active — Automation runs silently in background');
+    }
+  };
+
+  const [completedSummary, setCompletedSummary] = useState<{
+    discovered: number;
+    matched: number;
+    applied: number;
+    message: string;
+  } | null>(null);
+  const [currentExecutionState, setCurrentExecutionState] = useState<string>('IDLE');
+
+  const [liveUrl, setLiveUrl] = useState<string>('');
+  const [hasReceivedFrame, setHasReceivedFrame] = useState<boolean>(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const timelineEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // Listen to live WebSocket frame broadcasts
-    const unsubscribeFrame = wsClient.onFrame((b64) => {
-      setFrameBase64(`data:image/jpeg;base64,${b64}`);
+    // 1. High-Performance Native CDP Binary Frame Listener (ImageBitmap + Hardware Canvas)
+    const unsubscribeBinary = wsClient.onBinaryFrame(async (blobOrBuffer) => {
+      try {
+        const blob = blobOrBuffer instanceof Blob ? blobOrBuffer : new Blob([blobOrBuffer], { type: 'image/jpeg' });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        if ('createImageBitmap' in window) {
+          const bitmap = await createImageBitmap(blob);
+          if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+          }
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(bitmap, 0, 0);
+          bitmap.close();
+        } else {
+          const objectUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(objectUrl);
+          };
+          img.src = objectUrl;
+        }
+        setHasReceivedFrame(true);
+      } catch (err) {
+        // Tolerant frame drop
+      }
     });
 
-    // Listen to live timeline events
+    // 2. Real-time Navigation URL tracking from CDP
+    const unsubscribeNav = wsClient.onNavigation((url) => {
+      if (url) setLiveUrl(url);
+    });
+
+    // 3. Fallback base64 frame listener
+    const unsubscribeFrame = wsClient.onFrame((b64, url) => {
+      if (url) setLiveUrl(url);
+      if (!b64) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+          canvas.width = img.naturalWidth || 1280;
+          canvas.height = img.naturalHeight || 800;
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        setHasReceivedFrame(true);
+      };
+      img.src = `data:image/jpeg;base64,${b64}`;
+    });
+
+    // 4. Live timeline events
     const unsubscribeEvent = wsClient.onEvent((event) => {
       setTimelineEvents((prev) => [...prev, event]);
+      if (event.state) {
+        setCurrentExecutionState(event.state);
+      }
       if (event.event_name === 'PAUSED_FOR_USER' || event.state === 'PAUSED_OTP') {
         setOtpModalOpen(true);
+      }
+      if (event.event_name === 'RUN_COMPLETED') {
+        const stats = event.stats;
+        const msg = stats
+          ? `🎉 All automation done! Discovered: ${stats.discovered}, Matched: ${stats.matched}, Applied: ${stats.applied}.`
+          : event.message || '🎉 All automation done!';
+        showSuccess(msg);
+        setCompletedSummary({
+          discovered: stats?.discovered ?? 0,
+          matched: stats?.matched ?? 0,
+          applied: stats?.applied ?? 0,
+          message: event.message || 'All automation completed successfully!',
+        });
+        setCurrentExecutionState('COMPLETED');
+        onRefreshStatus();
+      } else if (
+        event.event_name === 'RUN_STARTED' ||
+        event.event_name === 'RUN_ABORTED'
+      ) {
+        onRefreshStatus();
       }
     });
 
     return () => {
+      unsubscribeBinary();
+      unsubscribeNav();
       unsubscribeFrame();
       unsubscribeEvent();
     };
@@ -58,22 +174,21 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({ activeRun, onRef
     timelineEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [timelineEvents]);
 
-  const handleStartRun = async () => {
+  const handleStartProfileRun = async () => {
     try {
       setIsStarting(true);
-      const roles = rolesInput.split(',').map((r) => r.trim()).filter(Boolean);
-      const locations = locationsInput.split(',').map((l) => l.trim()).filter(Boolean);
+      const prof = await api.getProfile().catch(() => null);
+      const roles = prof?.headline ? [prof.headline] : ['Software Engineer'];
+      const locations = prof?.location ? [prof.location] : ['Bengaluru'];
 
       const run = await api.startAutomation({
         source_type: sourceType,
         roles,
         locations,
-        auto_apply_matches: autoApply,
+        auto_apply_matches: true,
         max_applications: 10,
-        auto_apply_threshold: 85.0,
-        max_job_age_hours: maxJobAgeHours ? parseFloat(maxJobAgeHours) : undefined,
-        prefer_fresh_hours: preferFresh ? 6.0 : undefined,
-        freshness_weight: 0.10,
+        auto_apply_threshold: 80.0,
+        headless: !showDesktopBrowser,
       });
 
       setTimelineEvents([
@@ -81,14 +196,14 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({ activeRun, onRef
           run_id: run.run_id,
           event_name: 'RUN_INITIALIZED',
           state: 'INITIALIZING',
-          message: `Automation started for ${roles.join(', ')} on [${sourceType.toUpperCase()}]. Freshness filter: ${maxJobAgeHours ? `Within ${maxJobAgeHours}h` : 'Any time'}.`,
+          message: `Profile Autopilot started for [${roles.join(', ')}] on [${sourceType.toUpperCase()}] in ${showDesktopBrowser ? '🖥️ Visible Desktop Window' : '⚡ Background'} mode.`,
           timestamp: new Date().toISOString(),
         },
       ]);
-      showSuccess('Automation started successfully!');
+      showSuccess(`Profile Autopilot started (${showDesktopBrowser ? '🖥️ Desktop Window' : '⚡ Background'})!`);
       onRefreshStatus();
     } catch (e: any) {
-      showError(`Failed to start automation: ${e.response?.data?.detail || e.message}`);
+      showError(`Failed to start autopilot: ${e.response?.data?.detail || e.message}`);
     } finally {
       setIsStarting(false);
     }
@@ -134,104 +249,38 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({ activeRun, onRef
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Control & Configuration Bar */}
-      <div className="p-6 rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all">
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-              Source Platform
-            </label>
-            <select
-              value={sourceType}
-              onChange={(e) => setSourceType(e.target.value)}
-              disabled={isRunning}
-              className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
-            >
-              <option value="naukri">Naukri.com</option>
-              <option value="linkedin">LinkedIn (Easy Apply)</option>
-              <option value="greenhouse">Greenhouse ATS</option>
-              <option value="lever">Lever ATS</option>
-              <option value="workday">Workday ATS</option>
-              <option value="ashby">Ashby ATS</option>
-            </select>
+      {/* Top Mission Control Status Header - No Duplicate Filters */}
+      <div className="p-6 rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-center space-x-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-100 dark:bg-indigo-950/60 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs">
+            <Activity className="w-6 h-6 animate-pulse" />
           </div>
-
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-              Target Job Roles
-            </label>
-            <input
-              type="text"
-              value={rolesInput}
-              onChange={(e) => setRolesInput(e.target.value)}
-              disabled={isRunning}
-              placeholder="e.g. Lead Engineer, Staff Python"
-              className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 w-60 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-              Locations
-            </label>
-            <input
-              type="text"
-              value={locationsInput}
-              onChange={(e) => setLocationsInput(e.target.value)}
-              disabled={isRunning}
-              placeholder="e.g. Bengaluru, Remote"
-              className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 w-36 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
-            />
-          </div>
-
-          {/* Job Freshness Rule Filter */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-              Job Freshness Gate
-            </label>
-            <select
-              value={maxJobAgeHours}
-              onChange={(e) => setMaxJobAgeHours(e.target.value)}
-              disabled={isRunning}
-              className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
-            >
-              <option value="1">Posted within 1 hour</option>
-              <option value="6">Posted within 6 hours</option>
-              <option value="24">Posted within 24 hours</option>
-              <option value="72">Posted within 3 days</option>
-              <option value="168">Posted within 7 days</option>
-              <option value="">Any time (No age filter)</option>
-            </select>
-          </div>
-
-          <div className="flex items-center space-x-2 pt-6">
-            <input
-              type="checkbox"
-              id="autoApplyToggle"
-              checked={autoApply}
-              onChange={(e) => setAutoApply(e.target.checked)}
-              disabled={isRunning}
-              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 bg-slate-100 border-slate-300 dark:bg-slate-800 dark:border-slate-700"
-            />
-            <label htmlFor="autoApplyToggle" className="text-xs font-semibold text-slate-700 dark:text-slate-300 select-none cursor-pointer">
-              Auto Apply on &gt;85% Match
-            </label>
+            <div className="flex items-center space-x-2.5">
+              <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+                Live Automation Mission Control
+              </h1>
+              {isRunning ? (
+                <span className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/80">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>SESSION ACTIVE</span>
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                  STANDBY
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Autonomous browser interaction engine, DOM form automation, and real-time telemetry
+            </p>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center space-x-2.5">
-          {!isRunning ? (
-            <button
-              onClick={handleStartRun}
-              disabled={isStarting}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              <Play className="w-3.5 h-3.5 fill-white" />
-              <span>{isStarting ? 'Initializing Engine...' : 'Start Auto-Apply Run'}</span>
-            </button>
-          ) : (
-            <>
+        {/* Dynamic Controls based on run state */}
+        <div className="flex items-center space-x-3">
+          {isRunning ? (
+            <div className="flex items-center space-x-2">
               {isPaused ? (
                 <button
                   onClick={handleResume}
@@ -257,50 +306,190 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({ activeRun, onRef
                 <Square className="w-3.5 h-3.5 fill-white" />
                 <span>Stop Run</span>
               </button>
-            </>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Dual-Mode Toggle */}
+              <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => handleToggleDesktopBrowser(true)}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    showDesktopBrowser
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                  }`}
+                  title="Launches a real visible Chromium window on your desktop to watch automation at native 60 FPS"
+                >
+                  <Monitor className="w-3.5 h-3.5" />
+                  <span>Visible Desktop (60 FPS)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleDesktopBrowser(false)}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    !showDesktopBrowser
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                  }`}
+                  title="Runs silently in the background with in-memory canvas streaming"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Silent Background</span>
+                </button>
+              </div>
+
+              {/* Option to navigate to Job Discovery to select specific jobs */}
+              {onNavigate && (
+                <button
+                  onClick={() => onNavigate('discovery')}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 flex items-center space-x-2 transition-transform active:scale-95 cursor-pointer"
+                >
+                  <Compass className="w-4 h-4 text-indigo-500" />
+                  <span>Curate Jobs in Discovery</span>
+                </button>
+              )}
+
+              {/* 1-Click Profile Autopilot */}
+              <button
+                onClick={handleStartProfileRun}
+                disabled={isStarting}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <Rocket className="w-3.5 h-3.5" />
+                <span>{isStarting ? 'Starting Engine...' : 'Run Profile Autopilot'}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
 
+      {/* Run Completion Notification Banner */}
+      {completedSummary && (
+        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 flex items-center justify-between gap-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-emerald-900 dark:text-emerald-100 flex items-center space-x-2">
+                <span>All Automation Tasks Completed!</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-200/60 dark:bg-emerald-800/60 text-emerald-800 dark:text-emerald-200 font-bold">100% DONE</span>
+              </div>
+              <div className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
+                {completedSummary.message} — Discovered: <strong>{completedSummary.discovered}</strong> • Matched: <strong>{completedSummary.matched}</strong> • Applied: <strong>{completedSummary.applied}</strong>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0">
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('crm')}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                View Applications
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setCompletedSummary(null);
+                setCurrentExecutionState('IDLE');
+                onRefreshStatus();
+              }}
+              className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Dual Stream Grid: Browser Frame Canvas + Realtime Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Visual Frame Canvas (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col rounded-3xl bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-lg min-h-[480px]">
-          <div className="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
-              <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span>
-              <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-              <span className="text-xs font-bold text-slate-300 pl-2">Live Automation Viewport</span>
+        <div className="lg:col-span-7 flex flex-col rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+          {/* Browser Chrome Header */}
+          <div className="px-4 py-2.5 bg-slate-100/90 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+            <div className="flex items-center space-x-2 shrink-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 pl-1.5 hidden sm:inline">Browser Viewport</span>
             </div>
 
-            <div className="flex items-center space-x-2">
+            {/* URL Address Bar */}
+            <div className="flex-1 max-w-sm px-3 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center space-x-1.5 text-[11px] text-slate-500 dark:text-slate-400 truncate shadow-2xs">
+              <Lock className="w-3 h-3 text-emerald-500 shrink-0" />
+              <span className="truncate">{liveUrl || `https://www.${sourceType.toLowerCase()}.com/jobs`}</span>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0">
               {isRunning && (
-                <span className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                  <span>5 FPS STREAM</span>
+                <span className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>{showDesktopBrowser ? '🖥️ VISIBLE DESKTOP (60 FPS)' : '⚡ SILENT BACKGROUND'}</span>
                 </span>
               )}
-              <span className="text-[11px] text-slate-400 font-mono">1280x800</span>
+              <span className="text-[10px] text-slate-400 font-mono">1280×800</span>
             </div>
           </div>
 
-          <div className="flex-1 bg-slate-950/90 flex items-center justify-center relative p-2">
-            {frameBase64 ? (
-              <img
-                src={frameBase64}
-                alt="Live Automation Browser Frame"
-                className="w-full h-full object-contain rounded-xl border border-slate-800 shadow-inner"
-              />
-            ) : (
-              <div className="text-center p-8 space-y-3">
-                <div className="w-16 h-16 rounded-2xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-center mx-auto text-slate-400">
-                  <Activity className="w-8 h-8 text-indigo-400" />
+          {/* Viewport Canvas with exact 16:10 aspect ratio */}
+          <div className="aspect-[16/10] w-full bg-slate-100 dark:bg-slate-950 flex items-center justify-center relative overflow-hidden">
+            <canvas
+              ref={canvasRef}
+              width={1280}
+              height={800}
+              className="w-full h-full object-contain"
+            />
+            {!hasReceivedFrame && (
+              <div className="absolute inset-0 bg-slate-100/90 dark:bg-slate-950/90 backdrop-blur-xs flex items-center justify-center text-center p-8 z-10 pointer-events-none">
+                <div className="space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 flex items-center justify-center mx-auto text-indigo-600 dark:text-indigo-400 shadow-xs">
+                    <Activity className="w-7 h-7 animate-pulse" />
+                  </div>
+                  <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    {isRunning ? 'Connecting Live Browser Stream...' : 'Live Browser Viewport Ready'}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
+                    {isRunning
+                      ? 'Real-time visual stream active. Capturing field inputs, page scrolling, and application submissions.'
+                      : 'Launch Profile Autopilot or start a discovery run to stream real-time browser actions.'}
+                  </p>
                 </div>
-                <div className="text-sm font-bold text-slate-200">Live Browser Stream Ready</div>
-                <p className="text-xs text-slate-400 max-w-sm">
-                  Start an auto-apply run to stream real-time DOM interactions, field filling, and multi-step progression.
-                </p>
+              </div>
+            )}
+
+            {/* Stage HUD Indicators on top of Viewport */}
+            {isRunning && (currentExecutionState === 'MATCHING' || activeRun?.active_state === 'MATCHING') && (
+              <div className="absolute top-3 left-3 right-3 bg-slate-900/90 text-white backdrop-blur-md border border-indigo-500/40 rounded-xl p-2.5 flex items-center justify-between shadow-xl z-20 animate-in fade-in">
+                <div className="flex items-center space-x-2.5">
+                  <Sparkles className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
+                  <div>
+                    <span className="text-[11px] font-bold text-indigo-200">Stage 2: AI Matching Active</span>
+                    <span className="text-[10px] text-slate-300 ml-2 hidden sm:inline">Evaluating skills &amp; profile fit... Browser will resume for auto-apply.</span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-medium text-indigo-300 bg-indigo-500/15 px-2.5 py-0.5 rounded-full border border-indigo-500/30 flex items-center gap-1.5 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+                  Analyzing
+                </span>
+              </div>
+            )}
+
+            {isRunning && (currentExecutionState === 'DISCOVERING' || activeRun?.active_state === 'DISCOVERING') && (
+              <div className="absolute top-3 left-3 bg-slate-900/85 text-white backdrop-blur-md border border-emerald-500/40 rounded-xl px-3 py-1.5 flex items-center space-x-2 shadow-lg z-20 animate-in fade-in">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-[11px] font-bold text-emerald-300">Stage 1: Job Discovery &amp; Live Search Scrolling</span>
+              </div>
+            )}
+
+            {isRunning && (currentExecutionState === 'APPLYING' || activeRun?.active_state === 'APPLYING') && (
+              <div className="absolute top-3 left-3 bg-slate-900/85 text-white backdrop-blur-md border border-sky-500/40 rounded-xl px-3 py-1.5 flex items-center space-x-2 shadow-lg z-20 animate-in fade-in">
+                <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                <span className="text-[11px] font-bold text-sky-300">Stage 3: Submitting Application via Browser</span>
               </div>
             )}
           </div>

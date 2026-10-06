@@ -30,6 +30,15 @@ class ApplicationResponseDTO(BaseModel):
     screenshot_file_path: Optional[str] = None
     job_title: Optional[str] = None
     company: Optional[str] = None
+    location: Optional[str] = None
+    min_experience_years: Optional[float] = None
+    max_experience_years: Optional[float] = None
+    min_salary: Optional[float] = None
+    max_salary: Optional[float] = None
+    salary_currency: Optional[str] = "INR"
+    apply_url: Optional[str] = None
+    platform: Optional[str] = None
+    match_score: Optional[float] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     questions: List[ApplicationQuestionDTO] = []

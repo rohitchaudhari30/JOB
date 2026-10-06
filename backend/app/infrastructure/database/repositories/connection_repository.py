@@ -89,20 +89,39 @@ class SqlAlchemyBrowserSessionRepository(BrowserSessionRepository):
         return self._to_domain(res)
 
     async def get_by_user_and_platform(self, user_id: str, platform: str) -> Optional[BrowserSession]:
+        plat_lower = platform.lower().strip()
+        # 1. Join through PlatformConnectionModel
         stmt = select(BrowserSessionModel).join(
             PlatformConnectionModel, BrowserSessionModel.connection_id == PlatformConnectionModel.id
         ).where(
             BrowserSessionModel.user_id == user_id,
-            PlatformConnectionModel.platform == platform
-        )
+            PlatformConnectionModel.platform.ilike(plat_lower)
+        ).order_by(BrowserSessionModel.updated_at.desc())
         res = await self._session.scalar(stmt)
-        if not res:
-            # Fallback check on browser_sessions directly
-            stmt2 = select(BrowserSessionModel).where(BrowserSessionModel.user_id == user_id)
-            res = await self._session.scalar(stmt2)
-        if not res:
-            return None
-        return self._to_domain(res)
+        if res:
+            return self._to_domain(res)
+
+        # 2. Match via source_id directly matching platform name
+        stmt2 = select(BrowserSessionModel).where(
+            BrowserSessionModel.user_id == user_id,
+            BrowserSessionModel.source_id.ilike(plat_lower)
+        ).order_by(BrowserSessionModel.updated_at.desc())
+        res2 = await self._session.scalar(stmt2)
+        if res2:
+            return self._to_domain(res2)
+
+        # 3. Join through JobSourceModel
+        stmt3 = select(BrowserSessionModel).join(
+            JobSourceModel, BrowserSessionModel.source_id == JobSourceModel.id
+        ).where(
+            BrowserSessionModel.user_id == user_id,
+            JobSourceModel.source_type.ilike(plat_lower)
+        ).order_by(BrowserSessionModel.updated_at.desc())
+        res3 = await self._session.scalar(stmt3)
+        if res3:
+            return self._to_domain(res3)
+
+        return None
 
     async def save_session(self, session: BrowserSession) -> BrowserSession:
         model = await self._session.get(BrowserSessionModel, session.id)

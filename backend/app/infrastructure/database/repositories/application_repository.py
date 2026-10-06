@@ -1,5 +1,5 @@
 from typing import List
-from sqlalchemy import func, select
+from sqlalchemy import func, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.domain.applications.entities import (
@@ -13,6 +13,7 @@ from app.infrastructure.database.models.models import (
     ApplicationEventModel,
     ApplicationModel,
     ApplicationQuestionModel,
+    MatchResultModel,
 )
 
 
@@ -20,7 +21,7 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
     def __init__(self, session: AsyncSession):
         self._session = session
 
-    def _to_entity(self, model: ApplicationModel) -> Application:
+    def _to_entity(self, model: ApplicationModel, match_score: float | None = None) -> Application:
         questions = [
             ApplicationQuestion(
                 id=q.id,
@@ -33,8 +34,30 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             )
             for q in (model.questions or [])
         ]
-        job_title = model.job.title if getattr(model, "job", None) else None
-        company = model.job.company if getattr(model, "job", None) else None
+        job = getattr(model, "job", None)
+        job_title = job.title if job else None
+        company = job.company if job else None
+        location = job.location if job else None
+        min_experience_years = job.min_experience_years if job else None
+        max_experience_years = job.max_experience_years if job else None
+        min_salary = job.min_salary if job else None
+        max_salary = job.max_salary if job else None
+        salary_currency = job.salary_currency if job else "INR"
+        apply_url = job.apply_url if job else None
+        platform = None
+        if job:
+            if getattr(job, "source_id", None) and "-" not in str(job.source_id):
+                platform = str(job.source_id).capitalize()
+            elif job.apply_url:
+                url_lower = job.apply_url.lower()
+                if "naukri" in url_lower:
+                    platform = "Naukri"
+                elif "linkedin" in url_lower:
+                    platform = "LinkedIn"
+                elif "indeed" in url_lower:
+                    platform = "Indeed"
+            if not platform:
+                platform = "Naukri"
         return Application(
             id=model.id,
             user_id=model.user_id,
@@ -50,12 +73,28 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             updated_at=model.updated_at,
             job_title=job_title,
             company=company,
+            location=location,
+            min_experience_years=min_experience_years,
+            max_experience_years=max_experience_years,
+            min_salary=min_salary,
+            max_salary=max_salary,
+            salary_currency=salary_currency,
+            apply_url=apply_url,
+            platform=platform,
+            match_score=match_score,
             questions=questions,
         )
 
     async def get_by_id(self, application_id: str) -> Application | None:
         stmt = (
-            select(ApplicationModel)
+            select(ApplicationModel, MatchResultModel.overall_score)
+            .outerjoin(
+                MatchResultModel,
+                and_(
+                    MatchResultModel.job_id == ApplicationModel.job_id,
+                    MatchResultModel.user_id == ApplicationModel.user_id,
+                ),
+            )
             .where(ApplicationModel.id == application_id)
             .options(
                 selectinload(ApplicationModel.questions),
@@ -63,12 +102,19 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             )
         )
         result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
-        return self._to_entity(model) if model else None
+        row = result.first()
+        return self._to_entity(row[0], match_score=row[1]) if row else None
 
     async def get_by_user_and_job(self, user_id: str, job_id: str) -> Application | None:
         stmt = (
-            select(ApplicationModel)
+            select(ApplicationModel, MatchResultModel.overall_score)
+            .outerjoin(
+                MatchResultModel,
+                and_(
+                    MatchResultModel.job_id == ApplicationModel.job_id,
+                    MatchResultModel.user_id == ApplicationModel.user_id,
+                ),
+            )
             .where(
                 ApplicationModel.user_id == user_id,
                 ApplicationModel.job_id == job_id,
@@ -79,8 +125,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             )
         )
         result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
-        return self._to_entity(model) if model else None
+        row = result.first()
+        return self._to_entity(row[0], match_score=row[1]) if row else None
 
     async def save(self, application: Application) -> Application:
         stmt = select(ApplicationModel).where(ApplicationModel.id == application.id)
@@ -144,7 +190,14 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
         limit: int = 50
     ) -> List[Application]:
         stmt = (
-            select(ApplicationModel)
+            select(ApplicationModel, MatchResultModel.overall_score)
+            .outerjoin(
+                MatchResultModel,
+                and_(
+                    MatchResultModel.job_id == ApplicationModel.job_id,
+                    MatchResultModel.user_id == ApplicationModel.user_id,
+                ),
+            )
             .where(ApplicationModel.user_id == user_id)
             .options(
                 selectinload(ApplicationModel.questions),
@@ -156,8 +209,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
 
         stmt = stmt.order_by(ApplicationModel.created_at.desc()).offset(skip).limit(limit)
         result = await self._session.execute(stmt)
-        models = result.scalars().all()
-        return [self._to_entity(m) for m in models]
+        rows = result.all()
+        return [self._to_entity(m, match_score=score) for m, score in rows]
 
     async def count_by_state(self, user_id: str, state: str) -> int:
         stmt = select(func.count(ApplicationModel.id)).where(

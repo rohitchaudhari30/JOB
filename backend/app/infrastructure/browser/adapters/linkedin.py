@@ -98,7 +98,8 @@ class LinkedInAdapter(BaseJobSourceAdapter):
         page: Optional[Page] = None
         streamer = None
         try:
-            page = await context.new_page()
+            pages = getattr(context, "pages", None)
+            page = pages[0] if (isinstance(pages, list) and len(pages) > 0) else await context.new_page()
             if user_id and run_id:
                 from app.infrastructure.browser.screenshot_streamer import ScreenshotStreamer
                 streamer = ScreenshotStreamer(page=page, user_id=user_id, run_id=run_id, fps=5)
@@ -118,16 +119,66 @@ class LinkedInAdapter(BaseJobSourceAdapter):
             except Exception:
                 pass
 
-            await asyncio.sleep(2)  # Settle delay
+            # Dismiss any open modals or backdrops
+            try:
+                await page.evaluate("""() => {
+                    document.querySelectorAll('.modal__overlay, .artdeco-modal-overlay').forEach(el => el.remove());
+                    if (document.activeElement && document.activeElement.blur) {
+                        document.activeElement.blur();
+                    }
+                }""")
+            except Exception:
+                pass
 
-            cards = await page.query_selector_all(
-                ".job-card-container, .jobs-search-results__list-item, div[data-job-id], ul.jobs-search__results-list li, div.base-card"
-            )
-            logger.info(f"Found {len(cards)} job cards on LinkedIn.")
+            # Natural smooth visual scan with dynamic scrolling across listings
+            for _ in range(3):
+                await page.evaluate("window.scrollBy({ top: 450, behavior: 'smooth' })")
+                await asyncio.sleep(0.35)
 
-            for card in cards:
+            # Single high-performance in-browser extraction of all job cards
+            raw_cards_data = await page.evaluate("""
+                () => {
+                    const cards = document.querySelectorAll(
+                        ".job-card-container, .jobs-search-results__list-item, div[data-job-id], ul.jobs-search__results-list li, div.base-card"
+                    );
+                    const results = [];
+                    cards.forEach(card => {
+                        try {
+                            card.style.transition = 'box-shadow 0.2s ease';
+                            card.style.boxShadow = '0 0 0 2px rgba(10, 102, 194, 0.6)';
+                        } catch (e) {}
+
+                        const titleEl = card.querySelector(
+                            ".job-card-list__title, .artdeco-entity-lockup__title a, a[data-control-name='job_card_click'], a.base-card__full-link, h3.base-search-card__title"
+                        );
+                        if (!titleEl) return;
+                        const compEl = card.querySelector(
+                            ".job-card-container__primary-description, .artdeco-entity-lockup__subtitle, h4.base-search-card__subtitle a, h4.base-search-card__subtitle"
+                        );
+                        const locEl = card.querySelector(
+                            ".job-card-container__metadata-item, .artdeco-entity-lockup__caption, span.job-search-card__location"
+                        );
+                        const dateEl = card.querySelector(
+                            "time, .job-search-card__listdate, .job-search-card__listdate--new, .job-card-container__listed-time, time[datetime], .job-card-list__footer-item"
+                        );
+                        results.push({
+                            title: (titleEl.innerText || "").trim(),
+                            href: titleEl.getAttribute("href") || "",
+                            cardJobId: card.getAttribute("data-job-id") || "",
+                            company: compEl ? (compEl.innerText || "").trim() : "Confidential Company",
+                            location: locEl ? (locEl.innerText || "").trim() : "Any Location",
+                            postedText: dateEl ? (dateEl.innerText || "").trim() : "",
+                            postedDatetime: dateEl ? dateEl.getAttribute("datetime") || "" : "",
+                        });
+                    });
+                    return results;
+                }
+            """)
+            logger.info(f"Extracted {len(raw_cards_data)} raw job cards from LinkedIn in one pass.")
+
+            for item in raw_cards_data:
                 try:
-                    job = await self._parse_job_card(card, page, filters)
+                    job = self._build_job_from_dict(item, filters)
                     if job:
                         yield job
                 except Exception as card_err:
@@ -141,43 +192,28 @@ class LinkedInAdapter(BaseJobSourceAdapter):
             if page and not page.is_closed():
                 await page.close()
 
-    async def _parse_job_card(self, card, page: Page, filters: Optional[SearchQueryFilter] = None) -> Optional[Job]:
-        title_el = await card.query_selector(
-            ".job-card-list__title, .artdeco-entity-lockup__title a, a[data-control-name='job_card_click'], a.base-card__full-link, h3.base-search-card__title"
-        )
-        company_el = await card.query_selector(
-            ".job-card-container__primary-description, .artdeco-entity-lockup__subtitle, h4.base-search-card__subtitle a, h4.base-search-card__subtitle"
-        )
-        loc_el = await card.query_selector(
-            ".job-card-container__metadata-item, .artdeco-entity-lockup__caption, span.job-search-card__location"
-        )
-        date_el = await card.query_selector(
-            "time, .job-search-card__listdate, .job-search-card__listdate--new, .job-card-container__listed-time, time[datetime], .job-card-list__footer-item"
-        )
-
-        if not title_el:
+    def _build_job_from_dict(self, item: dict, filters: Optional[SearchQueryFilter] = None) -> Optional[Job]:
+        """Fast memory-only builder from in-browser extracted dictionary."""
+        title = item.get("title", "").strip()
+        if not title:
             return None
 
-        title = (await title_el.inner_text()).strip()
-        apply_url = await title_el.get_attribute("href") or ""
+        apply_url = item.get("href", "")
         if apply_url and not apply_url.startswith("http"):
             apply_url = f"{self.BASE_URL}{apply_url}"
 
         # Extract LinkedIn Job ID
-        job_id_attr = await card.get_attribute("data-job-id")
+        job_id_attr = item.get("cardJobId")
         if not job_id_attr:
             match = re.search(r"view/(\d+)", apply_url) or re.search(r"currentJobId=(\d+)", apply_url)
             external_job_id = match.group(1) if match else str(uuid.uuid5(uuid.NAMESPACE_URL, apply_url))
         else:
             external_job_id = job_id_attr
 
-        company = (await company_el.inner_text()).strip() if company_el else "Confidential Company"
-        location = (await loc_el.inner_text()).strip() if loc_el else "Any Location"
+        company = item.get("company", "Confidential Company")
+        location = item.get("location", "Any Location")
 
-        # Date & Freshness parsing
-        raw_posted_text = (await date_el.inner_text()).strip() if date_el else None
-        if not raw_posted_text and date_el:
-            raw_posted_text = await date_el.get_attribute("datetime")
+        raw_posted_text = item.get("postedText") or item.get("postedDatetime") or None
 
         from app.domain.jobs.freshness import FreshnessCalculator, PostedDateParser
         posted_at, precision, _ = PostedDateParser.parse(raw_posted_text)

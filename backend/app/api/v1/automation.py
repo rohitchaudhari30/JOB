@@ -43,6 +43,7 @@ class StartRunRequest(BaseModel):
     prefer_fresh_hours: Optional[float] = 6.0
     auto_apply_threshold: float = 85.0
     approval_threshold: float = 70.0
+    headless: bool = False  # False = 🖥️ Visible Desktop Window (Default), True = Silent Background
 
 
 class RunStatusResponse(BaseModel):
@@ -146,7 +147,22 @@ async def start_automation_run(
         app_repo=app_repo,
         user_repo=user_repo,
         ai_gateway=ai_gateway,
+        headless=req.headless,
     )
+    return _to_run_response(session)
+
+
+@router.get("/active", response_model=Optional[RunStatusResponse])
+async def get_active_user_run(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    session = orchestrator.get_active_user_run(current_user.id)
+    if not session or session.status in (
+        AutomationRunStatus.COMPLETED,
+        AutomationRunStatus.ABORTED,
+        AutomationRunStatus.FAILED,
+    ):
+        return None
     return _to_run_response(session)
 
 

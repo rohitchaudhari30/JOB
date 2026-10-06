@@ -63,7 +63,12 @@ export const App: React.FC = () => {
   };
 
   const loadActiveRun = async () => {
-    // Polls active run status if needed
+    try {
+      const run = await api.getActiveRun();
+      setActiveRun(run);
+    } catch (e) {
+      // Ignored if unauthenticated or network error
+    }
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -233,14 +238,35 @@ export const App: React.FC = () => {
     );
   }
 
+  const handleTabChange = (tab: NavTab | string) => {
+    if (tab === 'applications' || tab === 'application') {
+      setActiveTab('crm');
+    } else if (tab === 'ai-matches' || tab === 'ai_matches') {
+      setActiveTab('matches');
+    } else if (tab === 'job-discovery' || tab === 'job_discovery') {
+      setActiveTab('discovery');
+    } else if (tab === 'live-automation') {
+      setActiveTab('live_console');
+    } else {
+      setActiveTab(tab as NavTab);
+    }
+  };
+
   return (
     <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark' : ''} bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200`}>
-      <Navbar user={user} onLogout={handleLogout} onNavigate={setActiveTab} />
+      <Navbar
+        user={user}
+        onLogout={handleLogout}
+        onNavigate={handleTabChange}
+        activeRun={activeRun}
+        onOpenLiveConsole={() => handleTabChange('live_console')}
+      />
 
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
+          user={user}
           stats={{
             isLiveRunning: activeRun?.status === 'RUNNING',
           }}
@@ -248,24 +274,31 @@ export const App: React.FC = () => {
 
         <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8 w-full">
           {activeTab === 'dashboard' && (
-            <Dashboard onNavigate={setActiveTab} activeRun={activeRun} />
+            <Dashboard onNavigate={handleTabChange} activeRun={activeRun} />
           )}
           {activeTab === 'direct_apply' && (
-            <DirectApply onNavigate={setActiveTab} />
+            <DirectApply onNavigate={handleTabChange} />
           )}
           {activeTab === 'live_console' && (
             <LiveAutomation
               activeRun={activeRun}
               onRefreshStatus={loadActiveRun}
+              onNavigate={handleTabChange}
             />
           )}
-          {activeTab === 'matches' && <AIMatches />}
-          {activeTab === 'discovery' && <JobDiscovery />}
-          {activeTab === 'connections' && <PlatformConnections />}
-          {activeTab === 'crm' && <ApplicationCRM />}
-          {activeTab === 'analytics' && <Analytics />}
-          {activeTab === 'profile' && <ProfileManager onNavigate={setActiveTab} />}
-          {activeTab === 'schedules' && <ScheduleManager />}
+          {activeTab === 'matches' && <AIMatches onNavigate={handleTabChange} />}
+          {activeTab === 'discovery' && (
+            <JobDiscovery
+              activeRun={activeRun}
+              onRefreshStatus={loadActiveRun}
+              onNavigate={handleTabChange}
+            />
+          )}
+          {activeTab === 'connections' && <PlatformConnections onNavigate={handleTabChange} />}
+          {(activeTab === 'crm' || (activeTab as string) === 'applications') && <ApplicationCRM onNavigate={handleTabChange} />}
+          {activeTab === 'analytics' && <Analytics onNavigate={handleTabChange} />}
+          {activeTab === 'profile' && <ProfileManager onNavigate={handleTabChange} />}
+          {activeTab === 'schedules' && <DirectApply onNavigate={handleTabChange} initialTab="schedules" />}
         </main>
       </div>
     </div>

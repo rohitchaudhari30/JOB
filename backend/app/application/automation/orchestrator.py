@@ -116,7 +116,9 @@ class AutomationOrchestrator:
         match_repo: Optional[MatchResultRepository] = None,
         app_repo: Optional[ApplicationRepository] = None,
         user_repo: Optional[UserRepository] = None,
+        session_repo: Optional[Any] = None,
         ai_gateway: Optional[AIGateway] = None,
+        headless: bool = False,
     ) -> AutomationSession:
         run_id = f"run_{uuid.uuid4().hex[:8]}"
         session = AutomationSession(run_id=run_id, user_id=user_id)
@@ -144,7 +146,9 @@ class AutomationOrchestrator:
                 match_repo=match_repo,
                 app_repo=app_repo,
                 user_repo=user_repo,
+                session_repo=session_repo,
                 ai_gateway=ai_gateway,
+                headless=headless,
             )
         )
 
@@ -167,7 +171,9 @@ class AutomationOrchestrator:
         match_repo: Any = None,
         app_repo: Any = None,
         user_repo: Any = None,
+        session_repo: Any = None,
         ai_gateway: Any = None,
+        headless: bool = False,
     ):
         try:
             if job_repo is None or hasattr(job_repo, "_session"):
@@ -184,6 +190,7 @@ class AutomationOrchestrator:
                     SqlAlchemyResumeRepository,
                 )
                 from app.infrastructure.database.repositories.user_repository import SqlAlchemyUserRepository
+                from app.infrastructure.database.repositories.connection_repository import SqlAlchemyBrowserSessionRepository
 
                 async with AsyncSessionLocal() as db_session:
                     j_repo = SqlAlchemyJobRepository(db_session)
@@ -193,6 +200,7 @@ class AutomationOrchestrator:
                     m_repo = SqlAlchemyMatchResultRepository(db_session)
                     a_repo = SqlAlchemyApplicationRepository(db_session)
                     u_repo = SqlAlchemyUserRepository(db_session)
+                    sess_repo = SqlAlchemyBrowserSessionRepository(db_session)
                     ai_gw = MultiTierAIGateway(session=db_session)
 
                     await self._run_pipeline_core(
@@ -211,7 +219,9 @@ class AutomationOrchestrator:
                         match_repo=m_repo,
                         app_repo=a_repo,
                         user_repo=u_repo,
+                        session_repo=sess_repo,
                         ai_gateway=ai_gw,
+                        headless=headless,
                     )
                     await db_session.commit()
             else:
@@ -231,7 +241,9 @@ class AutomationOrchestrator:
                     match_repo=match_repo,
                     app_repo=app_repo,
                     user_repo=user_repo,
+                    session_repo=session_repo,
                     ai_gateway=ai_gateway,
+                    headless=headless,
                 )
         except Exception as e:
             logger.error(f"Automation run pipeline error: {e}", exc_info=True)
@@ -264,14 +276,18 @@ class AutomationOrchestrator:
         match_repo: Any,
         app_repo: Any,
         user_repo: Any,
-        ai_gateway: Any,
+        session_repo: Optional[Any] = None,
+        ai_gateway: Any = None,
+        headless: bool = False,
     ):
-        logger.info(f"Starting automation pipeline [{session.run_id}] for user [{session.user_id}]...")
+        logger.info(f"Starting automation pipeline [{session.run_id}] for user [{session.user_id}] (headless={headless})...")
 
+        mode_label = "Background Mode" if headless else "🖥️ Visible Desktop Browser Mode"
         await self._broadcast_event(
             session=session,
             event_name="RUN_STARTED",
-            message=f"Starting job automation cycle on [{source_type.upper()}] for roles: {', '.join(roles)}",
+            message=f"Starting job automation cycle on [{source_type.upper()}] ({mode_label}) for roles: {', '.join(roles)}",
+            payload={"headless": headless},
         )
 
         # Step 1: Job Discovery
@@ -282,12 +298,32 @@ class AutomationOrchestrator:
             min_salary=min_salary,
             max_pages=2,
         )
+
+        # Check for active authenticated session for this platform (Naukri, LinkedIn, etc.)
+        encrypted_storage_state = None
+        if session_repo:
+            try:
+                browser_sess = await session_repo.get_by_user_and_platform(session.user_id, source_type.lower())
+                if browser_sess and browser_sess.encrypted_storage_state and getattr(browser_sess, "status", "ACTIVE") == "ACTIVE":
+                    encrypted_storage_state = browser_sess.encrypted_storage_state
+                    logger.info(f"Loaded active session for user [{session.user_id}] on platform [{source_type}]. Injecting authenticated state.")
+                    await self._broadcast_event(
+                        session=session,
+                        event_name="SESSION_ATTACHED",
+                        message=f"Connected account detected: running authenticated automation on {source_type.upper()}.",
+                        payload={"platform": source_type},
+                    )
+            except Exception as sess_err:
+                logger.warning(f"Could not load session for [{source_type}]: {sess_err}. Running in guest mode.")
+
         discover_uc = DiscoverJobsUseCase(job_repo=job_repo, job_source_repo=source_repo)
         discovery_result = await discover_uc.execute(
             user_id=session.user_id,
             source_type=source_type,
             filters=filters,
+            encrypted_storage_state=encrypted_storage_state,
             run_id=session.run_id,
+            headless=headless,
         )
 
         disc_total = discovery_result.get("discovered_total", 0) if isinstance(discovery_result, dict) else getattr(discovery_result, "discovered_total", 0)
@@ -330,24 +366,33 @@ class AutomationOrchestrator:
             if not job_id:
                 continue
 
-            match_res = await evaluate_uc.execute(
-                user_id=session.user_id,
-                job_id=job_id,
-                custom_rule=match_rule,
-            )
-            session.matched_jobs_count += 1
+            try:
+                match_res = await evaluate_uc.execute(
+                    user_id=session.user_id,
+                    job_id=job_id,
+                    custom_rule=match_rule,
+                )
+                session.matched_jobs_count += 1
 
-            await self._broadcast_event(
-                session=session,
-                event_name="JOB_EVALUATED",
-                message=f"Evaluated [{job_title} at {job_company}]: Score {match_res.overall_score:.1f}% -> {match_res.decision.value}",
-                payload={"score": match_res.overall_score, "decision": match_res.decision.value},
-            )
+                await self._broadcast_event(
+                    session=session,
+                    event_name="JOB_EVALUATED",
+                    message=f"Evaluated [{job_title} at {job_company}]: Score {match_res.overall_score:.1f}% -> {match_res.decision.value}",
+                    payload={"score": match_res.overall_score, "decision": match_res.decision.value},
+                )
 
-            if match_res.decision in (DecisionEnum.AUTO_APPLY, DecisionEnum.REQUIRE_APPROVAL):
-                job_obj = await job_repo.get_by_id(job_id)
-                if job_obj:
-                    shortlisted_jobs.append((job_obj, match_res))
+                if match_res.decision in (DecisionEnum.AUTO_APPLY, DecisionEnum.REQUIRE_APPROVAL):
+                    job_obj = await job_repo.get_by_id(job_id)
+                    if job_obj:
+                        shortlisted_jobs.append((job_obj, match_res))
+            except Exception as eval_err:
+                logger.warning(f"Error evaluating job {job_id} ({job_title} at {job_company}): {eval_err}")
+                await self._broadcast_event(
+                    session=session,
+                    event_name="JOB_EVALUATION_FAILED",
+                    message=f"Skipped [{job_title} at {job_company}]: {eval_err}",
+                    payload={"job_id": job_id, "error": str(eval_err)},
+                )
 
         if session.cancel_requested:
             return
@@ -361,6 +406,7 @@ class AutomationOrchestrator:
             profile_repo=profile_repo,
             resume_repo=resume_repo,
             user_repo=user_repo,
+            session_repo=session_repo,
             ai_provider=ai_gateway,
         )
 
@@ -374,8 +420,17 @@ class AutomationOrchestrator:
             await session.pause_event.wait()
 
             # Determine if we should auto apply
-            should_apply = auto_apply_matches and (match_res.decision == DecisionEnum.AUTO_APPLY)
+            should_apply = auto_apply_matches and (
+                match_res.decision in (DecisionEnum.AUTO_APPLY, DecisionEnum.REQUIRE_APPROVAL)
+                or match_res.overall_score >= (match_rule.approval_threshold or 70.0)
+            )
             initial_state = WorkflowStateEnum.APPROVED if should_apply else WorkflowStateEnum.APPROVAL_REQUIRED
+
+            # Prevent double-applying if already submitted in a previous run
+            existing_app = await app_repo.get_by_user_and_job(user_id=session.user_id, job_id=job_obj.id)
+            if existing_app and existing_app.workflow_state in (WorkflowStateEnum.APPLIED, WorkflowStateEnum.SUBMITTING):
+                logger.info(f"Already applied to {job_obj.title} at {job_obj.company}. Skipping.")
+                continue
 
             app_entity = await create_app_uc.execute(
                 user_id=session.user_id,
@@ -391,13 +446,21 @@ class AutomationOrchestrator:
                     session=session,
                     event_name="AUTO_APPLYING",
                     message=f"Auto-applying to [{job_obj.title} at {job_obj.company}]...",
+                    payload={"job_id": job_obj.id, "job_title": job_obj.title, "company": job_obj.company},
                 )
                 executed_app = await exec_app_uc.execute(
                     application_id=app_entity.id,
                     run_id=session.run_id,
+                    headless=headless,
                 )
                 if executed_app.workflow_state == WorkflowStateEnum.APPLIED:
                     session.applications_submitted_count += 1
+                    await self._broadcast_event(
+                        session=session,
+                        event_name="APPLICATION_SUBMITTED",
+                        message=f"Application submitted successfully for [{job_obj.title} at {job_obj.company}].",
+                        payload={"job_id": job_obj.id, "application_id": executed_app.id, "job_title": job_obj.title, "company": job_obj.company},
+                    )
                 elif executed_app.workflow_state in (
                     WorkflowStateEnum.PAUSED_OTP,
                     WorkflowStateEnum.PAUSED_CAPTCHA,

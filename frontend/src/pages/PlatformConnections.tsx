@@ -19,11 +19,16 @@ import {
   Check,
   X,
   Loader2,
+  ArrowRight,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { PlatformConnectionInfo } from '../types';
 
-export const PlatformConnections: React.FC = () => {
+interface PlatformConnectionsProps {
+  onNavigate?: (tab: any) => void;
+}
+
+export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavigate }) => {
   const [connections, setConnections] = useState<PlatformConnectionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -216,6 +221,16 @@ export const PlatformConnections: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-3">
+          {connectedCount > 0 && onNavigate && (
+            <button
+              onClick={() => onNavigate('discovery')}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <span>Start Job Discovery</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <button
             onClick={loadConnections}
             disabled={loading}

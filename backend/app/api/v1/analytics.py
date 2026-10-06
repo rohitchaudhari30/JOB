@@ -161,3 +161,32 @@ async def get_weight_tuning(
         confidence_score=res.confidence_score,
         rationale=res.rationale,
     )
+
+
+class AIStatusResponse(BaseModel):
+    primary_provider: str = "groq"
+    primary_model: str
+    fallback_provider: str = "gemini"
+    fallback_model: str
+    is_groq_rate_limited: bool
+    remaining_cooldown_seconds: int
+    active_routing: str
+
+
+@router.get("/ai-status", response_model=AIStatusResponse)
+async def get_ai_status():
+    from app.infrastructure.ai.gateway import MultiTierAIGateway
+    from app.core.config import settings
+
+    is_limited = MultiTierAIGateway.is_rate_limit_active()
+    remaining = MultiTierAIGateway.get_remaining_cooldown()
+    active = f"gemini ({settings.GEMINI_DEFAULT_MODEL})" if is_limited else f"groq ({settings.GROQ_DEFAULT_MODEL})"
+    return AIStatusResponse(
+        primary_provider="groq",
+        primary_model=settings.GROQ_DEFAULT_MODEL,
+        fallback_provider="gemini",
+        fallback_model=settings.GEMINI_DEFAULT_MODEL,
+        is_groq_rate_limited=is_limited,
+        remaining_cooldown_seconds=remaining,
+        active_routing=active,
+    )

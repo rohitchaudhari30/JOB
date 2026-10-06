@@ -41,6 +41,19 @@ class ConnectionManager:
             for dead in dead_connections:
                 self.disconnect(user_id, dead)
 
+    async def broadcast_bytes_to_user(self, user_id: str, data: bytes):
+        """Streams binary data (raw JPEG / WebP frames) directly over WebSocket with zero base64 bloat."""
+        if user_id in self.active_connections:
+            dead_connections = []
+            for connection in self.active_connections[user_id]:
+                try:
+                    await connection.send_bytes(data)
+                except Exception:
+                    dead_connections.append(connection)
+
+            for dead in dead_connections:
+                self.disconnect(user_id, dead)
+
 
 ws_manager = ConnectionManager()
 

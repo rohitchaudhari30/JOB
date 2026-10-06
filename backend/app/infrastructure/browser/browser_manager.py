@@ -63,10 +63,10 @@ class PlaywrightBrowserManager:
                 "--disable-dev-shm-usage",
             ]
             self._browser = await self._playwright.chromium.launch(
-                headless=settings.BROWSER_HEADLESS,
+                headless=True,
                 args=launch_args,
             )
-            logger.info(f"Playwright Chromium browser launched (headless={settings.BROWSER_HEADLESS}).")
+            logger.info("Playwright Chromium background browser launched (headless=True).")
 
     async def initialize(self):
         """Launches the global Chromium browser instance."""
@@ -96,12 +96,20 @@ class PlaywrightBrowserManager:
         if encrypted_storage_state:
             try:
                 storage_state_dict = session_encryptor.decrypt_json(encrypted_storage_state)
-            except Exception as e:
-                logger.warning(f"Failed to decrypt storage_state: {e}. Launching clean context.")
+            except Exception:
+                try:
+                    storage_state_dict = (
+                        json.loads(encrypted_storage_state)
+                        if isinstance(encrypted_storage_state, str)
+                        else encrypted_storage_state
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to decrypt storage_state: {e}. Launching clean context.")
 
         context = await browser.new_context(
             storage_state=storage_state_dict,
             viewport={"width": viewport_width, "height": viewport_height},
+            device_scale_factor=1.0,
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -124,12 +132,12 @@ class PlaywrightBrowserManager:
         )
         return context
 
-    async def _create_headed_session_internal(
+    async def _create_headed_context_internal(
         self,
         storage_state_dict: Optional[dict] = None,
         viewport_width: int = 1280,
         viewport_height: int = 800,
-    ) -> tuple[BrowserContext, Page]:
+    ) -> BrowserContext:
         if not self._playwright:
             self._playwright = await async_playwright().start()
 
@@ -138,6 +146,7 @@ class PlaywrightBrowserManager:
             "--disable-infobars",
             "--no-sandbox",
             "--disable-setuid-sandbox",
+            f"--window-size={viewport_width},{viewport_height + 68}",
         ]
         headed_browser = await self._playwright.chromium.launch(
             headless=False,
@@ -146,6 +155,7 @@ class PlaywrightBrowserManager:
         context = await headed_browser.new_context(
             storage_state=storage_state_dict,
             viewport={"width": viewport_width, "height": viewport_height},
+            device_scale_factor=1.0,
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -164,9 +174,6 @@ class PlaywrightBrowserManager:
             };
             """
         )
-        page = await context.new_page()
-
-        # Wrap context.close to also close the dedicated headed browser instance
         orig_close = context.close
 
         async def _close_with_browser():
@@ -179,6 +186,20 @@ class PlaywrightBrowserManager:
                     pass
 
         context.close = _close_with_browser  # type: ignore
+        return context
+
+    async def _create_headed_session_internal(
+        self,
+        storage_state_dict: Optional[dict] = None,
+        viewport_width: int = 1280,
+        viewport_height: int = 800,
+    ) -> tuple[BrowserContext, Page]:
+        context = await self._create_headed_context_internal(
+            storage_state_dict=storage_state_dict,
+            viewport_width=viewport_width,
+            viewport_height=viewport_height,
+        )
+        page = await context.new_page()
         return context, page
 
     async def create_context(
@@ -280,11 +301,36 @@ class PlaywrightBrowserManager:
         encrypted_storage_state: Optional[str] = None,
         viewport_width: int = 1280,
         viewport_height: int = 800,
+        headless: bool = True,
     ) -> BrowserContext:
         """
         Creates an isolated, sandboxed BrowserContext for a specific user session.
+        Supports both headed (visible desktop window) and headless modes.
         Injects decrypted session cookies and stealth evasion scripts.
         """
+        if not headless:
+            storage_state_dict = None
+            if encrypted_storage_state:
+                try:
+                    storage_state_dict = session_encryptor.decrypt_json(encrypted_storage_state)
+                except Exception:
+                    try:
+                        storage_state_dict = (
+                            json.loads(encrypted_storage_state)
+                            if isinstance(encrypted_storage_state, str)
+                            else encrypted_storage_state
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to decrypt storage_state: {e}")
+
+            if self._needs_bridge():
+                if not self._proactor_bridge:
+                    self._proactor_bridge = ProactorLoopThread()
+                return await self._proactor_bridge.run_coro(
+                    self._create_headed_context_internal(storage_state_dict, viewport_width, viewport_height)
+                )
+            return await self._create_headed_context_internal(storage_state_dict, viewport_width, viewport_height)
+
         if self._needs_bridge():
             if not self._proactor_bridge:
                 self._proactor_bridge = ProactorLoopThread()

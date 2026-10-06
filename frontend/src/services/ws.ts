@@ -4,6 +4,7 @@ export interface WebSocketMessage {
   type: string;
   run_id?: string;
   frame_jpeg_base64?: string;
+  url?: string;
   event_name?: string;
   state?: string;
   message?: string;
@@ -19,12 +20,16 @@ export interface WebSocketMessage {
   challenge_type?: string;
 }
 
-export type FrameListener = (base64Jpeg: string) => void;
+export type BinaryFrameListener = (blobOrBuffer: Blob | ArrayBuffer) => void;
+export type NavListener = (url: string) => void;
+export type FrameListener = (base64Jpeg: string, url?: string) => void;
 export type EventListener = (event: TimelineEvent) => void;
 export type MessageListener = (msg: WebSocketMessage) => void;
 
 class WebSocketClient {
   private socket: WebSocket | null = null;
+  private binaryFrameListeners: Set<BinaryFrameListener> = new Set();
+  private navListeners: Set<NavListener> = new Set();
   private frameListeners: Set<FrameListener> = new Set();
   private eventListeners: Set<EventListener> = new Set();
   private messageListeners: Set<MessageListener> = new Set();
@@ -50,15 +55,26 @@ class WebSocketClient {
       };
 
       this.socket.onmessage = (event) => {
+        // 1. High-Performance Binary Frame from Native CDP Screencast
+        if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
+          this.binaryFrameListeners.forEach((listener) => listener(event.data));
+          return;
+        }
+
         try {
           const msg: WebSocketMessage = JSON.parse(event.data);
 
-          // 1. Visual Frame
-          if (msg.type === 'BROWSER_FRAME' && msg.frame_jpeg_base64) {
-            this.frameListeners.forEach((listener) => listener(msg.frame_jpeg_base64!));
+          // 2. Navigation URL update
+          if (msg.type === 'BROWSER_NAVIGATED' && msg.url) {
+            this.navListeners.forEach((listener) => listener(msg.url!));
           }
 
-          // 2. Automation Timeline Event
+          // 3. Fallback visual frame
+          if (msg.type === 'BROWSER_FRAME' && msg.frame_jpeg_base64) {
+            this.frameListeners.forEach((listener) => listener(msg.frame_jpeg_base64!, msg.url));
+          }
+
+          // 4. Automation Timeline Event
           if (msg.type === 'AUTOMATION_TIMELINE_EVENT' || msg.type === 'APPLICATION_EVENT') {
             const timelineEvt: TimelineEvent = {
               run_id: msg.run_id || '',
@@ -72,7 +88,7 @@ class WebSocketClient {
             this.eventListeners.forEach((listener) => listener(timelineEvt));
           }
 
-          // 3. Generic Message Dispatch
+          // 5. Generic Message Dispatch
           this.messageListeners.forEach((listener) => listener(msg));
         } catch (err) {
           console.error('[WebSocket] Error parsing message:', err);
@@ -113,6 +129,16 @@ class WebSocketClient {
     } else {
       console.warn('[WebSocket] Cannot send command; socket not connected.');
     }
+  }
+
+  onBinaryFrame(listener: BinaryFrameListener) {
+    this.binaryFrameListeners.add(listener);
+    return () => this.binaryFrameListeners.delete(listener);
+  }
+
+  onNavigation(listener: NavListener) {
+    this.navListeners.add(listener);
+    return () => this.navListeners.delete(listener);
   }
 
   onFrame(listener: FrameListener) {

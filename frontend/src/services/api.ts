@@ -86,6 +86,13 @@ export const api = {
     });
     return res.data;
   },
+  deleteResume: async (resumeId: string): Promise<void> => {
+    await apiClient.delete(`/resumes/${resumeId}`);
+  },
+  setDefaultResume: async (resumeId: string): Promise<Resume> => {
+    const res = await apiClient.post(`/resumes/${resumeId}/set-default`);
+    return res.data;
+  },
 
   // Jobs
   listJobs: async (params?: {
@@ -166,6 +173,10 @@ export const api = {
   // Automation & Schedules
   startAutomation: async (payload: any): Promise<AutomationRunStatus> => {
     const res = await apiClient.post('/automation/start', payload);
+    return res.data;
+  },
+  getActiveRun: async (): Promise<AutomationRunStatus | null> => {
+    const res = await apiClient.get('/automation/active');
     return res.data;
   },
   getRunStatus: async (runId: string): Promise<AutomationRunStatus> => {

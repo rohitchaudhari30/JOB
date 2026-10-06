@@ -33,11 +33,11 @@ class Settings(BaseSettings):
     GROQ_TEMPERATURE: float = 0.2
 
     GEMINI_API_KEY: str = ""
-    GEMINI_DEFAULT_MODEL: str = "gemini-2.5-flash"
-    GEMINI_PRO_MODEL: str = "gemini-2.5-pro"
+    GEMINI_DEFAULT_MODEL: str = "gemini-2.0-flash"
+    GEMINI_PRO_MODEL: str = "gemini-1.5-pro"
 
     # Browser Automation
-    BROWSER_HEADLESS: bool = False
+    BROWSER_HEADLESS: bool = True
     BROWSER_TIMEOUT_MS: int = 30000
     BROWSER_USER_DATA_DIR: str = "./storage/browser_profiles"
     BROWSER_TRACE_ON_FAILURE: bool = True

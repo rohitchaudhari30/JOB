@@ -18,7 +18,11 @@ logger = logging.getLogger("app.ai.groq")
 
 class GroqProvider(AIProvider):
     def __init__(self, api_key: str | None = None, model_name: str | None = None):
-        self._api_key = api_key or settings.GROQ_API_KEY
+        raw_key = api_key or settings.GROQ_API_KEY
+        if raw_key and raw_key.strip().lower() in ("your_groq_api_key_here", "placeholder", "none", "test", ""):
+            self._api_key = None
+        else:
+            self._api_key = raw_key
         self._model = model_name or settings.GROQ_DEFAULT_MODEL
         self._client = AsyncGroq(api_key=self._api_key) if self._api_key else None
 
@@ -95,6 +99,7 @@ class GroqProvider(AIProvider):
             missing_skills=data.get("missing_skills", []),
             reasoning=data.get("reasoning", "Evaluated based on skill and role overlap."),
             confidence=float(data.get("confidence", 0.90)),
+            provider_used="groq",
         )
 
     async def classify_question(self, question_text: str, options: List[str] | None = None) -> QuestionIntentDTO:

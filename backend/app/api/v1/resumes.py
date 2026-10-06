@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from app.api.deps import get_ai_gateway, get_current_user, get_resume_repository
 from app.application.profile.use_cases import UploadResumeUseCase
@@ -90,3 +91,36 @@ async def delete_resume(
             pass
 
     await resume_repo.delete(resume_id, current_user.id)
+
+
+@router.post("/{resume_id}/set-default", response_model=ResumeResponse)
+@router.patch("/{resume_id}/default", response_model=ResumeResponse)
+async def set_default_resume(
+    resume_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+):
+    resume = await resume_repo.set_default(resume_id, current_user.id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found.")
+    return resume
+
+
+@router.get("/{resume_id}/download")
+async def download_resume(
+    resume_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+):
+    resume = await resume_repo.get_by_id(resume_id)
+    if not resume or resume.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Resume not found.")
+
+    if not os.path.exists(resume.file_path):
+        raise HTTPException(status_code=404, detail="Resume file not found on disk.")
+
+    return FileResponse(
+        path=resume.file_path,
+        filename=resume.file_name,
+        media_type=resume.mime_type or "application/pdf",
+    )

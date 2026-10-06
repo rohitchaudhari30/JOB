@@ -67,4 +67,13 @@ class Application:
     updated_at: datetime | None = None
     job_title: str | None = None
     company: str | None = None
+    location: str | None = None
+    min_experience_years: float | None = None
+    max_experience_years: float | None = None
+    min_salary: float | None = None
+    max_salary: float | None = None
+    salary_currency: str | None = "INR"
+    apply_url: str | None = None
+    platform: str | None = None
+    match_score: float | None = None
     questions: List[ApplicationQuestion] = field(default_factory=list)

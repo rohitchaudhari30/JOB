@@ -138,9 +138,17 @@ class ConnectionManager(ConnectionManagerInterface):
             account_ref = "Connected Account"
             try:
                 if platform == "naukri":
-                    user_elem = await page.query_selector(".user-name, .nI-gNb-drawer__user-name")
+                    user_elem = await page.query_selector(".user-name, .nI-gNb-drawer__user-name, .profile-name")
                     if user_elem:
-                        account_ref = (await user_elem.text_content() or "").strip()
+                        text = (await user_elem.text_content() or "").strip()
+                        if text:
+                            account_ref = text
+                elif platform == "linkedin":
+                    user_elem = await page.query_selector(".feed-identity-module__actor-meta, h1.text-heading-xlarge, .profile-rail-card__actor-link")
+                    if user_elem:
+                        text = (await user_elem.text_content() or "").strip()
+                        if text:
+                            account_ref = text.split("\n")[0].strip()
             except Exception:
                 pass
 

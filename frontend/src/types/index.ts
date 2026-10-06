@@ -155,6 +155,15 @@ export interface Application {
   job?: Job;
   job_title?: string;
   company?: string;
+  location?: string;
+  min_experience_years?: number;
+  max_experience_years?: number;
+  min_salary?: number;
+  max_salary?: number;
+  salary_currency?: string;
+  apply_url?: string;
+  platform?: string;
+  match_score?: number;
 }
 
 export interface ApplicationStats {

@@ -25,7 +25,11 @@ import { api } from '../services/api';
 import { MatchResult } from '../types';
 import { useToast } from '../context/ToastContext';
 
-export const AIMatches: React.FC = () => {
+interface AIMatchesProps {
+  onNavigate?: (tab: any) => void;
+}
+
+export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   const { showSuccess, showError } = useToast();
   const [allMatches, setAllMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +75,10 @@ export const AIMatches: React.FC = () => {
       setApplyingJobId(jobId);
       const app = await api.createApplication(jobId);
       await api.approveApplication(app.id, true);
-      showSuccess('Application queued and automation execution started!');
+      showSuccess('Application queued! Redirecting to Live Console...');
+      if (onNavigate) {
+        setTimeout(() => onNavigate('live_console'), 600);
+      }
     } catch (e: any) {
       showError(`Application failed: ${e.response?.data?.detail || e.message}`);
     } finally {
@@ -534,13 +541,16 @@ export const AIMatches: React.FC = () => {
                       ))}
 
                       {m.missing_skills && m.missing_skills.map((s) => (
-                        <span
+                        <button
                           key={s}
-                          className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200/80 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800/40 inline-flex items-center space-x-1"
+                          type="button"
+                          onClick={() => onNavigate?.('profile')}
+                          title="Click to add/update skills in Candidate Profile"
+                          className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 dark:text-rose-300 dark:border-rose-800/40 inline-flex items-center space-x-1 cursor-pointer transition-colors"
                         >
                           <X className="w-2.5 h-2.5" />
                           <span>{s}</span>
-                        </span>
+                        </button>
                       ))}
 
                       {(!m.matched_skills || m.matched_skills.length === 0) &&

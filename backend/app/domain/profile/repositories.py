@@ -57,6 +57,10 @@ class ResumeRepository(ABC):
     async def delete(self, resume_id: str, user_id: str) -> bool:
         pass
 
+    @abstractmethod
+    async def set_default(self, resume_id: str, user_id: str) -> Resume | None:
+        pass
+
 
 class SavedAnswerRepository(ABC):
     @abstractmethod

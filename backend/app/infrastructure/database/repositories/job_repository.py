@@ -72,7 +72,6 @@ class SqlAlchemyJobRepository(JobRepository):
         model = result.scalar_one_or_none()
         if model:
             model.last_seen_at = datetime.now(timezone.utc)
-            await self._session.flush()
 
     async def save(self, job: Job) -> Job:
         from datetime import datetime, timezone

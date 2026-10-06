@@ -37,6 +37,8 @@ npm-debug.log*
 # Playwright & Browser Sessions
 .playwright/
 browser_profiles/
+backend/*.png
+*.png
 
 # IDE & OS files
 .vscode/

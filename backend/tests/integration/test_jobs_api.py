@@ -49,7 +49,7 @@ class MockNaukriSourceAdapter(BaseJobSourceAdapter):
 
 
 class MockBrowserManager:
-    async def create_isolated_context(self, encrypted_storage_state=None):
+    async def create_isolated_context(self, encrypted_storage_state=None, *args, **kwargs):
         class MockContext:
             async def close(self):
                 pass

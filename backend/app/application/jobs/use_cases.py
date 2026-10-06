@@ -30,6 +30,7 @@ class DiscoverJobsUseCase:
         filters: SearchQueryFilter,
         encrypted_storage_state: Optional[str] = None,
         run_id: Optional[str] = None,
+        headless: bool = True,
     ) -> Dict[str, Any]:
         # 1. Ensure JobSource exists in catalog
         source = await self._source_repo.get_by_type(source_type)
@@ -46,9 +47,15 @@ class DiscoverJobsUseCase:
         adapter = adapter_registry.get_source_adapter(source_type)
 
         # 3. Create isolated browser context
-        context = await self._browser_mgr.create_isolated_context(
-            encrypted_storage_state=encrypted_storage_state
-        )
+        try:
+            context = await self._browser_mgr.create_isolated_context(
+                encrypted_storage_state=encrypted_storage_state,
+                headless=headless,
+            )
+        except TypeError:
+            context = await self._browser_mgr.create_isolated_context(
+                encrypted_storage_state=encrypted_storage_state,
+            )
 
         discovered_total = 0
         new_saved = 0
@@ -65,6 +72,13 @@ class DiscoverJobsUseCase:
                 job_stream = adapter.search_jobs(context, filters)
 
             async for raw_job in job_stream:
+                if run_id:
+                    from app.application.automation.orchestrator import orchestrator
+                    sess = orchestrator.get_session(run_id)
+                    if sess and sess.cancel_requested:
+                        logger.info(f"Stopping job discovery early for run [{run_id}] because stop was requested.")
+                        break
+
                 discovered_total += 1
                 raw_job.source_id = source.id
                 raw_job.source_type = source.source_type
@@ -75,6 +89,7 @@ class DiscoverJobsUseCase:
                     duplicates += 1
                     await self._job_repo.touch_seen(existing.id)
                     logger.debug(f"Updated last_seen_at on duplicate job: {raw_job.external_job_id} ({raw_job.title})")
+                    saved_jobs.append(existing)
                     continue
 
                 # Save new job to database

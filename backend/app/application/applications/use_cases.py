@@ -95,6 +95,7 @@ class ExecuteApplicationUseCase:
         profile_repo: CandidateProfileRepository,
         resume_repo: ResumeRepository,
         user_repo: Optional[Any] = None,
+        session_repo: Optional[Any] = None,
         dom_analyzer: Optional[DOMAnalyzer] = None,
         form_engine: Optional[FormEngine] = None,
         ai_provider: Optional[AIProvider] = None,
@@ -104,11 +105,12 @@ class ExecuteApplicationUseCase:
         self._profile_repo = profile_repo
         self._resume_repo = resume_repo
         self._user_repo = user_repo
+        self._session_repo = session_repo
         self._dom_analyzer = dom_analyzer or DOMAnalyzer()
         self._form_engine = form_engine or FormEngine()
         self._ai_provider = ai_provider
 
-    async def execute(self, application_id: str, run_id: Optional[str] = None) -> Application:
+    async def execute(self, application_id: str, run_id: Optional[str] = None, headless: bool = True) -> Application:
         app = await self._app_repo.get_by_id(application_id)
         if not app:
             raise EntityNotFoundException(f"Application with ID [{application_id}] not found.")
@@ -157,19 +159,53 @@ class ExecuteApplicationUseCase:
         page = None
         streamer = None
 
+        # Look up active platform session if available
+        encrypted_storage_state = None
+        if self._session_repo:
+            target_platform = (job.source_type or job.source_id or "").lower()
+            if target_platform:
+                try:
+                    sess = await self._session_repo.get_by_user_and_platform(app.user_id, target_platform)
+                    if sess and sess.encrypted_storage_state and getattr(sess, "status", "ACTIVE") == "ACTIVE":
+                        encrypted_storage_state = sess.encrypted_storage_state
+                        logger.info(f"Injecting authenticated session for applying to {target_platform}.")
+                except Exception as sess_err:
+                    logger.warning(f"Could not load session for applying to {target_platform}: {sess_err}")
+
         try:
-            # 1. Acquire isolated browser context
-            context = await browser_manager.create_isolated_context()
+            # 1. Acquire isolated browser context (with authenticated session if available)
+            try:
+                context = await browser_manager.create_isolated_context(
+                    encrypted_storage_state=encrypted_storage_state,
+                    headless=headless,
+                )
+            except TypeError:
+                context = await browser_manager.create_isolated_context(
+                    encrypted_storage_state=encrypted_storage_state,
+                )
             await trace_manager.start_tracing(context)
 
-            page = await context.new_page()
+            pages = getattr(context, "pages", None)
+            page = pages[0] if (isinstance(pages, list) and len(pages) > 0) else await context.new_page()
             streamer = ScreenshotStreamer(page=page, user_id=app.user_id, run_id=run_id, fps=5)
             streamer.start()
 
             # 2. Navigate to Application URL
             target_url = job.apply_url
             logger.info(f"Navigating to job application URL: {target_url}")
-            await page.goto(target_url, wait_until="networkidle", timeout=30000)
+            try:
+                await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+            except Exception:
+                await page.goto(target_url, timeout=30000)
+            await asyncio.sleep(0.8)
+            if hasattr(page, "evaluate"):
+                try:
+                    eval_res = page.evaluate("window.scrollBy({ top: 350, behavior: 'smooth' })")
+                    if asyncio.iscoroutine(eval_res) or hasattr(eval_res, "__await__"):
+                        await eval_res
+                except Exception:
+                    pass
+            await asyncio.sleep(0.4)
 
             # 3. Scan DOM
             scanned_form = await self._dom_analyzer.scan_form(page)

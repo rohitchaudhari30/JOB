@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Search,
   RefreshCw,
@@ -16,13 +16,35 @@ import {
   Radio,
   SlidersHorizontal,
   Trash2,
+  CheckSquare,
+  Square,
+  Play,
+  Zap,
+  CheckCircle2,
+  Layers,
+  AlertTriangle,
+  FileText,
+  ShieldCheck,
+  Loader2,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { wsClient } from '../services/ws';
 import { useToast } from '../context/ToastContext';
-import { Job } from '../types';
+import { AutomationRunStatus, Job, Application, Resume, MatchResult } from '../types';
+import { LiveConsoleDrawer } from '../components/LiveConsoleDrawer';
 
-export const JobDiscovery: React.FC = () => {
-  const { showSuccess, showError } = useToast();
+interface JobDiscoveryProps {
+  activeRun?: AutomationRunStatus | null;
+  onRefreshStatus?: () => void;
+  onNavigate?: (tab: any) => void;
+}
+
+export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
+  activeRun = null,
+  onRefreshStatus = () => {},
+  onNavigate,
+}) => {
+  const { showSuccess, showError, showWarning } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,6 +58,127 @@ export const JobDiscovery: React.FC = () => {
   const [isClearing, setIsClearing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+
+  // Queue & Selection Management
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
+  const [isLiveDrawerOpen, setIsLiveDrawerOpen] = useState(false);
+  const [queuedJobsForDrawer, setQueuedJobsForDrawer] = useState<Job[]>([]);
+  const [isStartingQueue, setIsStartingQueue] = useState(false);
+  const [appliedJobMap, setAppliedJobMap] = useState<Map<string, { appliedAt?: string; status: string }>>(new Map());
+  const [liveApplyingJobId, setLiveApplyingJobId] = useState<string | null>(null);
+  const [liveQueueJobIds, setLiveQueueJobIds] = useState<Set<string>>(new Set());
+  const [liveSubmittedJobIds, setLiveSubmittedJobIds] = useState<Set<string>>(new Set());
+
+  // Pre-flight setup data & guardrails
+  const [connections, setConnections] = useState<any[]>([]);
+  const [resumes, setResumes] = useState<Resume[]>([]);
+  const [matchesMap, setMatchesMap] = useState<Map<string, MatchResult>>(new Map());
+  const [evaluatingJobIds, setEvaluatingJobIds] = useState<Set<string>>(new Set());
+  const [filterMinFit, setFilterMinFit] = useState(false);
+  const [appliedTodayCount, setAppliedTodayCount] = useState(0);
+
+  const loadPreflightData = async () => {
+    try {
+      const [connsData, resumesData, matchesData] = await Promise.all([
+        api.listConnections().catch(() => []),
+        api.listResumes().catch(() => []),
+        api.listMatches().catch(() => []),
+      ]);
+      setConnections(connsData || []);
+      setResumes(resumesData || []);
+
+      const mMap = new Map<string, MatchResult>();
+      (matchesData || []).forEach((m: MatchResult) => {
+        if (m.job_id) mMap.set(m.job_id, m);
+      });
+      setMatchesMap(mMap);
+    } catch (e) {
+      console.error('Failed to load preflight data:', e);
+    }
+  };
+
+  const loadAppliedJobs = async () => {
+    try {
+      const apps = await api.listApplications();
+      const map = new Map<string, { appliedAt?: string; status: string }>();
+      apps.forEach((app: Application) => {
+        if (app.job_id) {
+          map.set(app.job_id, { appliedAt: app.applied_at || app.created_at, status: app.workflow_state });
+        }
+      });
+      setAppliedJobMap(map);
+
+      const countToday = apps.filter((app: Application) => {
+        const d = app.applied_at || app.created_at;
+        if (!d) return false;
+        return new Date(d).toDateString() === new Date().toDateString();
+      }).length;
+      setAppliedTodayCount(countToday);
+    } catch {
+      // Ignore if list fails
+    }
+  };
+
+  const handleEvaluateSingle = async (jobId: string) => {
+    try {
+      setEvaluatingJobIds((prev) => new Set(prev).add(jobId));
+      const res = await api.evaluateMatch(jobId);
+      setMatchesMap((prev) => {
+        const next = new Map(prev);
+        next.set(jobId, res);
+        return next;
+      });
+      showSuccess(`Fit calculated: ${Math.round(res.overall_score)}% match`, 'AI Evaluation Complete');
+    } catch (e: any) {
+      showError(`Match evaluation failed: ${e.message}`);
+    } finally {
+      setEvaluatingJobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+    }
+  };
+
+  useEffect(() => {
+    loadAppliedJobs();
+    loadPreflightData();
+
+    // Listen to live WebSocket events to mark applications in real-time
+    const unsubscribeEvent = wsClient.onEvent((evt) => {
+      if (evt.event_name === 'AUTO_APPLYING') {
+        if (evt.payload?.job_id) {
+          setLiveApplyingJobId(evt.payload.job_id);
+        } else if (evt.message) {
+          const matchJob = jobs.find((j) => evt.message.includes(j.company) || evt.message.includes(j.title));
+          if (matchJob) setLiveApplyingJobId(matchJob.id);
+        }
+      } else if (
+        evt.event_name === 'APPLICATION_SUBMITTED' ||
+        evt.state === 'APPLIED'
+      ) {
+        if (evt.payload?.job_id) {
+          setLiveSubmittedJobIds((prev) => new Set(prev).add(evt.payload.job_id));
+        } else if (liveApplyingJobId) {
+          setLiveSubmittedJobIds((prev) => new Set(prev).add(liveApplyingJobId));
+        }
+        setLiveApplyingJobId(null);
+        loadAppliedJobs();
+      } else if (
+        evt.event_name === 'RUN_COMPLETED' ||
+        evt.event_name === 'RUN_ABORTED' ||
+        evt.event_name === 'RUN_FAILED'
+      ) {
+        setLiveApplyingJobId(null);
+        setLiveQueueJobIds(new Set());
+        loadAppliedJobs();
+      }
+    });
+
+    return () => {
+      unsubscribeEvent();
+    };
+  }, []);
 
   useEffect(() => {
     // Load candidate profile defaults
@@ -111,6 +254,11 @@ export const JobDiscovery: React.FC = () => {
       setDeletingId(jobId);
       await api.deleteJob(jobId);
       setJobs((prev) => prev.filter((j) => j.id !== jobId));
+      setSelectedJobIds((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
       showSuccess(`Removed "${title}" from repository`, 'Job Removed');
     } catch (e: any) {
       showError(`Failed to remove job: ${e.response?.data?.detail || e.message}`);
@@ -124,6 +272,7 @@ export const JobDiscovery: React.FC = () => {
       setIsClearing(true);
       const res = await api.clearJobs();
       setJobs([]);
+      setSelectedJobIds(new Set());
       setShowConfirmClear(false);
       showSuccess(`Cleared ${res.deleted_count} discovered jobs`, 'Repository Cleared');
     } catch (e: any) {
@@ -131,6 +280,107 @@ export const JobDiscovery: React.FC = () => {
     } finally {
       setIsClearing(false);
     }
+  };
+  const defaultResume = resumes.find((r) => r.is_default) || resumes[0];
+  const hasResume = Boolean(defaultResume);
+  const currentConn = connections.find((c: any) => c.platform?.toLowerCase() === platform.toLowerCase());
+  const isPlatformConnected = currentConn?.status === 'CONNECTED';
+
+  const displayedJobs = useMemo(() => {
+    let result = jobs;
+    if (filterMinFit) {
+      result = result.filter((j) => {
+        const m = matchesMap.get(j.id);
+        return m && m.overall_score >= 80;
+      });
+    }
+    return result;
+  }, [jobs, filterMinFit, matchesMap]);
+
+  // Selection toggle
+  const toggleJobSelection = (jobId: string) => {
+    setSelectedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedJobIds.size === displayedJobs.length) {
+      setSelectedJobIds(new Set());
+    } else {
+      setSelectedJobIds(new Set(displayedJobs.map((j) => j.id)));
+    }
+  };
+
+  const handleSelectTopN = (n: number) => {
+    const topN = displayedJobs.slice(0, n).map((j) => j.id);
+    setSelectedJobIds(new Set(topN));
+  };
+
+  // Trigger automation for selected jobs
+  const handleLaunchQueue = async (selectedOnlyJobs?: Job[]) => {
+    const targetJobs = selectedOnlyJobs || displayedJobs.filter((j) => selectedJobIds.has(j.id));
+    if (targetJobs.length === 0) {
+      showWarning('Please select at least 1 job to launch auto-apply.');
+      return;
+    }
+
+    if (!isPlatformConnected) {
+      showWarning(`Please connect your ${platform.toUpperCase()} session in Platform Connections before auto-applying.`);
+      if (onNavigate) onNavigate('connections');
+      return;
+    }
+
+    if (!hasResume) {
+      showWarning('Please upload a PDF resume in Candidate Profile before auto-applying.');
+      if (onNavigate) onNavigate('profile');
+      return;
+    }
+
+    if (appliedTodayCount >= 20) {
+      showWarning('Daily Safe Limit Reached (20 applications). Recommended to wait until tomorrow to prevent platform throttling.');
+    }
+
+    try {
+      setIsStartingQueue(true);
+      setQueuedJobsForDrawer(targetJobs);
+      setLiveQueueJobIds(new Set(targetJobs.map((j) => j.id)));
+      if (targetJobs.length > 0) {
+        setLiveApplyingJobId(targetJobs[0].id);
+      }
+      setIsLiveDrawerOpen(true);
+
+      const rolesList = roles.split(',').map((r) => r.trim()).filter(Boolean);
+      const locList = location.split(',').map((l) => l.trim()).filter(Boolean);
+
+      await api.startAutomation({
+        source_type: platform,
+        roles: rolesList.length > 0 ? rolesList : [targetJobs[0].title],
+        locations: locList,
+        auto_apply_matches: true,
+        max_applications: targetJobs.length,
+        auto_apply_threshold: 75.0,
+        headless: localStorage.getItem('show_desktop_browser') === 'false',
+      });
+
+      showSuccess(`Live Auto-Apply initiated for ${targetJobs.length} selected opportunities!`, 'Mission Control Launched');
+      onRefreshStatus();
+    } catch (e: any) {
+      showError(`Failed to initiate auto-apply: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setIsStartingQueue(false);
+    }
+  };
+
+  // 1-Click single job apply
+  const handleSingleJobApply = (job: Job) => {
+    handleLaunchQueue([job]);
   };
 
   const formatRelativeTime = (job: Job): { label: string; badgeStyle: string; isLive: boolean } => {
@@ -193,8 +443,10 @@ export const JobDiscovery: React.FC = () => {
     };
   };
 
+  const selectedCount = selectedJobIds.size;
+
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn pb-24">
       {/* Discovery Trigger & Scouting Controls */}
       <div className="p-6 rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 space-y-4 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -307,10 +559,52 @@ export const JobDiscovery: React.FC = () => {
         </div>
       </div>
 
+      {/* Pre-flight Readiness Alert Banner */}
+      {(!isPlatformConnected || !hasResume) && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 dark:bg-amber-950/30 dark:border-amber-700/50 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-fadeIn">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                Pre-flight Setup Required for {platform.toUpperCase()}
+              </h4>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                {!isPlatformConnected && !hasResume
+                  ? `Your ${platform.toUpperCase()} session is disconnected and no active resume was found.`
+                  : !isPlatformConnected
+                  ? `Your ${platform.toUpperCase()} session is disconnected. Connect session cookies to allow bot submission.`
+                  : 'No resume uploaded. Upload a PDF resume in Profile to attach to applications.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {!isPlatformConnected && onNavigate && (
+              <button
+                onClick={() => onNavigate('connections')}
+                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                Connect {platform === 'linkedin' ? 'LinkedIn' : 'Naukri'}
+              </button>
+            )}
+            {!hasResume && onNavigate && (
+              <button
+                onClick={() => onNavigate('profile')}
+                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                Upload Resume
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Freshness & Filter Toolbar */}
       <div className="p-4 rounded-2xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-        {/* Segmented Freshness Filter Chips */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Segmented Freshness Filter Chips + Anti-Ban & Top Fit */}
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Freshness:</span>
           {[
             { label: '🔥 Past 24 Hours', value: '24h' },
@@ -334,7 +628,37 @@ export const JobDiscovery: React.FC = () => {
               </button>
             );
           })}
+
+          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block" />
+
+          {/* Top Fit Filter Toggle */}
+          <button
+            onClick={() => setFilterMinFit((prev) => !prev)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 border ${
+              filterMinFit
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
+            }`}
+            title="Show only jobs with >= 80% AI match score"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${filterMinFit ? 'text-amber-300' : 'text-amber-500'}`} />
+            <span>Top Fit (&gt;80%)</span>
+          </button>
+
+          {/* Anti-Ban Daily Safe Limit Badge */}
+          <div
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 border ${
+              appliedTodayCount >= 20
+                ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/80'
+            }`}
+            title="Safe daily cap: 20 applications/day prevents anti-bot spam detection and account throttling."
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Safe Cap: {appliedTodayCount}/20 today</span>
+          </div>
         </div>
+
 
         {/* Detailed Controls: Sort By & Search */}
         <div className="flex flex-wrap items-center gap-2.5">
@@ -375,75 +699,235 @@ export const JobDiscovery: React.FC = () => {
         </div>
       </div>
 
-      {/* Discovered Jobs List */}
+      {/* Discovered Jobs Header & Bulk Selection Controls */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-            Discovered Job Repository ({jobs.length} loaded)
-          </h2>
-
-          {jobs.length > 0 && (
-            <div>
-              {!showConfirmClear ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Discovered Job Repository ({displayedJobs.length} {filterMinFit ? 'top fit' : 'loaded'})
+            </h2>
+            {displayedJobs.length > 0 && (
+              <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => setShowConfirmClear(true)}
-                  className="px-3 py-1 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 flex items-center space-x-1.5 transition-all cursor-pointer shadow-xs"
+                  onClick={handleSelectAll}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center space-x-1 cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Clear All ({jobs.length})</span>
+                  {selectedCount === displayedJobs.length ? (
+                    <>
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>Deselect All</span>
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-3.5 h-3.5" />
+                      <span>Select All ({displayedJobs.length})</span>
+                    </>
+                  )}
                 </button>
-              ) : (
-                <div className="flex items-center space-x-2 animate-fadeIn bg-rose-50 dark:bg-rose-950/50 px-3 py-1 rounded-xl border border-rose-200 dark:border-rose-900/80">
-                  <span className="text-xs text-rose-700 dark:text-rose-300 font-semibold">Delete all {jobs.length} jobs?</span>
+
+                {displayedJobs.length >= 5 && (
                   <button
-                    onClick={handleClearAll}
-                    disabled={isClearing}
-                    className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer disabled:opacity-50"
+                    onClick={() => handleSelectTopN(5)}
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+                    title="Select top 5 newest jobs"
                   >
-                    {isClearing ? 'Clearing...' : 'Yes, Delete'}
+                    ⚡ Top 5
                   </button>
+                )}
+                {displayedJobs.length >= 10 && (
                   <button
-                    onClick={() => setShowConfirmClear(false)}
-                    className="px-2 py-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer"
+                    onClick={() => handleSelectTopN(10)}
+                    className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+                    title="Select top 10 newest jobs"
                   >
-                    Cancel
+                    ⚡ Top 10
                   </button>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {jobs.length > 0 && (
+              <div>
+                {!showConfirmClear ? (
+                  <button
+                    onClick={() => setShowConfirmClear(true)}
+                    className="px-3 py-1 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 flex items-center space-x-1.5 transition-all cursor-pointer shadow-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Clear All ({jobs.length})</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center space-x-2 animate-fadeIn bg-rose-50 dark:bg-rose-950/50 px-3 py-1 rounded-xl border border-rose-200 dark:border-rose-900/80">
+                    <span className="text-xs text-rose-700 dark:text-rose-300 font-semibold">Delete all {jobs.length} jobs?</span>
+                    <button
+                      onClick={handleClearAll}
+                      disabled={isClearing}
+                      className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer disabled:opacity-50"
+                    >
+                      {isClearing ? 'Clearing...' : 'Yes, Delete'}
+                    </button>
+                    <button
+                      onClick={() => setShowConfirmClear(false)}
+                      className="px-2 py-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {loading ? (
           <div className="text-center py-16 text-slate-500 text-xs">Loading fresh jobs...</div>
-        ) : jobs.length === 0 ? (
+        ) : displayedJobs.length === 0 ? (
           <div className="text-center py-16 bg-white dark:bg-slate-900/30 rounded-3xl border border-slate-200/80 dark:border-slate-800 text-slate-500 text-xs shadow-sm">
-            No jobs found matching the selected freshness or keyword criteria.
+            {filterMinFit
+              ? 'No jobs found with >= 80% AI match fit. Try evaluating more jobs or resetting the filter.'
+              : 'No jobs found matching the selected freshness or keyword criteria.'}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {jobs.map((job) => {
+            {displayedJobs.map((job) => {
               const freshness = formatRelativeTime(job);
+              const isSelected = selectedJobIds.has(job.id);
+              const appInfo = appliedJobMap.get(job.id);
+              const isApplied = Boolean(appInfo) || liveSubmittedJobIds.has(job.id);
+              const isCurrentlyApplying =
+                liveApplyingJobId === job.id ||
+                (activeRun?.status === 'RUNNING' &&
+                  Boolean(activeRun?.current_job_title) &&
+                  (job.title.toLowerCase().includes(activeRun.current_job_title!.toLowerCase()) ||
+                    activeRun.current_job_title!.toLowerCase().includes(job.title.toLowerCase())));
+              const isQueued = !isCurrentlyApplying && !isApplied && liveQueueJobIds.has(job.id);
+
               return (
                 <div
                   key={job.id}
-                  className="p-5 rounded-2xl bg-white border border-slate-200/80 hover:border-slate-300 dark:bg-slate-900/70 dark:border-slate-800 dark:hover:border-slate-700 transition-all flex flex-col justify-between space-y-3 shadow-xs hover:shadow-md"
+                  className={`p-5 rounded-2xl bg-white border transition-all flex flex-col justify-between space-y-3 shadow-xs hover:shadow-md relative ${
+                    isCurrentlyApplying
+                      ? 'border-amber-400 ring-2 ring-amber-400/30 bg-amber-50/20 dark:bg-amber-950/25 dark:border-amber-500'
+                      : isApplied
+                      ? 'border-emerald-400/80 bg-emerald-50/15 dark:bg-emerald-950/20 dark:border-emerald-800'
+                      : isQueued
+                      ? 'border-indigo-400/80 ring-1 ring-indigo-400/20 bg-indigo-50/10 dark:bg-indigo-950/20 dark:border-indigo-800'
+                      : isSelected
+                      ? 'border-indigo-500 ring-2 ring-indigo-500/20 dark:bg-slate-900/90 dark:border-indigo-500'
+                      : 'border-slate-200/80 hover:border-slate-300 dark:bg-slate-900/70 dark:border-slate-800 dark:hover:border-slate-700'
+                  }`}
                 >
                   <div className="space-y-2.5">
-                    {/* Header: Platform tag + Freshness badge + Delete button */}
+                    {/* Header: Selection Checkbox + Platform tag + AI Fit Badge + Freshness / Applied badge + Delete button */}
                     <div className="flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200/80 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/80">
-                        {job.source_type ? job.source_type.toUpperCase() : 'NAUKRI'}
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        {/* Checkbox */}
+                        {isCurrentlyApplying ? (
+                          <div
+                            className="w-5 h-5 rounded-lg flex items-center justify-center bg-amber-500 text-white shadow-xs animate-pulse"
+                            title="Automation engine currently applying to this job"
+                          >
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          </div>
+                        ) : isApplied ? (
+                          <div
+                            className="w-5 h-5 rounded-lg flex items-center justify-center bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
+                            title="Application already submitted"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </div>
+                        ) : isQueued ? (
+                          <div
+                            className="w-5 h-5 rounded-lg flex items-center justify-center bg-indigo-100 text-indigo-700 dark:bg-indigo-900/80 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700"
+                            title="Waiting in automation queue"
+                          >
+                            <Clock className="w-3 h-3" />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleJobSelection(job.id)}
+                            className={`w-5 h-5 rounded-lg flex items-center justify-center transition-all cursor-pointer border ${
+                              isSelected
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                                : 'bg-slate-50 border-slate-300 dark:bg-slate-800 dark:border-slate-600 text-transparent hover:border-indigo-400'
+                            }`}
+                            title={isSelected ? 'Deselect Job' : 'Select for Auto-Apply'}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200/80 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/80">
+                          {job.source_type ? job.source_type.toUpperCase() : 'NAUKRI'}
+                        </span>
+                      </div>
 
                       <div className="flex items-center space-x-1.5">
-                        {/* Freshness Badge */}
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] border flex items-center space-x-1.5 ${freshness.badgeStyle}`}>
-                          {freshness.isLive && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                          )}
-                          <span>{freshness.label}</span>
-                        </span>
+                        {/* AI Match Fit Badge / Evaluation Trigger */}
+                        {(() => {
+                          const match = matchesMap.get(job.id);
+                          const isEvaluating = evaluatingJobIds.has(job.id);
+
+                          if (match) {
+                            const score = Math.round(match.overall_score);
+                            const scoreColor =
+                              score >= 80
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                                : score >= 60
+                                ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                                : 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800';
+
+                            return (
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center space-x-1 ${scoreColor}`}
+                                title={`AI Fit Score: ${score}%\n${match.reasoning_summary || match.matched_skills?.slice(0, 3).join(', ') || ''}`}
+                              >
+                                <Zap className="w-2.5 h-2.5" />
+                                <span>{score}% Fit</span>
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <button
+                              onClick={() => handleEvaluateSingle(job.id)}
+                              disabled={isEvaluating}
+                              className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center space-x-1 transition-all cursor-pointer disabled:opacity-50"
+                              title="Calculate candidate-job fit score with AI"
+                            >
+                              <Sparkles className={`w-2.5 h-2.5 ${isEvaluating ? 'animate-spin' : 'text-amber-500'}`} />
+                              <span>{isEvaluating ? 'Scoring...' : '⚡ AI Fit'}</span>
+                            </button>
+                          );
+                        })()}
+
+                        {/* Real-time Status Badges */}
+                        {isCurrentlyApplying ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white flex items-center space-x-1 shadow-xs animate-pulse">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                            <span>APPLYING NOW</span>
+                          </span>
+                        ) : isQueued ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center space-x-1">
+                            <Clock className="w-2.5 h-2.5" />
+                            <span>In Queue</span>
+                          </span>
+                        ) : isApplied ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800 flex items-center space-x-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                            <span>Applied ✅</span>
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] border flex items-center space-x-1.5 ${freshness.badgeStyle}`}>
+                            {freshness.isLive && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            )}
+                            <span>{freshness.label}</span>
+                          </span>
+                        )}
 
                         {/* Dismiss / Delete Button */}
                         <button
@@ -482,21 +966,62 @@ export const JobDiscovery: React.FC = () => {
                     </p>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                    <span className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                  {/* Card Footer with 1-Click Live Bot Apply & Real-Time Status Actions */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-slate-600 dark:text-slate-300 font-semibold bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded truncate">
                       {job.max_experience_years && job.max_experience_years > (job.min_experience_years || 0)
-                        ? `Exp: ${job.min_experience_years} - ${job.max_experience_years} yrs`
+                        ? `Exp: ${job.min_experience_years}-${job.max_experience_years} yrs`
                         : `Exp: ${job.min_experience_years || 0}+ yrs`}
                     </span>
-                    <a
-                      href={job.apply_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center space-x-1"
-                    >
-                      <span>Job Link</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+
+                    <div className="flex items-center space-x-2">
+                      <a
+                        href={job.apply_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center space-x-0.5"
+                        title="View Original Job Link"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+
+                      {isCurrentlyApplying ? (
+                        <button
+                          onClick={() => setIsLiveDrawerOpen(true)}
+                          className="px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs cursor-pointer transition-all animate-pulse active:scale-95"
+                          title="Automation actively interacting with browser for this job. Click to watch live stream."
+                        >
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Watch Live ⚡</span>
+                        </button>
+                      ) : isQueued ? (
+                        <button
+                          onClick={() => setIsLiveDrawerOpen(true)}
+                          className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 dark:text-indigo-300 text-xs font-semibold flex items-center space-x-1 cursor-pointer transition-all"
+                          title="Waiting in automation batch. Click to view console."
+                        >
+                          <Clock className="w-3 h-3" />
+                          <span>Queued (View)</span>
+                        </button>
+                      ) : isApplied ? (
+                        <button
+                          onClick={() => onNavigate && onNavigate('crm')}
+                          className="px-3 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 dark:text-emerald-400 text-xs font-bold border border-emerald-200 dark:border-emerald-800 flex items-center space-x-1 transition-all cursor-pointer active:scale-95"
+                          title="View Application Details in CRM"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span>Applied (CRM)</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleSingleJobApply(job)}
+                          className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 dark:text-indigo-300 text-xs font-bold border border-indigo-200 dark:border-indigo-800 flex items-center space-x-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                        >
+                          <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
+                          <span>Apply Live</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -504,6 +1029,62 @@ export const JobDiscovery: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Floating Action Bar when jobs are selected */}
+      {selectedCount > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slideUp">
+          <div className="px-5 py-3 rounded-2xl bg-slate-900/95 text-white border border-indigo-500/40 shadow-2xl backdrop-blur-md flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
+              </span>
+              <span className="text-xs font-bold">
+                {selectedCount} Job{selectedCount > 1 ? 's' : ''} Queued
+              </span>
+            </div>
+
+            {defaultResume && (
+              <div className="hidden sm:flex items-center space-x-1.5 text-xs text-slate-300 bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700">
+                <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="truncate max-w-[130px] font-medium" title={defaultResume.file_name}>
+                  {defaultResume.file_name}
+                </span>
+              </div>
+            )}
+
+            <div className="h-4 w-px bg-slate-700" />
+
+            <button
+              onClick={() => setSelectedJobIds(new Set())}
+              className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Clear
+            </button>
+
+            <button
+              onClick={() => handleLaunchQueue()}
+              disabled={isStartingQueue}
+              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-black text-xs shadow-lg shadow-indigo-600/30 flex items-center space-x-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+            >
+              <Play className="w-3.5 h-3.5 fill-white" />
+              <span>{isStartingQueue ? 'Launching Engine...' : `🚀 Start Live Auto-Apply (${selectedCount})`}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-over Live Mission Control Drawer */}
+      <LiveConsoleDrawer
+        isOpen={isLiveDrawerOpen}
+        onClose={() => setIsLiveDrawerOpen(false)}
+        queuedJobs={queuedJobsForDrawer}
+        activeRun={activeRun}
+        onRefreshStatus={onRefreshStatus}
+        sourceType={platform}
+        activeResumeName={defaultResume?.file_name}
+        onNavigate={onNavigate}
+      />
     </div>
   );
 };
