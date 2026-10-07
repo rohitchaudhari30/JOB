@@ -16,7 +16,7 @@ from app.api.v1.automation import router as automation_router
 from app.api.v1.connections import router as connections_router
 from app.api.v1.health import router as health_router
 from app.api.v1.jobs import router as jobs_router
-from app.api.v1.matching import router as matching_router
+from app.api.v1.matching import router as matching_router, matching_weights_alias_router
 from app.api.v1.profile import router as profile_router
 from app.api.v1.resumes import router as resumes_router
 from app.api.v1.ws import router as ws_router
@@ -34,8 +34,11 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode...")
     await init_db()
     scheduler_worker.initialize()
+    from app.workers.automation_worker import automation_worker
+    automation_worker.start()
     yield
     logger.info(f"Shutting down {settings.APP_NAME}...")
+    automation_worker.stop()
     scheduler_worker.shutdown()
     await browser_manager.shutdown()
 
@@ -73,6 +76,7 @@ app.include_router(profile_router, prefix="/api/v1")
 app.include_router(connections_router, prefix="/api/v1")
 app.include_router(resumes_router, prefix="/api/v1")
 app.include_router(matching_router, prefix="/api/v1")
+app.include_router(matching_weights_alias_router, prefix="/api/v1")
 app.include_router(jobs_router, prefix="/api/v1")
 app.include_router(applications_router, prefix="/api/v1")
 app.include_router(automation_router, prefix="/api/v1")

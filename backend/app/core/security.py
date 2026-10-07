@@ -29,14 +29,20 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: timedelta | None = None) -> str:
-    """Creates a signed JWT access token."""
+    """Creates a signed, short-lived JWT access token (default 15 minutes)."""
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
-    if expires_delta:
-        expire = now + expires_delta
-    else:
-        expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire, "iat": now})
+    expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire, "iat": now, "type": "access"})
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def create_refresh_token(data: Dict[str, Any], expires_delta: timedelta | None = None) -> str:
+    """Creates a signed, revocable JWT refresh token (default 7 days)."""
+    to_encode = data.copy()
+    now = datetime.now(timezone.utc)
+    expire = now + (expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
+    to_encode.update({"exp": expire, "iat": now, "type": "refresh"})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -47,6 +53,17 @@ def decode_access_token(token: str) -> Dict[str, Any]:
         return payload
     except JWTError:
         raise AuthenticationException("Could not validate credentials.")
+
+
+def decode_refresh_token(token: str) -> Dict[str, Any]:
+    """Decodes and verifies a JWT refresh token."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise AuthenticationException("Invalid token type. Refresh token required.")
+        return payload
+    except JWTError:
+        raise AuthenticationException("Invalid or expired refresh token.")
 
 
 class SessionStorageEncryptor:

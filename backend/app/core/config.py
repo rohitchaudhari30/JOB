@@ -45,9 +45,14 @@ class Settings(BaseSettings):
 
     # Security & Session
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Short-lived access token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7     # Revocable refresh token lifespan
     SESSION_COOKIE_MAX_AGE_DAYS: int = 30
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+
+    # Upload & Defense in Depth
+    MAX_RESUME_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB maximum
+    ALLOWED_RESUME_EXTENSIONS: str = ".pdf,.docx"
 
     # Rate Limiting & Safety
     DEFAULT_MAX_CONCURRENT_SESSIONS: int = 2
@@ -58,5 +63,26 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
+    @property
+    def allowed_resume_extensions_list(self) -> List[str]:
+        return [ext.strip().lower() for ext in self.ALLOWED_RESUME_EXTENSIONS.split(",") if ext.strip()]
+
+    def validate_production_secrets(self) -> None:
+        """Enforces fail-fast production security standards."""
+        is_prod = self.APP_ENV.lower() in ("production", "prod", "staging") or not self.DEBUG
+        if is_prod:
+            insecure_secret = "default_insecure_development_secret_key_change_in_production_123456"
+            if not self.SECRET_KEY or self.SECRET_KEY == insecure_secret or len(self.SECRET_KEY) < 32:
+                raise ValueError(
+                    "FATAL SECURITY MISCONFIGURATION: In production, SECRET_KEY must be a cryptographically secure random string (minimum 32 characters) provided via environment variables or secret manager."
+                )
+
+            insecure_enc = "dGVzdF9rZXlfdGhhdF9pczMzX2J5dGVzX2xvbmdfMTIzNDU2Nzg="
+            if not self.ENCRYPTION_KEY or self.ENCRYPTION_KEY == insecure_enc:
+                raise ValueError(
+                    "FATAL SECURITY MISCONFIGURATION: In production, ENCRYPTION_KEY must be a 32-byte base64-encoded AES key provided via environment variables or secret manager."
+                )
+
 
 settings = Settings()
+settings.validate_production_secrets()

@@ -102,22 +102,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun }) =
                 {activeRun && activeRun.status === 'RUNNING' ? 'Engine Active' : 'Engine Ready'}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            {activeRun && activeRun.status === 'RUNNING' && (
               <button
-                onClick={() => onNavigate('direct_apply')}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Start Apply Now</span>
-              </button>
-              <button
-                onClick={() => onNavigate('matches')}
+                onClick={() => onNavigate('live_console')}
                 className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 font-semibold text-xs border border-white/10 flex items-center gap-1.5 transition-all cursor-pointer"
               >
-                <span>Explore High Matches</span>
-                <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
+                <Tv className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Open Live Console</span>
               </button>
-            </div>
+            )}
           </div>
         </div>
 

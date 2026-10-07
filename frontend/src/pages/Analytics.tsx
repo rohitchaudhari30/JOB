@@ -31,6 +31,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
   const [skills, setSkills] = useState<SkillDemandInsight[]>([]);
   const [weightTuning, setWeightTuning] = useState<WeightTuningRecommendation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingWeights, setSavingWeights] = useState(false);
   const [appliedNotification, setAppliedNotification] = useState(false);
 
   const fetchAnalyticsData = async () => {
@@ -59,9 +60,23 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
     fetchAnalyticsData();
   }, []);
 
-  const handleApplyRecommendedWeights = () => {
-    setAppliedNotification(true);
-    setTimeout(() => setAppliedNotification(false), 4000);
+  const handleApplyRecommendedWeights = async () => {
+    if (!weightTuning) return;
+    try {
+      setSavingWeights(true);
+      await api.updateMatchingWeights({
+        skills_weight: weightTuning.recommended_skill_weight,
+        semantic_weight: weightTuning.recommended_semantic_weight,
+        experience_weight: weightTuning.recommended_experience_weight,
+      });
+      setAppliedNotification(true);
+      setTimeout(() => setAppliedNotification(false), 5000);
+      await fetchAnalyticsData();
+    } catch (e: any) {
+      console.error('Failed to update weights:', e);
+    } finally {
+      setSavingWeights(false);
+    }
   };
 
   if (loading) {
@@ -237,10 +252,20 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
 
           <button
             onClick={handleApplyRecommendedWeights}
-            className="mt-6 w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center space-x-2 transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+            disabled={savingWeights || !weightTuning}
+            className="mt-6 w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center space-x-2 transition-all shadow-md shadow-indigo-600/20 cursor-pointer disabled:opacity-50"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>Apply AI Recommended Weights</span>
+            {savingWeights ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Saving Weights...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>Apply AI Recommended Weights</span>
+              </>
+            )}
           </button>
         </div>
 

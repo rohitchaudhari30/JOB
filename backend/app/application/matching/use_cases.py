@@ -6,7 +6,11 @@ from app.domain.ai.contracts import AIGateway
 from app.domain.jobs.repositories import JobRepository
 from app.domain.matching.entities import MatchResult, MatchRule
 from app.domain.matching.repositories import MatchResultRepository
-from app.domain.profile.repositories import CandidateProfileRepository, ResumeRepository
+from app.domain.profile.repositories import (
+    CandidateProfileRepository,
+    ResumeRepository,
+    SavedAnswerRepository,
+)
 
 logger = logging.getLogger("app.application.matching")
 
@@ -21,11 +25,13 @@ class EvaluateJobMatchUseCase:
         match_repo: MatchResultRepository,
         resume_repo: ResumeRepository,
         ai_gateway: AIGateway,
+        saved_answer_repo: Optional[SavedAnswerRepository] = None,
     ):
         self._profile_repo = profile_repo
         self._job_repo = job_repo
         self._match_repo = match_repo
         self._resume_repo = resume_repo
+        self._saved_answer_repo = saved_answer_repo
         self._cascade = MatchingCascadeEngine(ai_gateway=ai_gateway)
 
     async def execute(
@@ -47,11 +53,29 @@ class EvaluateJobMatchUseCase:
         if resume_id:
             resume = await self._resume_repo.get_by_id(resume_id)
 
+        rule_to_use = custom_rule
+        if rule_to_use is None and self._saved_answer_repo:
+            try:
+                import json
+                ans = await self._saved_answer_repo.find_by_intent(user_id, "matching_weights")
+                if ans and ans.answer_text:
+                    data = json.loads(ans.answer_text)
+                    rule_to_use = MatchRule(
+                        skills_weight=float(data.get("skills_weight", 0.35)),
+                        experience_weight=float(data.get("experience_weight", 0.20)),
+                        role_title_weight=float(data.get("role_title_weight", 0.15)),
+                        location_weight=float(data.get("location_weight", 0.10)),
+                        auto_apply_threshold=float(data.get("auto_apply_threshold", 90.0)),
+                        approval_threshold=float(data.get("approval_threshold", 75.0)),
+                    )
+            except Exception as e:
+                logger.warning(f"Could not load custom matching weights for user {user_id}: {e}")
+
         # Run 5-stage cascade
         match_result = await self._cascade.evaluate(
             profile=profile,
             job=job,
-            rule=custom_rule or MatchRule(),
+            rule=rule_to_use or MatchRule(),
             resume=resume,
         )
 

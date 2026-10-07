@@ -93,6 +93,12 @@ export const api = {
     const res = await apiClient.post(`/resumes/${resumeId}/set-default`);
     return res.data;
   },
+  downloadResume: async (resumeId: string): Promise<Blob> => {
+    const res = await apiClient.get(`/resumes/${resumeId}/download`, {
+      responseType: 'blob',
+    });
+    return res.data;
+  },
 
   // Jobs
   listJobs: async (params?: {
@@ -141,6 +147,22 @@ export const api = {
   },
   evaluateAllMatches: async (limit?: number): Promise<MatchResult[]> => {
     const res = await apiClient.post('/jobs/matches/evaluate-all', null, { params: { limit } });
+    return res.data;
+  },
+  updateMatchingWeights: async (weights: {
+    skills_weight: number;
+    semantic_weight: number;
+    experience_weight: number;
+    role_title_weight?: number;
+    location_weight?: number;
+    auto_apply_threshold?: number;
+    approval_threshold?: number;
+  }): Promise<{ status: string; message: string; weights: any }> => {
+    const res = await apiClient.post('/jobs/matches/weights', weights);
+    return res.data;
+  },
+  getMatchingWeights: async (): Promise<{ weights: any }> => {
+    const res = await apiClient.get('/jobs/matches/weights');
     return res.data;
   },
 

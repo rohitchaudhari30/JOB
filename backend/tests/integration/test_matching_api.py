@@ -78,4 +78,23 @@ async def test_matching_api_flow(client: AsyncClient, monkeypatch):
     assert len(list_data) >= 1
     assert list_data[0]["job_id"] == job_id
 
+    # 7. Test Save and Retrieve Matching Weights
+    weights_res = await client.post(
+        "/api/v1/jobs/matches/weights",
+        json={"skills_weight": 0.45, "semantic_weight": 0.35, "experience_weight": 0.20},
+        headers=headers,
+    )
+    assert weights_res.status_code == 200
+    assert weights_res.json()["status"] == "success"
+    assert weights_res.json()["weights"]["skills_weight"] == 0.45
+
+    get_weights_res = await client.get("/api/v1/jobs/matches/weights", headers=headers)
+    assert get_weights_res.status_code == 200
+    assert get_weights_res.json()["weights"]["skills_weight"] == 0.45
+
+    # Check analytics reflects the updated weights
+    tuning_res = await client.get("/api/v1/analytics/weights-tuning", headers=headers)
+    assert tuning_res.status_code == 200
+    assert tuning_res.json()["current_skill_weight"] == 0.45
+
     app.dependency_overrides.clear()

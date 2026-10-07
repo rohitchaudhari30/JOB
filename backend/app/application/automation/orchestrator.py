@@ -18,26 +18,24 @@ from app.domain.matching.entities import DecisionEnum, MatchResult, MatchRule
 from app.domain.matching.repositories import MatchResultRepository
 from app.domain.profile.repositories import CandidateProfileRepository, ResumeRepository
 from app.domain.auth.repositories import UserRepository
+from app.domain.automation.state_machine import AutomationState, AutomationStateMachine
 
 logger = logging.getLogger("app.automation.orchestrator")
 
-
-class AutomationRunStatus(str, Enum):
-    IDLE = "IDLE"
-    RUNNING = "RUNNING"
-    PAUSED = "PAUSED"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-    ABORTED = "ABORTED"
+# Alias for backwards compatibility across existing API consumers
+AutomationRunStatus = AutomationState
 
 
 class AutomationSession:
-    """Maintains in-memory live execution state for an active automation run."""
+    """
+    Maintains in-memory live execution state for an active automation run.
+    Enforces deterministic state transitions via AutomationStateMachine.
+    """
 
     def __init__(self, run_id: str, user_id: str):
         self.run_id = run_id
         self.user_id = user_id
-        self.status = AutomationRunStatus.IDLE
+        self._state_machine = AutomationStateMachine(initial_state=AutomationState.IDLE)
         self.is_paused = False
         self.pause_event = asyncio.Event()
         self.pause_event.set()  # Not paused by default
@@ -46,6 +44,7 @@ class AutomationSession:
         self.discovered_jobs_count = 0
         self.matched_jobs_count = 0
         self.applications_submitted_count = 0
+        self.failed_applications_count = 0
         self.current_job_title: Optional[str] = None
         self.current_application_id: Optional[str] = None
         self.active_state: str = "IDLE"
@@ -53,9 +52,21 @@ class AutomationSession:
         self.created_at = datetime.now(timezone.utc)
         self.completed_at: Optional[datetime] = None
 
+    @property
+    def status(self) -> AutomationState:
+        return self._state_machine.current_state
+
+    @status.setter
+    def status(self, target_state: AutomationState):
+        if self._state_machine.current_state != target_state:
+            self._state_machine.transition_to(target_state)
+
+    def transition_to(self, target_state: AutomationState) -> AutomationState:
+        return self._state_machine.transition_to(target_state)
+
     def pause(self):
         self.is_paused = True
-        self.status = AutomationRunStatus.PAUSED
+        self.transition_to(AutomationState.PAUSED)
         self.pause_event.clear()
         logger.info(f"Automation run [{self.run_id}] paused.")
 
@@ -63,13 +74,16 @@ class AutomationSession:
         if user_input:
             self.user_input_queue.put_nowait(user_input)
         self.is_paused = False
-        self.status = AutomationRunStatus.RUNNING
+        self.transition_to(AutomationState.RUNNING)
         self.pause_event.set()
         logger.info(f"Automation run [{self.run_id}] resumed.")
 
     def abort(self, reason: str = "Aborted by user"):
         self.cancel_requested = True
-        self.status = AutomationRunStatus.ABORTED
+        if self._state_machine.can_transition_to(AutomationState.ABORTED):
+            self.transition_to(AutomationState.ABORTED)
+        elif self._state_machine.can_transition_to(AutomationState.STOPPED):
+            self.transition_to(AutomationState.STOPPED)
         self.error_message = reason
         self.pause_event.set()  # Unblock if paused
         logger.info(f"Automation run [{self.run_id}] aborted: {reason}")
@@ -122,7 +136,8 @@ class AutomationOrchestrator:
     ) -> AutomationSession:
         run_id = f"run_{uuid.uuid4().hex[:8]}"
         session = AutomationSession(run_id=run_id, user_id=user_id)
-        session.status = AutomationRunStatus.RUNNING
+        session.transition_to(AutomationState.STARTING)
+        session.transition_to(AutomationState.RUNNING)
 
         async with self._lock:
             self._sessions[run_id] = session
@@ -247,7 +262,8 @@ class AutomationOrchestrator:
                 )
         except Exception as e:
             logger.error(f"Automation run pipeline error: {e}", exc_info=True)
-            session.status = AutomationRunStatus.FAILED
+            if session._state_machine.can_transition_to(AutomationState.FAILED):
+                session.transition_to(AutomationState.FAILED)
             session.error_message = str(e)
             await self._broadcast_event(
                 session=session,
@@ -473,7 +489,12 @@ class AutomationOrchestrator:
                     )
                     await session.pause_event.wait()
 
-        session.status = AutomationRunStatus.COMPLETED
+        if session.cancel_requested:
+            if session._state_machine.can_transition_to(AutomationState.STOPPED):
+                session.transition_to(AutomationState.STOPPED)
+        else:
+            if session._state_machine.can_transition_to(AutomationState.COMPLETED):
+                session.transition_to(AutomationState.COMPLETED)
         session.active_state = "FINISHED"
         session.completed_at = datetime.now(timezone.utc)
 

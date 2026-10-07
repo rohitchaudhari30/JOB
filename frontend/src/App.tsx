@@ -10,7 +10,6 @@ import { ApplicationCRM } from './pages/ApplicationCRM';
 import { ProfileManager } from './pages/ProfileManager';
 import { PlatformConnections } from './pages/PlatformConnections';
 import { DirectApply } from './pages/DirectApply';
-import { ScheduleManager } from './pages/ScheduleManager';
 import { Analytics } from './pages/Analytics';
 import { useTheme } from './context/ThemeContext';
 import { api, setAuthToken } from './services/api';
@@ -25,9 +24,9 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [activeRun, setActiveRun] = useState<AutomationRunStatus | null>(null);
-  const [authEmail, setAuthEmail] = useState('demo.engineer@example.com');
-  const [authPassword, setAuthPassword] = useState('SecurePassword123!');
-  const [authFullName, setAuthFullName] = useState('Lead Automation Engineer');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authFullName, setAuthFullName] = useState('');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
 

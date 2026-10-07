@@ -309,12 +309,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
 
   const handleDownloadResume = async (resumeId: string, fileName: string) => {
     try {
-      const token = localStorage.getItem('auth_token');
-      const res = await fetch(`http://localhost:8000/api/v1/resumes/${resumeId}/download`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error('Could not download file.');
-      const blob = await res.blob();
+      const blob = await api.downloadResume(resumeId);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -324,7 +319,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (e: any) {
-      showError(`Download failed: ${e.message}`);
+      showError(`Download failed: ${e.response?.data?.detail || e.message}`);
     }
   };
 

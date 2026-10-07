@@ -16,6 +16,7 @@ from app.infrastructure.database.models import (
     JobSourceModel,
     MatchResultModel,
     ResumeModel,
+    SavedAnswerModel,
 )
 
 
@@ -208,10 +209,30 @@ class AnalyticsService:
             rec_exp = 0.20
             rationale = "Candidate profile shows high semantic contextual alignment. Increasing semantic weight surfaces high-relevance cross-functional roles."
 
+        # Check if candidate has explicitly calibrated custom weights
+        cur_skill = 0.40
+        cur_semantic = 0.40
+        cur_exp = 0.20
+
+        saved_weights_stmt = select(SavedAnswerModel).where(
+            SavedAnswerModel.user_id == user_id,
+            SavedAnswerModel.canonical_intent == "matching_weights",
+        )
+        saved_weights_model = (await self.session.scalars(saved_weights_stmt)).first()
+        if saved_weights_model and saved_weights_model.answer_text:
+            try:
+                import json
+                sw_data = json.loads(saved_weights_model.answer_text)
+                cur_skill = float(sw_data.get("skills_weight", cur_skill))
+                cur_semantic = float(sw_data.get("semantic_weight", cur_semantic))
+                cur_exp = float(sw_data.get("experience_weight", cur_exp))
+            except Exception:
+                pass
+
         return WeightTuningRecommendation(
-            current_skill_weight=0.40,
-            current_semantic_weight=0.40,
-            current_experience_weight=0.20,
+            current_skill_weight=cur_skill,
+            current_semantic_weight=cur_semantic,
+            current_experience_weight=cur_exp,
             recommended_skill_weight=rec_skill,
             recommended_semantic_weight=rec_semantic,
             recommended_experience_weight=rec_exp,

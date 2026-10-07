@@ -9,6 +9,7 @@ from app.api.deps import (
     get_matching_repository,
     get_profile_repository,
     get_resume_repository,
+    get_saved_answer_repository,
 )
 from app.application.matching.use_cases import EvaluateJobMatchUseCase, ListMatchesUseCase
 from app.domain.ai.contracts import AIGateway
@@ -19,9 +20,20 @@ from app.infrastructure.database.repositories.matching_repository import SqlAlch
 from app.infrastructure.database.repositories.profile_repository import (
     SqlAlchemyProfileRepository,
     SqlAlchemyResumeRepository,
+    SqlAlchemySavedAnswerRepository,
 )
 
 router = APIRouter(prefix="/jobs/matches", tags=["Job Matching & Scoring"])
+
+
+class UpdateMatchingWeightsRequest(BaseModel):
+    skills_weight: float = Field(..., ge=0.0, le=1.0)
+    semantic_weight: float = Field(..., ge=0.0, le=1.0)
+    experience_weight: float = Field(..., ge=0.0, le=1.0)
+    role_title_weight: Optional[float] = Field(0.15, ge=0.0, le=1.0)
+    location_weight: Optional[float] = Field(0.10, ge=0.0, le=1.0)
+    auto_apply_threshold: Optional[float] = Field(90.0, ge=0.0, le=100.0)
+    approval_threshold: Optional[float] = Field(75.0, ge=0.0, le=100.0)
 
 
 class MatchResultResponse(BaseModel):
@@ -106,6 +118,7 @@ async def evaluate_all_discovered_jobs(
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
     match_repo: Annotated[SqlAlchemyMatchResultRepository, Depends(get_matching_repository)],
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+    saved_answer_repo: Annotated[SqlAlchemySavedAnswerRepository, Depends(get_saved_answer_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
     limit: int = Query(25, ge=1, le=100),
 ):
@@ -116,6 +129,7 @@ async def evaluate_all_discovered_jobs(
         match_repo=match_repo,
         resume_repo=resume_repo,
         ai_gateway=ai_gateway,
+        saved_answer_repo=saved_answer_repo,
     )
     batch_use_case = BatchEvaluateJobsUseCase(
         evaluate_use_case=eval_use_case,
@@ -204,3 +218,78 @@ async def evaluate_job_match(
         apply_url=result.apply_url,
         raw_posted_text=result.raw_posted_text,
     )
+
+
+@router.post("/weights", status_code=status.HTTP_200_OK)
+async def update_matching_weights(
+    req: UpdateMatchingWeightsRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    saved_answer_repo: Annotated[SqlAlchemySavedAnswerRepository, Depends(get_saved_answer_repository)],
+):
+    """Saves tuned matching cascade weights for the current user."""
+    import json
+    import uuid
+    from app.domain.profile.entities import SavedAnswer
+
+    payload = {
+        "skills_weight": req.skills_weight,
+        "semantic_weight": req.semantic_weight,
+        "experience_weight": req.experience_weight,
+        "role_title_weight": req.role_title_weight,
+        "location_weight": req.location_weight,
+        "auto_apply_threshold": req.auto_apply_threshold,
+        "approval_threshold": req.approval_threshold,
+    }
+
+    existing = await saved_answer_repo.find_by_intent(current_user.id, "matching_weights")
+    if existing:
+        existing.answer_text = json.dumps(payload)
+        existing.is_verified = True
+        await saved_answer_repo.save(existing)
+    else:
+        new_answer = SavedAnswer(
+            id=str(uuid.uuid4()),
+            user_id=current_user.id,
+            canonical_intent="matching_weights",
+            question_pattern="user_matching_weights",
+            answer_text=json.dumps(payload),
+            is_verified=True,
+        )
+        await saved_answer_repo.save(new_answer)
+
+    return {
+        "status": "success",
+        "message": "AI matching weights updated and persisted successfully.",
+        "weights": payload,
+    }
+
+
+@router.get("/weights", status_code=status.HTTP_200_OK)
+async def get_matching_weights(
+    current_user: Annotated[User, Depends(get_current_user)],
+    saved_answer_repo: Annotated[SqlAlchemySavedAnswerRepository, Depends(get_saved_answer_repository)],
+):
+    """Retrieves current tuned matching cascade weights for the current user."""
+    import json
+    existing = await saved_answer_repo.find_by_intent(current_user.id, "matching_weights")
+    if existing and existing.answer_text:
+        try:
+            return {"weights": json.loads(existing.answer_text)}
+        except Exception:
+            pass
+    return {
+        "weights": {
+            "skills_weight": 0.35,
+            "semantic_weight": 0.25,
+            "experience_weight": 0.20,
+            "role_title_weight": 0.15,
+            "location_weight": 0.10,
+            "auto_apply_threshold": 90.0,
+            "approval_threshold": 75.0,
+        }
+    }
+
+
+matching_weights_alias_router = APIRouter(prefix="/matching", tags=["Job Matching & Scoring"])
+matching_weights_alias_router.add_api_route("/weights", update_matching_weights, methods=["POST"], status_code=status.HTTP_200_OK)
+matching_weights_alias_router.add_api_route("/weights", get_matching_weights, methods=["GET"], status_code=status.HTTP_200_OK)

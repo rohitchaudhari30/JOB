@@ -1,0 +1,70 @@
+services:
+  # 1. FastAPI Web & WebSocket Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: autoapply-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - DATABASE_URL=sqlite+aiosqlite:///./storage/app.db
+      - REDIS_URL=redis://redis:6379/0
+      - TASK_QUEUE_BACKEND=local
+      - STORAGE_DIR=/app/storage
+      - BROWSER_HEADLESS=true
+    volumes:
+      - ./storage:/app/storage
+      - ./backend/app:/app/app
+    depends_on:
+      - redis
+
+  # 2. Dedicated Automation Worker Daemon
+  automation-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: autoapply-worker
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.automation_worker"]
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - DATABASE_URL=sqlite+aiosqlite:///./storage/app.db
+      - REDIS_URL=redis://redis:6379/0
+      - STORAGE_DIR=/app/storage
+      - BROWSER_HEADLESS=true
+    volumes:
+      - ./storage:/app/storage
+      - ./backend/app:/app/app
+    depends_on:
+      - redis
+      - backend
+
+  # 3. Redis Queue & Event Broker
+  redis:
+    image: redis:7-alpine
+    container_name: autoapply-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # 4. React Vite Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: autoapply-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  redis_data:

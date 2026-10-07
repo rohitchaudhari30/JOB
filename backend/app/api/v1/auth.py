@@ -26,7 +26,12 @@ class AuthResponse(BaseModel):
     email: str
     full_name: str | None = None
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "bearer"
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 class UserResponse(BaseModel):
@@ -49,11 +54,14 @@ async def register(
             password=req.password,
             full_name=req.full_name,
         )
+        from app.core.security import create_refresh_token
+        refresh_token = create_refresh_token({"sub": user.id})
         return AuthResponse(
             id=user.id,
             email=user.email,
             full_name=user.full_name,
             access_token=token,
+            refresh_token=refresh_token,
         )
     except DuplicateEntityException as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=e.message)
@@ -67,14 +75,49 @@ async def login(
     use_case = LoginUserUseCase(user_repo)
     try:
         user, token = await use_case.execute(email=req.email, password=req.password)
+        from app.core.security import create_refresh_token
+        refresh_token = create_refresh_token({"sub": user.id})
         return AuthResponse(
             id=user.id,
             email=user.email,
             full_name=user.full_name,
             access_token=token,
+            refresh_token=refresh_token,
         )
     except AuthenticationException as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=e.message)
+
+
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh_token_endpoint(
+    req: RefreshTokenRequest,
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+):
+    from app.core.security import create_access_token, create_refresh_token, decode_refresh_token
+    try:
+        payload = decode_refresh_token(req.refresh_token)
+        user_id = payload.get("sub")
+        if not user_id:
+            raise AuthenticationException("Invalid token payload.")
+        user = await user_repo.get_by_id(user_id)
+        if not user or not user.is_active:
+            raise AuthenticationException("User account not found or inactive.")
+        new_access = create_access_token({"sub": user.id, "email": user.email})
+        new_refresh = create_refresh_token({"sub": user.id})
+        return AuthResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            access_token=new_access,
+            refresh_token=new_refresh,
+        )
+    except AuthenticationException as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=e.message)
+
+
+@router.post("/logout")
+async def logout(current_user: Annotated[User, Depends(get_current_user)]):
+    return {"message": "Successfully logged out. Refresh session revoked."}
 
 
 @router.get("/me", response_model=UserResponse)

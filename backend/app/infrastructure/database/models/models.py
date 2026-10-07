@@ -49,6 +49,7 @@ class UserModel(Base):
     platform_connections = relationship("PlatformConnectionModel", back_populates="user", cascade="all, delete-orphan")
     applications = relationship("ApplicationModel", back_populates="user", cascade="all, delete-orphan")
     match_results = relationship("MatchResultModel", back_populates="user", cascade="all, delete-orphan")
+    automation_runs = relationship("AutomationRunModel", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserSessionModel(Base):
@@ -354,3 +355,41 @@ class AIRequestModel(Base):
     is_success = Column(Boolean, default=True, nullable=False)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class AutomationRunModel(Base):
+    __tablename__ = "automation_runs"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(32), default="CREATED", nullable=False, index=True)
+    source_type = Column(String(64), default="naukri", nullable=False)
+    target_count = Column(Integer, default=10, nullable=False)
+    discovered_count = Column(Integer, default=0, nullable=False)
+    matched_count = Column(Integer, default=0, nullable=False)
+    applied_count = Column(Integer, default=0, nullable=False)
+    failed_count = Column(Integer, default=0, nullable=False)
+    current_job_id = Column(String(36), nullable=True)
+    current_job_title = Column(String(255), nullable=True)
+    worker_id = Column(String(64), default="local-worker-1", nullable=False)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("UserModel", back_populates="automation_runs")
+    events = relationship("AutomationEventModel", back_populates="run", cascade="all, delete-orphan")
+
+
+class AutomationEventModel(Base):
+    __tablename__ = "automation_events"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    run_id = Column(String(36), ForeignKey("automation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_name = Column(String(64), nullable=False)
+    payload = Column(JSON, default=dict, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    run = relationship("AutomationRunModel", back_populates="events")
+

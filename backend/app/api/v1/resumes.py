@@ -47,15 +47,50 @@ async def upload_resume(
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)] = None,
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)] = None,
 ):
+    # 1. Extension allowlist check
+    original_filename = file.filename or "resume.pdf"
+    file_ext = os.path.splitext(original_filename)[1].lower()
+    if file_ext not in settings.allowed_resume_extensions_list:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type '{file_ext}'. Allowed formats: {', '.join(settings.allowed_resume_extensions_list)}",
+        )
+
+    # 2. Magic bytes and size check
+    header_chunk = await file.read(2048)
+    if not header_chunk:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
+
+    # PDF magic bytes: %PDF-
+    # DOCX magic bytes: PK\x03\x04 (ZIP container signature)
+    is_valid_pdf = file_ext == ".pdf" and header_chunk.startswith(b"%PDF-")
+    is_valid_docx = file_ext == ".docx" and header_chunk.startswith(b"PK\x03\x04")
+
+    if not (is_valid_pdf or is_valid_docx):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File content does not match the '{file_ext}' extension signature (magic byte verification failed).",
+        )
+
+    # Read remaining file and check total size
+    remaining_chunk = await file.read()
+    total_size = len(header_chunk) + len(remaining_chunk)
+    if total_size > settings.MAX_RESUME_SIZE_BYTES:
+        max_mb = settings.MAX_RESUME_SIZE_BYTES // (1024 * 1024)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Resume file size exceeds maximum limit of {max_mb} MB.",
+        )
+
     upload_dir = os.path.join(settings.STORAGE_DIR, "resumes", current_user.id)
     os.makedirs(upload_dir, exist_ok=True)
 
-    file_ext = os.path.splitext(file.filename or "resume.pdf")[1]
     saved_filename = f"{uuid.uuid4()}{file_ext}"
     saved_path = os.path.join(upload_dir, saved_filename)
 
     with open(saved_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(header_chunk)
+        buffer.write(remaining_chunk)
 
     # Basic raw text placeholder / extraction
     raw_text = f"Extracted resume content for {label} - {target_role}"

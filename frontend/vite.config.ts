@@ -1,10 +1,15 @@
+import fs from 'fs'
+import path from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import path from 'path'
+
+const realCwd = fs.realpathSync(process.cwd());
+if (process.cwd() !== realCwd) {
+  process.chdir(realCwd);
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  root: path.resolve(__dirname),
   plugins: [react()],
   resolve: {
     alias: {
@@ -23,5 +28,10 @@ export default defineConfig({
         ws: true,
       },
     },
+  },
+  // @ts-expect-error - Vitest configuration extensions
+  test: {
+    globals: true,
+    environment: 'jsdom',
   },
 })

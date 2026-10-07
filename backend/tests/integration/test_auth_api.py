@@ -38,3 +38,17 @@ async def test_register_and_login_flow(client: AsyncClient):
     me_data = me_res.json()
     assert me_data["email"] == "engineer@example.com"
     assert me_data["full_name"] == "Senior Engineer"
+
+    # 5. Refresh token rotation
+    assert "refresh_token" in login_data
+    refresh_token = login_data["refresh_token"]
+    refresh_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert refresh_res.status_code == 200
+    new_data = refresh_res.json()
+    assert "access_token" in new_data
+    assert "refresh_token" in new_data
+
+    # 6. Logout
+    logout_res = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {new_data['access_token']}"})
+    assert logout_res.status_code == 200
+    assert "logged out" in logout_res.json()["message"].lower()
