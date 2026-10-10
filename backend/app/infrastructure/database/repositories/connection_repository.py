@@ -20,6 +20,9 @@ class SqlAlchemyConnectionRepository(PlatformConnectionRepository):
             return None
         return self._to_domain(res)
 
+    async def get_by_platform(self, user_id: str, platform: str) -> Optional[PlatformConnection]:
+        return await self.get_by_user_and_platform(user_id, platform)
+
     async def list_user_connections(self, user_id: str) -> List[PlatformConnection]:
         stmt = select(PlatformConnectionModel).where(PlatformConnectionModel.user_id == user_id)
         res = await self._session.scalars(stmt)

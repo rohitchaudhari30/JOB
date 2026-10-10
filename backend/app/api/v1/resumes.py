@@ -119,6 +119,13 @@ async def delete_resume(
     if not resume or resume.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Resume not found.")
 
+    can_del, reason = await resume_repo.can_delete(resume_id, current_user.id)
+    if not can_del:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=reason or "Cannot delete resume: resume is actively in use by pending/active applications or running campaigns. (RESUME_IN_USE)",
+        )
+
     if os.path.exists(resume.file_path):
         try:
             os.remove(resume.file_path)

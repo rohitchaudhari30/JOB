@@ -1,8 +1,14 @@
-from typing import Annotated, List, Optional
+import os
+from pathlib import Path
+from typing import Annotated, Any, List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
+from app.core.config import settings
 from app.api.deps import (
     get_ai_gateway,
     get_application_repository,
+    get_campaign_repository,
+    get_connection_repository,
     get_current_user,
     get_job_repository,
     get_profile_repository,
@@ -13,7 +19,10 @@ from app.application.applications.dtos import (
     ApplicationResponseDTO,
     ApplicationStatsDTO,
     ApproveApplicationDTO,
+    BatchQueueApplicationsDTO,
     CreateApplicationDTO,
+    PaginatedApplicationsDTO,
+    ReconcileApplicationDTO,
     ResumeApplicationDTO,
     StopApplicationDTO,
     TakeControlDTO,
@@ -24,8 +33,15 @@ from app.application.applications.use_cases import (
     ExecuteApplicationUseCase,
     GetApplicationUseCase,
     ListApplicationsUseCase,
+    ReconcileApplicationUseCase,
     ResumeApplicationUseCase,
+    RetryApplicationUseCase,
     StopApplicationUseCase,
+)
+from app.core.exceptions import (
+    AuthorizationException,
+    EntityNotFoundException,
+    ValidationException,
 )
 from app.domain.ai.contracts import AIGateway
 from app.domain.applications.entities import Application, WorkflowStateEnum
@@ -63,6 +79,9 @@ def _to_response_dto(app: Application) -> ApplicationResponseDTO:
         apply_url=app.apply_url,
         platform=app.platform,
         match_score=app.match_score,
+        retry_count=app.retry_count or 0,
+        error_category=app.error_category,
+        next_retry_at=app.next_retry_at,
         created_at=app.created_at,
         updated_at=app.updated_at,
         questions=[
@@ -79,22 +98,64 @@ def _to_response_dto(app: Application) -> ApplicationResponseDTO:
     )
 
 
-@router.get("", response_model=List[ApplicationResponseDTO])
+async def _get_authorized_app(
+    application_id: str,
+    user_id: str,
+    app_repo: SqlAlchemyApplicationRepository,
+    current_user: Optional[User] = None,
+) -> Application:
+    app = await app_repo.get_by_id(application_id)
+    if not app:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Application [{application_id}] not found.",
+        )
+    is_admin = bool(current_user and getattr(current_user, "is_superuser", False))
+    if app.user_id != user_id and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized access to this application record.",
+        )
+    return app
+
+
+@router.get("", response_model=PaginatedApplicationsDTO)
 async def list_applications(
     current_user: Annotated[User, Depends(get_current_user)],
     app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
     state: Optional[str] = Query(None),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=500),
+    skip: Optional[int] = Query(None, ge=0),
+    limit: Optional[int] = Query(None, ge=1, le=1000),
 ):
+    if skip is not None:
+        eff_skip = skip
+        eff_limit = limit or page_size
+        eff_page = (eff_skip // eff_limit) + 1
+        eff_page_size = eff_limit
+    else:
+        eff_page = page
+        eff_page_size = page_size
+        eff_skip = (page - 1) * page_size
+        eff_limit = page_size
+
     use_case = ListApplicationsUseCase(app_repo=app_repo)
-    apps = await use_case.execute(
+    apps, total_count = await use_case.execute(
         user_id=current_user.id,
         state=state,
-        skip=skip,
-        limit=limit,
+        skip=eff_skip,
+        limit=eff_limit,
     )
-    return [_to_response_dto(a) for a in apps]
+    total_pages = (total_count + eff_page_size - 1) // eff_page_size if total_count > 0 else 1
+
+    return PaginatedApplicationsDTO(
+        items=[_to_response_dto(a) for a in apps],
+        total=total_count,
+        page=eff_page,
+        page_size=eff_page_size,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/stats", response_model=ApplicationStatsDTO)
@@ -102,25 +163,17 @@ async def get_application_stats(
     current_user: Annotated[User, Depends(get_current_user)],
     app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
 ):
-    total = len(await app_repo.list_by_user(user_id=current_user.id, limit=1000))
-    applied = await app_repo.count_by_state(current_user.id, WorkflowStateEnum.APPLIED.value)
-    paused = (
-        await app_repo.count_by_state(current_user.id, WorkflowStateEnum.PAUSED_OTP.value)
-        + await app_repo.count_by_state(current_user.id, WorkflowStateEnum.PAUSED_CAPTCHA.value)
-        + await app_repo.count_by_state(current_user.id, WorkflowStateEnum.PAUSED_USER_INPUT.value)
-    )
-    failed = await app_repo.count_by_state(current_user.id, WorkflowStateEnum.FAILED.value)
-    approval_required = await app_repo.count_by_state(
-        current_user.id, WorkflowStateEnum.APPROVAL_REQUIRED.value
-    )
+    stats = await app_repo.get_aggregate_stats(current_user.id)
+    return ApplicationStatsDTO(**stats)
 
-    return ApplicationStatsDTO(
-        total=total,
-        applied=applied,
-        paused=paused,
-        failed=failed,
-        approval_required=approval_required,
-    )
+
+@router.get("/applied-map", response_model=dict[str, dict[str, Optional[str]]])
+async def get_applied_jobs_map(
+    current_user: Annotated[User, Depends(get_current_user)],
+    app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
+):
+    """Returns a compact mapping of job_id -> {status, applied_at} for all applications belonging to current user."""
+    return await app_repo.get_applied_job_map(current_user.id)
 
 
 @router.get("/{application_id}", response_model=ApplicationResponseDTO)
@@ -129,11 +182,87 @@ async def get_application(
     current_user: Annotated[User, Depends(get_current_user)],
     app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
 ):
-    use_case = GetApplicationUseCase(app_repo=app_repo)
-    app = await use_case.execute(application_id=application_id)
-    if app.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access.")
+    app = await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
     return _to_response_dto(app)
+
+
+@router.get("/{application_id}/screenshot")
+async def get_application_screenshot(
+    application_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
+):
+    app = await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
+    if not app.screenshot_file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Screenshot artifact not found.",
+        )
+
+    # Path Traversal Defense (CWE-22): Jail path strictly within storage root and approved screenshots directory
+    storage_root = Path(settings.STORAGE_DIR).resolve()
+    screenshots_root = (storage_root / "screenshots").resolve()
+    resumes_root = (storage_root / "resumes").resolve()
+    raw_path = Path(app.screenshot_file_path)
+
+    # Canonical path resolution
+    if raw_path.is_absolute():
+        resolved_path = raw_path.resolve()
+    else:
+        # Check if raw_path is relative to cwd and already within storage_root (e.g. "./storage/...")
+        cwd_cand = raw_path.resolve()
+        try:
+            cwd_cand.relative_to(storage_root)
+            resolved_path = cwd_cand
+        except ValueError:
+            # Check if (storage_root / raw_path) target was specified (e.g. "screenshots/..." or "resumes/...")
+            storage_cand = (storage_root / raw_path).resolve()
+            if (
+                len(raw_path.parts) > 1
+                or raw_path.parts[0] in ("screenshots", "resumes", "traces", "browser_profiles")
+            ):
+                resolved_path = storage_cand
+            else:
+                resolved_path = (screenshots_root / raw_path).resolve()
+
+    # Boundary check 1: Strict isolation against resumes or sensitive subtrees
+    try:
+        resolved_path.relative_to(resumes_root)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access to artifact outside storage root is forbidden (must be within approved screenshots directory).",
+        )
+    except ValueError:
+        pass
+
+    # Boundary check 2: Strict confinement to screenshots directory
+    try:
+        resolved_path.relative_to(screenshots_root)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access to artifact outside storage root is forbidden (must be within approved screenshots directory).",
+        )
+
+    if not resolved_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Screenshot artifact not found on disk.",
+        )
+
+    if resolved_path.suffix.lower() not in [".png", ".jpg", ".jpeg", ".webp"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid screenshot artifact format.",
+        )
+
+    ext = resolved_path.suffix.lower().lstrip(".")
+    media_type = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+    return FileResponse(
+        str(resolved_path),
+        media_type=media_type,
+        filename=f"screenshot_{application_id}{resolved_path.suffix.lower()}",
+    )
 
 
 @router.post("", response_model=ApplicationResponseDTO, status_code=status.HTTP_201_CREATED)
@@ -142,14 +271,116 @@ async def create_application(
     current_user: Annotated[User, Depends(get_current_user)],
     app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
+    profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
+    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+    campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
+    conn_repo: Annotated[Any, Depends(get_connection_repository)],
+    ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
 ):
-    use_case = CreateApplicationUseCase(app_repo=app_repo, job_repo=job_repo)
-    app = await use_case.execute(
+    from app.application.applications.application_orchestrator import ApplicationOrchestrator
+    from app.application.applications.commands import ApplicationSource, QueueApplicationCommand
+
+    exec_uc = ExecuteApplicationUseCase(
+        app_repo=app_repo,
+        job_repo=job_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        ai_provider=ai_gateway,
+    )
+    orchestrator = ApplicationOrchestrator(
+        app_repo=app_repo,
+        job_repo=job_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        campaign_repo=campaign_repo,
+        connection_repo=conn_repo,
+        execute_use_case=exec_uc,
+    )
+
+    try:
+        source_enum = ApplicationSource(req.source) if req.source else ApplicationSource.DIRECT_APPLY
+    except Exception:
+        source_enum = ApplicationSource.DIRECT_APPLY
+
+    cmd = QueueApplicationCommand(
         user_id=current_user.id,
         job_id=req.job_id,
+        source=source_enum,
+        campaign_id=req.campaign_id,
         resume_id=req.resume_id,
+        auto_execute=req.auto_execute,
     )
-    return _to_response_dto(app)
+    result = await orchestrator.queue_application(cmd)
+    if not result.is_queued or not result.application:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{result.error_code}: {result.error_message}",
+        )
+    return _to_response_dto(result.application)
+
+
+@router.post("/batch-queue", status_code=status.HTTP_201_CREATED)
+async def batch_queue_applications(
+    req: BatchQueueApplicationsDTO,
+    current_user: Annotated[User, Depends(get_current_user)],
+    app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
+    job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
+    profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
+    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+    campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
+    conn_repo: Annotated[Any, Depends(get_connection_repository)],
+    ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+):
+    from app.application.applications.application_orchestrator import ApplicationOrchestrator
+    from app.application.applications.commands import ApplicationSource, BatchQueueApplicationCommand
+
+    exec_uc = ExecuteApplicationUseCase(
+        app_repo=app_repo,
+        job_repo=job_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        ai_provider=ai_gateway,
+    )
+    orchestrator = ApplicationOrchestrator(
+        app_repo=app_repo,
+        job_repo=job_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        campaign_repo=campaign_repo,
+        connection_repo=conn_repo,
+        execute_use_case=exec_uc,
+    )
+
+    try:
+        source_enum = ApplicationSource(req.source) if req.source else ApplicationSource.CAMPAIGN
+    except Exception:
+        source_enum = ApplicationSource.CAMPAIGN
+
+    cmd = BatchQueueApplicationCommand(
+        user_id=current_user.id,
+        job_ids=req.job_ids,
+        source=source_enum,
+        campaign_id=req.campaign_id,
+        resume_id=req.resume_id,
+        auto_execute=req.auto_execute,
+    )
+    result = await orchestrator.batch_queue_applications(cmd)
+    return {
+        "total_requested": result.total_requested,
+        "queued_count": result.queued_count,
+        "skipped_count": result.skipped_count,
+        "results": [
+            {
+                "job_id": cmd.job_ids[i] if i < len(cmd.job_ids) else None,
+                "is_queued": r.is_queued,
+                "status": r.status,
+                "error_code": r.error_code,
+                "error_message": r.error_message,
+                "application_id": r.application.id if r.application else None,
+            }
+            for i, r in enumerate(result.results)
+        ],
+    }
 
 
 @router.post("/{application_id}/approve", response_model=ApplicationResponseDTO)
@@ -161,8 +392,11 @@ async def approve_application(
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
     profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+    campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
+    conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
 ):
+    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
     execute_use_case = ExecuteApplicationUseCase(
         app_repo=app_repo,
         job_repo=job_repo,
@@ -170,13 +404,58 @@ async def approve_application(
         resume_repo=resume_repo,
         ai_provider=ai_gateway,
     )
-    use_case = ApproveApplicationUseCase(app_repo=app_repo, execute_use_case=execute_use_case)
+    use_case = ApproveApplicationUseCase(
+        app_repo=app_repo,
+        execute_use_case=execute_use_case,
+        job_repo=job_repo,
+        resume_repo=resume_repo,
+        campaign_repo=campaign_repo,
+        connection_repo=conn_repo,
+    )
     app = await use_case.execute(
         application_id=application_id,
         resume_id=req.resume_id,
         auto_execute=req.auto_execute,
     )
     return _to_response_dto(app)
+
+
+@router.post("/{application_id}/retry", response_model=ApplicationResponseDTO)
+async def retry_application(
+    application_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
+    job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
+    profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
+    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+    campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
+    conn_repo: Annotated[Any, Depends(get_connection_repository)],
+    ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+):
+    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
+    execute_use_case = ExecuteApplicationUseCase(
+        app_repo=app_repo,
+        job_repo=job_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        ai_provider=ai_gateway,
+    )
+    use_case = RetryApplicationUseCase(
+        app_repo=app_repo,
+        execute_use_case=execute_use_case,
+        job_repo=job_repo,
+        resume_repo=resume_repo,
+        campaign_repo=campaign_repo,
+        connection_repo=conn_repo,
+    )
+    is_admin = bool(getattr(current_user, "is_superuser", False))
+    try:
+        app = await use_case.execute(application_id=application_id, user_id=current_user.id, is_admin=is_admin)
+        return _to_response_dto(app)
+    except AuthorizationException:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access to this application record.")
+    except ValidationException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/{application_id}/resume", response_model=ApplicationResponseDTO)
@@ -190,6 +469,7 @@ async def resume_application(
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
 ):
+    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
     execute_use_case = ExecuteApplicationUseCase(
         app_repo=app_repo,
         job_repo=job_repo,
@@ -212,9 +492,57 @@ async def stop_application(
     current_user: Annotated[User, Depends(get_current_user)],
     app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
 ):
+    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
     use_case = StopApplicationUseCase(app_repo=app_repo)
     app = await use_case.execute(application_id=application_id, reason=req.reason or "Aborted by user")
     return _to_response_dto(app)
+
+
+@router.post("/{application_id}/reconcile", response_model=ApplicationResponseDTO)
+async def reconcile_application(
+    application_id: str,
+    req: ReconcileApplicationDTO,
+    current_user: Annotated[User, Depends(get_current_user)],
+    app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
+    job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
+    profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
+    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+    campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
+    conn_repo: Annotated[Any, Depends(get_connection_repository)],
+    ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+):
+    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
+    execute_use_case = ExecuteApplicationUseCase(
+        app_repo=app_repo,
+        job_repo=job_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        ai_provider=ai_gateway,
+    )
+    use_case = ReconcileApplicationUseCase(
+        app_repo=app_repo,
+        execute_use_case=execute_use_case,
+        job_repo=job_repo,
+        resume_repo=resume_repo,
+        campaign_repo=campaign_repo,
+        connection_repo=conn_repo,
+    )
+    is_admin = bool(getattr(current_user, "is_superuser", False))
+    try:
+        app = await use_case.execute(
+            application_id=application_id,
+            action=req.action,
+            notes=req.notes,
+            user_id=current_user.id,
+            is_admin=is_admin,
+        )
+        return _to_response_dto(app)
+    except AuthorizationException:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access to this application record.")
+    except ValidationException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except EntityNotFoundException as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @router.post("/{application_id}/execute", response_model=ApplicationResponseDTO)
@@ -227,6 +555,7 @@ async def execute_application(
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
 ):
+    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
     use_case = ExecuteApplicationUseCase(
         app_repo=app_repo,
         job_repo=job_repo,

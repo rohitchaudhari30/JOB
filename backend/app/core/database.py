@@ -78,6 +78,8 @@ async def _migrate_sqlite_columns():
                     ("posted_at_source", "VARCHAR DEFAULT 'scraped_text'"),
                     ("freshness_bucket", "VARCHAR DEFAULT 'unknown'"),
                     ("freshness_score", "FLOAT DEFAULT 50.0"),
+                    ("canonical_job_key", "VARCHAR(64)"),
+                    ("canonical_confidence", "FLOAT DEFAULT 1.0"),
                     ("updated_at", "DATETIME"),
                 ]
                 for col_name, col_type in new_job_cols:
@@ -96,8 +98,36 @@ async def _migrate_sqlite_columns():
             # Check match_results table
             res = await conn.execute(text("PRAGMA table_info(match_results)"))
             match_cols = {row[1] for row in res.fetchall()}
-            if match_cols and "freshness_score" not in match_cols:
-                await conn.execute(text("ALTER TABLE match_results ADD COLUMN freshness_score FLOAT"))
+            if match_cols:
+                new_match_cols = [
+                    ("freshness_score", "FLOAT DEFAULT 50.0"),
+                    ("evaluation_key", "VARCHAR(64)"),
+                    ("match_score", "FLOAT"),
+                    ("recommendation_score", "FLOAT"),
+                    ("experience_score", "FLOAT"),
+                    ("role_title_score", "FLOAT"),
+                    ("location_score", "FLOAT"),
+                    ("salary_score", "FLOAT"),
+                    ("ai_score", "FLOAT"),
+                    ("resume_version", "INTEGER"),
+                    ("resume_snapshot_hash", "VARCHAR(64)"),
+                    ("profile_version", "INTEGER"),
+                    ("profile_snapshot_hash", "VARCHAR(64)"),
+                    ("job_snapshot_hash", "VARCHAR(64)"),
+                    ("matching_engine_version", "VARCHAR(32)"),
+                    ("matching_config_version", "VARCHAR(32)"),
+                    ("prompt_version", "VARCHAR(32)"),
+                    ("embedding_model", "VARCHAR(64)"),
+                    ("embedding_version", "VARCHAR(32)"),
+                    ("recommendation_reasons", "TEXT"),
+                    ("blocking_reasons", "TEXT"),
+                    ("breakdown_json", "TEXT"),
+                    ("ai_model", "VARCHAR(64)"),
+                    ("duration_ms", "INTEGER"),
+                ]
+                for col_name, col_type in new_match_cols:
+                    if col_name not in match_cols:
+                        await conn.execute(text(f"ALTER TABLE match_results ADD COLUMN {col_name} {col_type}"))
 
             # Check browser_sessions table
             res = await conn.execute(text("PRAGMA table_info(browser_sessions)"))
@@ -106,6 +136,91 @@ async def _migrate_sqlite_columns():
                 await conn.execute(text("ALTER TABLE browser_sessions ADD COLUMN connection_id VARCHAR(36)"))
             if sess_cols and "last_used_at" not in sess_cols:
                 await conn.execute(text("ALTER TABLE browser_sessions ADD COLUMN last_used_at DATETIME"))
+
+            # Check campaign_executions table
+            res = await conn.execute(text("PRAGMA table_info(campaign_executions)"))
+            camp_exec_cols = {row[1] for row in res.fetchall()}
+            if camp_exec_cols:
+                new_exec_cols = [
+                    ("worker_id", "VARCHAR(64) DEFAULT 'worker-1'"),
+                    ("heartbeat_at", "DATETIME"),
+                    ("lease_expires_at", "DATETIME"),
+                    ("lease_version", "INTEGER DEFAULT 1 NOT NULL"),
+                    ("updated_at", "DATETIME"),
+                ]
+                for col_name, col_type in new_exec_cols:
+                    if col_name not in camp_exec_cols:
+                        await conn.execute(text(f"ALTER TABLE campaign_executions ADD COLUMN {col_name} {col_type}"))
+
+            # Check campaign_job_items table
+            res = await conn.execute(text("PRAGMA table_info(campaign_job_items)"))
+            camp_item_cols = {row[1] for row in res.fetchall()}
+            if camp_item_cols:
+                new_item_cols = [
+                    ("retry_count", "INTEGER DEFAULT 0"),
+                    ("error_category", "VARCHAR(64)"),
+                    ("next_retry_at", "DATETIME"),
+                    ("last_error", "TEXT"),
+                ]
+                for col_name, col_type in new_item_cols:
+                    if col_name not in camp_item_cols:
+                        await conn.execute(text(f"ALTER TABLE campaign_job_items ADD COLUMN {col_name} {col_type}"))
+
+            # Check applications table
+            res = await conn.execute(text("PRAGMA table_info(applications)"))
+            app_cols = {row[1] for row in res.fetchall()}
+            if app_cols:
+                new_app_cols = [
+                    ("outcome_status", "VARCHAR(32) DEFAULT 'NOT_SUBMITTED'"),
+                    ("retry_count", "INTEGER DEFAULT 0"),
+                    ("error_category", "VARCHAR(64)"),
+                    ("next_retry_at", "DATETIME"),
+                    ("current_attempt_id", "VARCHAR(64)"),
+                ]
+                for col_name, col_type in new_app_cols:
+                    if col_name not in app_cols:
+                        await conn.execute(text(f"ALTER TABLE applications ADD COLUMN {col_name} {col_type}"))
+
+            # Dynamic safety reconciliation across all declared tables in Base.metadata
+            from app.infrastructure.database.models.models import Base as ModelsBase
+            all_tables_res = await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            existing_tables = {row[0] for row in all_tables_res.fetchall()}
+
+            for tbl_name, tbl_obj in ModelsBase.metadata.tables.items():
+                if tbl_name not in existing_tables:
+                    continue
+                tbl_info_res = await conn.execute(text(f"PRAGMA table_info({tbl_name})"))
+                current_cols = {row[1] for row in tbl_info_res.fetchall()}
+                for col in tbl_obj.columns:
+                    if col.name not in current_cols:
+                        col_type_str = "VARCHAR(255)"
+                        raw_type = str(col.type).upper()
+                        if "INT" in raw_type:
+                            col_type_str = "INTEGER"
+                        elif "FLOAT" in raw_type or "NUMERIC" in raw_type:
+                            col_type_str = "FLOAT"
+                        elif "BOOL" in raw_type:
+                            col_type_str = "BOOLEAN"
+                        elif "DATETIME" in raw_type:
+                            col_type_str = "DATETIME"
+                        elif "TEXT" in raw_type or "JSON" in raw_type:
+                            col_type_str = "TEXT"
+
+                        default_clause = ""
+                        if col.default is not None and hasattr(col.default, "arg") and not callable(col.default.arg):
+                            arg = col.default.arg
+                            if isinstance(arg, (int, float)):
+                                default_clause = f" DEFAULT {arg}"
+                            elif isinstance(arg, bool):
+                                default_clause = f" DEFAULT {1 if arg else 0}"
+                            elif isinstance(arg, str):
+                                default_clause = f" DEFAULT '{arg}'"
+
+                        try:
+                            await conn.execute(text(f"ALTER TABLE {tbl_name} ADD COLUMN {col.name} {col_type_str}{default_clause}"))
+                            logger.info(f"Auto-migrated missing column: {tbl_name}.{col.name} ({col_type_str})")
+                        except Exception as auto_col_err:
+                            logger.debug(f"Column add notice for {tbl_name}.{col.name}: {auto_col_err}")
     except Exception as e:
         logger.warning(f"SQLite auto-migration notice: {e}")
 

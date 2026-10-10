@@ -62,3 +62,14 @@ class BaseApplicationAdapter(ABC):
     async def submit_application(self, page) -> bool:
         """Triggers final submission and verifies confirmation."""
         pass
+
+    async def verify_submission(self, page, original_url: str) -> Optional[tuple[bool, str]]:
+        """
+        Platform-specific post-submit verification hook.
+        Returns:
+            (True, detail_message) -> Confirmed submission
+            (False, detail_message) -> Confirmed rejection / validation error
+            None -> Inconclusive / unhandled, fall back to conservative default heuristics
+        """
+        return None
+

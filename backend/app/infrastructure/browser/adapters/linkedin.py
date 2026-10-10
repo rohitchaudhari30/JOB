@@ -3,10 +3,11 @@ import logging
 import re
 import urllib.parse
 import uuid
+import inspect
 from typing import AsyncGenerator, Optional
 from playwright.async_api import BrowserContext, Page
 from app.domain.jobs.entities import Job, SearchQueryFilter
-from app.infrastructure.browser.adapters.base import BaseJobSourceAdapter
+from app.infrastructure.browser.adapters.base import BaseApplicationAdapter, BaseJobSourceAdapter
 
 logger = logging.getLogger("app.adapters.linkedin")
 
@@ -100,15 +101,21 @@ class LinkedInAdapter(BaseJobSourceAdapter):
         try:
             pages = getattr(context, "pages", None)
             page = pages[0] if (isinstance(pages, list) and len(pages) > 0) else await context.new_page()
+            logger.info("page_created", extra={"platform": "linkedin", "run_id": run_id})
             if user_id and run_id:
                 from app.infrastructure.browser.screenshot_streamer import ScreenshotStreamer
                 streamer = ScreenshotStreamer(page=page, user_id=user_id, run_id=run_id, fps=5)
                 streamer.start()
+                logger.info("screencast_started", extra={"platform": "linkedin", "run_id": run_id})
 
             search_url = self._build_search_url(filters)
-            logger.info(f"Navigating to LinkedIn search: {search_url}")
+            logger.info("navigation_started", extra={"platform": "linkedin", "run_id": run_id, "url": search_url})
 
             await page.goto(search_url, timeout=30000, wait_until="domcontentloaded")
+            logger.info("navigation_completed", extra={"platform": "linkedin", "run_id": run_id, "url": search_url})
+
+            if page.is_closed():
+                raise RuntimeError("Target page, context or browser has been closed during search.")
 
             # Wait for job card elements to mount dynamically
             try:
@@ -116,27 +123,45 @@ class LinkedInAdapter(BaseJobSourceAdapter):
                     ".job-card-container, .jobs-search-results__list-item, div[data-job-id], ul.jobs-search__results-list li, div.base-card",
                     timeout=8000
                 )
-            except Exception:
-                pass
+            except Exception as wait_err:
+                if page.is_closed() or "closed" in str(wait_err).lower():
+                    raise RuntimeError(f"Target page, context or browser has been closed: {wait_err}") from wait_err
+                logger.debug(f"Selector wait non-critical timeout: {wait_err}")
 
             # Dismiss any open modals or backdrops
-            try:
-                await page.evaluate("""() => {
-                    document.querySelectorAll('.modal__overlay, .artdeco-modal-overlay').forEach(el => el.remove());
-                    if (document.activeElement && document.activeElement.blur) {
-                        document.activeElement.blur();
-                    }
-                }""")
-            except Exception:
-                pass
+            if not page.is_closed():
+                try:
+                    await page.evaluate("""() => {
+                        document.querySelectorAll('.modal__overlay, .artdeco-modal-overlay').forEach(el => el.remove());
+                        if (document.activeElement && document.activeElement.blur) {
+                            document.activeElement.blur();
+                        }
+                    }""")
+                except Exception as eval_err:
+                    if page.is_closed() or "closed" in str(eval_err).lower():
+                        raise RuntimeError(f"Target page, context or browser has been closed: {eval_err}") from eval_err
+                    logger.debug(f"Dismiss modal evaluation skipped: {eval_err}")
 
             # Natural smooth visual scan with dynamic scrolling across listings
             for _ in range(3):
-                await page.evaluate("window.scrollBy({ top: 450, behavior: 'smooth' })")
-                await asyncio.sleep(0.35)
+                if page.is_closed():
+                    raise RuntimeError("Target page, context or browser has been closed during scrolling.")
+                try:
+                    await page.evaluate("window.scrollBy({ top: 450, behavior: 'smooth' })")
+                    await asyncio.sleep(0.35)
+                except Exception as scroll_err:
+                    if page.is_closed() or "closed" in str(scroll_err).lower():
+                        raise RuntimeError(f"Target page, context or browser has been closed during scrolling: {scroll_err}") from scroll_err
+                    logger.debug(f"Scroll pass interrupted: {scroll_err}")
+                    break
 
+            if page.is_closed():
+                raise RuntimeError("Target page, context or browser has been closed prior to extraction.")
+
+            logger.info("search_started", extra={"platform": "linkedin", "run_id": run_id})
             # Single high-performance in-browser extraction of all job cards
-            raw_cards_data = await page.evaluate("""
+            try:
+                raw_cards_data = await page.evaluate("""
                 () => {
                     const cards = document.querySelectorAll(
                         ".job-card-container, .jobs-search-results__list-item, div[data-job-id], ul.jobs-search__results-list li, div.base-card"
@@ -174,7 +199,12 @@ class LinkedInAdapter(BaseJobSourceAdapter):
                     return results;
                 }
             """)
-            logger.info(f"Extracted {len(raw_cards_data)} raw job cards from LinkedIn in one pass.")
+            except Exception as extract_err:
+                if page.is_closed() or "closed" in str(extract_err).lower():
+                    raise RuntimeError(f"Target page, context or browser has been closed: {extract_err}") from extract_err
+                raise extract_err
+
+            logger.info("search_completed", extra={"platform": "linkedin", "run_id": run_id, "cards_count": len(raw_cards_data)})
 
             for item in raw_cards_data:
                 try:
@@ -186,11 +216,20 @@ class LinkedInAdapter(BaseJobSourceAdapter):
 
         except Exception as e:
             logger.error(f"LinkedIn search failed: {e}")
+            raise
         finally:
             if streamer:
-                await streamer.stop()
+                try:
+                    await streamer.stop()
+                    logger.info("screencast_stopped", extra={"platform": "linkedin", "run_id": run_id})
+                except Exception:
+                    pass
             if page and not page.is_closed():
-                await page.close()
+                try:
+                    await page.close()
+                    logger.info("page_closed", extra={"platform": "linkedin", "run_id": run_id})
+                except Exception:
+                    pass
 
     def _build_job_from_dict(self, item: dict, filters: Optional[SearchQueryFilter] = None) -> Optional[Job]:
         """Fast memory-only builder from in-browser extracted dictionary."""
@@ -270,3 +309,73 @@ class LinkedInAdapter(BaseJobSourceAdapter):
         finally:
             if page and not page.is_closed():
                 await page.close()
+
+
+class LinkedInApplicationAdapter(BaseApplicationAdapter):
+    """Application adapter for LinkedIn (Easy Apply and Direct Apply)."""
+
+    @property
+    def source_type(self) -> str:
+        return "linkedin"
+
+    async def open_application(self, page, apply_url: str) -> bool:
+        await page.goto(apply_url, timeout=30000, wait_until="domcontentloaded")
+        return True
+
+    async def handle_challenge(self, page) -> Optional[str]:
+        content = await page.content()
+        if "security verification" in content.lower() or "checkpoint" in getattr(page, "url", "").lower():
+            return "CAPTCHA"
+        return None
+
+    async def submit_application(self, page) -> bool:
+        submit_btn = page.locator("button:has-text('Submit application'), button[aria-label='Submit application']").first
+        await submit_btn.click(timeout=8000)
+        return True
+
+    async def verify_submission(self, page, original_url: str) -> Optional[tuple[bool, str]]:
+        """
+        LinkedIn-specific post-submit confirmation verification.
+        Detects:
+        - Easy Apply success modal: 'Your application was sent to', 'Application submitted'
+        - Post-apply 'Done' button or dismissed dialog
+        - Error alert inside modal: '.artdeco-inline-feedback--error'
+        """
+        try:
+            if hasattr(page, "evaluate"):
+                check_script = """
+                () => {
+                    const bodyText = (document.body ? document.body.innerText : '') || '';
+                    if (bodyText.includes('Your application was sent to') || 
+                        bodyText.includes('Application submitted') ||
+                        bodyText.includes('Application was sent')) {
+                        return { confirmed: true, message: 'LinkedIn Easy Apply confirmation modal detected.' };
+                    }
+                    
+                    const doneBtn = Array.from(document.querySelectorAll('button')).find(b => {
+                        const aria = (b.getAttribute('aria-label') || '').toLowerCase();
+                        const txt = (b.innerText || '').trim().toLowerCase();
+                        return aria === 'dismiss' || txt === 'done';
+                    });
+                    const modalHeader = document.querySelector('.artdeco-modal__header');
+                    if (modalHeader && (modalHeader.innerText.includes('Application sent') || modalHeader.innerText.includes('Submitted'))) {
+                        return { confirmed: true, message: 'LinkedIn modal header confirmation detected.' };
+                    }
+                    
+                    const errorFeedback = document.querySelector('.artdeco-inline-feedback--error');
+                    if (errorFeedback && errorFeedback.innerText && errorFeedback.innerText.trim().length > 0) {
+                        return { confirmed: false, message: 'LinkedIn inline error: ' + errorFeedback.innerText.trim().slice(0, 150) };
+                    }
+                    
+                    return null;
+                }
+                """
+                res = page.evaluate(check_script)
+                if inspect.isawaitable(res):
+                    res = await res
+                if res and isinstance(res, dict):
+                    return (res.get("confirmed", False), res.get("message", "LinkedIn outcome detected."))
+        except Exception as e:
+            logger.warning(f"LinkedIn verification hook error: {e}")
+        return None
+

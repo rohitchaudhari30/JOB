@@ -3,10 +3,11 @@ import logging
 import re
 import urllib.parse
 import uuid
+import inspect
 from typing import AsyncGenerator, Optional
 from playwright.async_api import BrowserContext, Page
 from app.domain.jobs.entities import Job, SearchQueryFilter
-from app.infrastructure.browser.adapters.base import BaseJobSourceAdapter
+from app.infrastructure.browser.adapters.base import BaseApplicationAdapter, BaseJobSourceAdapter
 
 logger = logging.getLogger("app.adapters.naukri")
 
@@ -110,15 +111,21 @@ class NaukriAdapter(BaseJobSourceAdapter):
         try:
             pages = getattr(context, "pages", None)
             page = pages[0] if (isinstance(pages, list) and len(pages) > 0) else await context.new_page()
+            logger.info("page_created", extra={"platform": "naukri", "run_id": run_id})
             if user_id and run_id:
                 from app.infrastructure.browser.screenshot_streamer import ScreenshotStreamer
                 streamer = ScreenshotStreamer(page=page, user_id=user_id, run_id=run_id, fps=5)
                 streamer.start()
+                logger.info("screencast_started", extra={"platform": "naukri", "run_id": run_id})
 
             search_url = self._build_search_url(filters)
-            logger.info(f"Navigating to Naukri search: {search_url}")
+            logger.info("navigation_started", extra={"platform": "naukri", "run_id": run_id, "url": search_url})
 
             await page.goto(search_url, timeout=30000, wait_until="domcontentloaded")
+            logger.info("navigation_completed", extra={"platform": "naukri", "run_id": run_id, "url": search_url})
+
+            if page.is_closed():
+                raise RuntimeError("Target page, context or browser has been closed during search.")
 
             # Wait for job card elements to mount dynamically
             try:
@@ -126,27 +133,45 @@ class NaukriAdapter(BaseJobSourceAdapter):
                     ".srp-jobtuple-wrapper, article.jobTuple, .cust-job-tuple, div[data-job-id], div[class*='srp-jobtuple']",
                     timeout=8000
                 )
-            except Exception:
-                pass
+            except Exception as wait_err:
+                if page.is_closed() or "closed" in str(wait_err).lower():
+                    raise RuntimeError(f"Target page, context or browser has been closed: {wait_err}") from wait_err
+                logger.debug(f"Selector wait non-critical timeout: {wait_err}")
 
             # Dismiss any open search autocomplete dropdowns or backdrops
-            try:
-                await page.evaluate("""() => {
-                    document.querySelectorAll('.nI-gNb-backdrop, .drawer-wrapper').forEach(el => el.remove());
-                    if (document.activeElement && document.activeElement.blur) {
-                        document.activeElement.blur();
-                    }
-                }""")
-            except Exception:
-                pass
+            if not page.is_closed():
+                try:
+                    await page.evaluate("""() => {
+                        document.querySelectorAll('.nI-gNb-backdrop, .drawer-wrapper').forEach(el => el.remove());
+                        if (document.activeElement && document.activeElement.blur) {
+                            document.activeElement.blur();
+                        }
+                    }""")
+                except Exception as eval_err:
+                    if page.is_closed() or "closed" in str(eval_err).lower():
+                        raise RuntimeError(f"Target page, context or browser has been closed: {eval_err}") from eval_err
+                    logger.debug(f"Dismiss backdrop evaluation skipped: {eval_err}")
 
             # Natural smooth visual scan with dynamic scrolling across listings
             for _ in range(3):
-                await page.evaluate("window.scrollBy({ top: 450, behavior: 'smooth' })")
-                await asyncio.sleep(0.35)
+                if page.is_closed():
+                    raise RuntimeError("Target page, context or browser has been closed during scrolling.")
+                try:
+                    await page.evaluate("window.scrollBy({ top: 450, behavior: 'smooth' })")
+                    await asyncio.sleep(0.35)
+                except Exception as scroll_err:
+                    if page.is_closed() or "closed" in str(scroll_err).lower():
+                        raise RuntimeError(f"Target page, context or browser has been closed during scrolling: {scroll_err}") from scroll_err
+                    logger.debug(f"Scroll pass interrupted: {scroll_err}")
+                    break
 
+            if page.is_closed():
+                raise RuntimeError("Target page, context or browser has been closed prior to extraction.")
+
+            logger.info("search_started", extra={"platform": "naukri", "run_id": run_id})
             # Single high-performance in-browser extraction of all job cards
-            raw_cards_data = await page.evaluate("""
+            try:
+                raw_cards_data = await page.evaluate("""
                 () => {
                     const selectors = [
                         ".srp-jobtuple-wrapper",
@@ -192,7 +217,12 @@ class NaukriAdapter(BaseJobSourceAdapter):
                     return results;
                 }
             """)
-            logger.info(f"Extracted {len(raw_cards_data)} raw job cards from Naukri in one pass.")
+            except Exception as extract_err:
+                if page.is_closed() or "closed" in str(extract_err).lower():
+                    raise RuntimeError(f"Target page, context or browser has been closed: {extract_err}") from extract_err
+                raise extract_err
+
+            logger.info("search_completed", extra={"platform": "naukri", "run_id": run_id, "cards_count": len(raw_cards_data)})
 
             for item in raw_cards_data:
                 try:
@@ -204,11 +234,20 @@ class NaukriAdapter(BaseJobSourceAdapter):
 
         except Exception as e:
             logger.error(f"Naukri search failed: {e}")
+            raise
         finally:
             if streamer:
-                await streamer.stop()
+                try:
+                    await streamer.stop()
+                    logger.info("screencast_stopped", extra={"platform": "naukri", "run_id": run_id})
+                except Exception:
+                    pass
             if page and not page.is_closed():
-                await page.close()
+                try:
+                    await page.close()
+                    logger.info("page_closed", extra={"platform": "naukri", "run_id": run_id})
+                except Exception:
+                    pass
 
     def _build_job_from_dict(self, item: dict) -> Optional[Job]:
         """Fast memory-only builder from in-browser extracted dictionary."""
@@ -322,3 +361,73 @@ class NaukriAdapter(BaseJobSourceAdapter):
         finally:
             if page and not page.is_closed():
                 await page.close()
+
+
+class NaukriApplicationAdapter(BaseApplicationAdapter):
+    """Application adapter for Naukri job portal."""
+
+    @property
+    def source_type(self) -> str:
+        return "naukri"
+
+    async def open_application(self, page, apply_url: str) -> bool:
+        await page.goto(apply_url, timeout=30000, wait_until="domcontentloaded")
+        return True
+
+    async def handle_challenge(self, page) -> Optional[str]:
+        content = await page.content()
+        if "Enter OTP" in content or "verification code" in content.lower():
+            return "OTP"
+        if "recaptcha" in content.lower() or "cf-turnstile" in content.lower():
+            return "CAPTCHA"
+        return None
+
+    async def submit_application(self, page) -> bool:
+        submit_btn = page.locator("button:has-text('Apply'), button:has-text('Submit'), .apply-button").first
+        await submit_btn.click(timeout=8000)
+        return True
+
+    async def verify_submission(self, page, original_url: str) -> Optional[tuple[bool, str]]:
+        """
+        Naukri-specific confirmation verification.
+        Detects:
+        - Applied banner/toast: '.apply-message', '.applied-status', '.msg-box', '.apply-confirmation'
+        - Button text changed to 'Already Applied' or 'Applied'
+        - Inline error: '.server-err', '.error-container'
+        """
+        try:
+            if hasattr(page, "evaluate"):
+                check_script = """
+                () => {
+                    const bodyText = (document.body ? document.body.innerText : '') || '';
+                    if (bodyText.includes('Your application has been sent') || 
+                        bodyText.includes('Successfully applied') || 
+                        bodyText.includes('You have successfully applied') ||
+                        bodyText.includes('Application sent to')) {
+                        return { confirmed: true, message: 'Naukri positive confirmation message detected.' };
+                    }
+                    
+                    const appliedBtn = Array.from(document.querySelectorAll('button, .apply-button')).find(b => {
+                        const txt = (b.innerText || '').trim().toLowerCase();
+                        return txt === 'applied' || txt === 'already applied';
+                    });
+                    if (appliedBtn) {
+                        return { confirmed: true, message: 'Naukri button updated to Applied state.' };
+                    }
+                    
+                    const errEl = document.querySelector('.server-err, .error-container, .apply-error');
+                    if (errEl && errEl.innerText && errEl.innerText.trim().length > 0) {
+                        return { confirmed: false, message: 'Naukri error: ' + errEl.innerText.trim().slice(0, 150) };
+                    }
+                    
+                    return null;
+                }
+                """
+                res = page.evaluate(check_script)
+                if inspect.isawaitable(res):
+                    res = await res
+                if res and isinstance(res, dict):
+                    return (res.get("confirmed", False), res.get("message", "Naukri outcome detected."))
+        except Exception as e:
+            logger.warning(f"Naukri verification hook error: {e}")
+        return None

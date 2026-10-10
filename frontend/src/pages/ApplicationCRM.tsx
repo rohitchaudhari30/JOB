@@ -20,12 +20,14 @@ import {
   CheckCircle2,
   Sparkles,
   Briefcase,
+  Info,
+  RotateCcw,
 } from 'lucide-react';
 import { api } from '../services/api';
-import { Application } from '../types';
+import { Application, ApplicationStats } from '../types';
 import { useToast } from '../context/ToastContext';
 
-type DerivedStatus = 'Applied' | 'Skipped' | 'Failed' | 'Company site' | 'Already applied' | 'Pending';
+type DerivedStatus = 'Applied' | 'Needs Verification' | 'Skipped' | 'Failed' | 'Company site' | 'Already applied' | 'Pending';
 
 const isUuidString = (str?: string | null): boolean => {
   if (!str) return false;
@@ -117,11 +119,42 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
   const [sortColumn, setSortColumn] = useState<'date' | 'match' | 'status'>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
-  // Pagination
+  // Server Stats & Configurable Pagination
+  const [backendStats, setBackendStats] = useState<ApplicationStats | null>(null);
+  const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   const [expandedReasonId, setExpandedReasonId] = useState<string | null>(null);
-  const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
+  const [selectedScreenshotApp, setSelectedScreenshotApp] = useState<{ id: string; path: string } | null>(null);
+  const [screenshotImageUrl, setScreenshotImageUrl] = useState<string | null>(null);
+  const [screenshotLoading, setScreenshotLoading] = useState<boolean>(false);
+  const [selectedAppForRationale, setSelectedAppForRationale] = useState<Application | null>(null);
+  const [selectedAppForReconciliation, setSelectedAppForReconciliation] = useState<Application | null>(null);
+  const [reconcileNotes, setReconcileNotes] = useState<string>('');
+  const [isReconciling, setIsReconciling] = useState<boolean>(false);
+
+  const openScreenshotPreview = async (appId: string, path: string) => {
+    setSelectedScreenshotApp({ id: appId, path });
+    setScreenshotLoading(true);
+    try {
+      const blob = await api.getApplicationScreenshot(appId);
+      const url = URL.createObjectURL(blob);
+      setScreenshotImageUrl(url);
+    } catch (err) {
+      console.error('Failed to load screenshot image:', err);
+      setScreenshotImageUrl(null);
+    } finally {
+      setScreenshotLoading(false);
+    }
+  };
+
+  const closeScreenshotPreview = () => {
+    if (screenshotImageUrl) {
+      URL.revokeObjectURL(screenshotImageUrl);
+    }
+    setSelectedScreenshotApp(null);
+    setScreenshotImageUrl(null);
+  };
 
   useEffect(() => {
     loadData();
@@ -130,12 +163,14 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
   const loadData = async () => {
     try {
       setLoading(true);
-      const [appsData, matchesData] = await Promise.all([
+      const [appsData, matchesData, statsData] = await Promise.all([
         api.listApplications(),
         api.listMatches().catch(() => []),
+        api.getApplicationStats().catch(() => null),
       ]);
 
       setApplications(appsData);
+      setBackendStats(statsData);
 
       const scoreMap = new Map<string, number>();
       matchesData.forEach((m) => {
@@ -158,6 +193,60 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
       loadData();
     } catch (e: any) {
       showError(`Approval failed: ${e.response?.data?.detail || e.message}`);
+    }
+  };
+
+  const handleReject = async (appId: string) => {
+    try {
+      await api.stopApplication(appId, 'Dismissed by candidate from Review Queue');
+      showSuccess('Application dismissed from review queue.');
+      loadData();
+    } catch (e: any) {
+      showError(`Dismiss failed: ${e.response?.data?.detail || e.message}`);
+    }
+  };
+
+  const handleReconcileAction = async (
+    action: 'CONFIRM_SUBMITTED' | 'MARK_NOT_SUBMITTED_AND_RETRY' | 'DISMISS'
+  ) => {
+    if (!selectedAppForReconciliation) return;
+    try {
+      setIsReconciling(true);
+      await api.reconcileApplication(selectedAppForReconciliation.id, action, reconcileNotes || undefined);
+      if (action === 'CONFIRM_SUBMITTED') {
+        showSuccess('Application confirmed as submitted and marked APPLIED!');
+      } else if (action === 'MARK_NOT_SUBMITTED_AND_RETRY') {
+        showSuccess('Verified not submitted. Re-execution queued through canonical orchestrator!');
+      } else {
+        showSuccess('Application marked as dismissed.');
+      }
+      setSelectedAppForReconciliation(null);
+      setReconcileNotes('');
+      loadData();
+    } catch (e: any) {
+      showError(`Reconciliation failed: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
+  const handleRetry = async (app: Application) => {
+    // Critical safety: Do not allow blind immediate retry for uncertain submissions
+    if (app.workflow_state === 'RECONCILIATION_REQUIRED' || app.workflow_state === 'SUBMISSION_UNKNOWN') {
+      setSelectedAppForReconciliation(app);
+      return;
+    }
+    try {
+      if (app.workflow_state?.startsWith('PAUSED_')) {
+        await api.resumeApplication(app.id);
+        showSuccess('Application resumed from pause point!');
+      } else {
+        await api.retryApplication(app.id);
+        showSuccess('Application retry queued with exponential backoff!');
+      }
+      loadData();
+    } catch (e: any) {
+      showError(`Retry rejected: ${e.response?.data?.detail || e.message}`);
     }
   };
 
@@ -190,6 +279,19 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
         label: 'Company site',
         className:
           'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/40',
+      };
+    }
+
+    if (
+      app.workflow_state === 'RECONCILIATION_REQUIRED' ||
+      app.workflow_state === 'SUBMISSION_UNKNOWN' ||
+      reason.includes('reconciliation_required') ||
+      reason.includes('submission_uncertain')
+    ) {
+      return {
+        label: 'Needs Verification',
+        className:
+          'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-800/40',
       };
     }
 
@@ -273,13 +375,16 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
 
   // Dynamic CRM Metrics & KPIs
   const stats = useMemo(() => {
-    let appliedCount = 0;
-    let appliedTodayCount = 0;
-    let skippedCount = 0;
-    let failedCount = 0;
-    let companySiteCount = 0;
-    let alreadyAppliedCount = 0;
-    let pendingCount = 0;
+    let localAppliedCount = 0;
+    let localAppliedTodayCount = 0;
+    let localSkippedCount = 0;
+    let localFailedCount = 0;
+    let localCompanySiteCount = 0;
+    let localAlreadyAppliedCount = 0;
+    let localNeedsVerificationCount = 0;
+    let localPendingCount = 0;
+    let localReviewQueueCount = 0;
+    let localNeedsAttentionCount = 0;
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -290,35 +395,62 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
     applications.forEach((app) => {
       const derived = getDerivedStatus(app).label;
       if (derived === 'Applied') {
-        appliedCount++;
+        localAppliedCount++;
         const d = parseSafeDate(app.applied_at) || parseSafeDate(app.created_at);
         if (d && d.getTime() >= todayTimestamp) {
-          appliedTodayCount++;
+          localAppliedTodayCount++;
         }
       } else if (derived === 'Skipped') {
-        skippedCount++;
+        localSkippedCount++;
       } else if (derived === 'Failed') {
-        failedCount++;
+        localFailedCount++;
       } else if (derived === 'Company site') {
-        companySiteCount++;
+        localCompanySiteCount++;
       } else if (derived === 'Already applied') {
-        alreadyAppliedCount++;
+        localAlreadyAppliedCount++;
+      } else if (derived === 'Needs Verification') {
+        localNeedsVerificationCount++;
       } else {
-        pendingCount++;
+        localPendingCount++;
       }
 
       const score = app.match_score ?? matchScores.get(app.job_id);
       if (typeof score === 'number' && score > 0) {
         validScores.push(score);
       }
+
+      // Review Queue: Approval Required or match score 65-79%
+      const isReview =
+        app.workflow_state === 'APPROVAL_REQUIRED' ||
+        (typeof score === 'number' && score >= 65 && score < 80 && app.workflow_state !== 'APPLIED');
+      if (isReview) localReviewQueueCount++;
+
+      // Needs Attention: Failed, paused on challenge/rate limit, or uncertain submission requiring verification
+      const isAttention =
+        app.workflow_state === 'FAILED' ||
+        app.workflow_state === 'RECONCILIATION_REQUIRED' ||
+        app.workflow_state === 'SUBMISSION_UNKNOWN' ||
+        (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_'));
+      if (isAttention) localNeedsAttentionCount++;
     });
 
-    const total = applications.length;
-    const successRate = total > 0 ? Math.round((appliedCount / total) * 100) : 0;
+    const total = backendStats?.total ?? applications.length;
+    const appliedCount = backendStats?.applied ?? localAppliedCount;
+    const appliedTodayCount = backendStats?.applied_today ?? localAppliedTodayCount;
+    const successRate = backendStats?.success_rate ?? (total > 0 ? Math.round((appliedCount / total) * 100) : 0);
     const avgMatch =
       validScores.length > 0
         ? Math.round(validScores.reduce((acc, curr) => acc + curr, 0) / validScores.length)
         : 0;
+
+    const failedCount = backendStats?.failed ?? localFailedCount;
+    const skippedCount = backendStats?.skipped ?? localSkippedCount;
+    const reviewQueueCount = backendStats?.approval_required ?? localReviewQueueCount;
+    const needsAttentionCount = backendStats?.needs_attention ?? localNeedsAttentionCount;
+    const needsVerificationCount = backendStats?.reconciliation_required ?? localNeedsVerificationCount;
+    const companySiteCount = localCompanySiteCount;
+    const alreadyAppliedCount = localAlreadyAppliedCount;
+    const pendingCount = localPendingCount;
 
     return {
       total,
@@ -332,13 +464,19 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
       failedCount,
       skippedCount,
       alreadyAppliedCount,
+      needsVerificationCount,
       pendingCount,
+      reviewQueueCount,
+      needsAttentionCount,
     };
-  }, [applications, matchScores]);
+  }, [applications, matchScores, backendStats]);
 
   const filterChips: { id: string; label: string; count: number; dotColor?: string }[] = useMemo(
     () => [
       { id: 'All', label: 'All', count: stats.total },
+      { id: 'Review Queue', label: 'Review Queue', count: stats.reviewQueueCount, dotColor: 'bg-indigo-500' },
+      { id: 'Needs Attention', label: 'Needs Attention', count: stats.needsAttentionCount, dotColor: 'bg-orange-500' },
+      { id: 'Needs Verification', label: 'Needs Verification', count: stats.needsVerificationCount, dotColor: 'bg-amber-500' },
       { id: 'Applied', label: 'Applied', count: stats.appliedCount, dotColor: 'bg-emerald-500' },
       { id: 'Skipped', label: 'Skipped', count: stats.skippedCount, dotColor: 'bg-amber-500' },
       { id: 'Failed', label: 'Failed', count: stats.failedCount, dotColor: 'bg-rose-500' },
@@ -353,7 +491,24 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
     let result = [...applications];
 
     // Status chip filter
-    if (selectedFilter !== 'All') {
+    if (selectedFilter === 'Review Queue') {
+      result = result.filter((app) => {
+        const score = app.match_score ?? matchScores.get(app.job_id);
+        return (
+          app.workflow_state === 'APPROVAL_REQUIRED' ||
+          (typeof score === 'number' && score >= 65 && score < 80 && app.workflow_state !== 'APPLIED')
+        );
+      });
+    } else if (selectedFilter === 'Needs Attention') {
+      result = result.filter((app) => {
+        return (
+          app.workflow_state === 'FAILED' ||
+          app.workflow_state === 'RECONCILIATION_REQUIRED' ||
+          app.workflow_state === 'SUBMISSION_UNKNOWN' ||
+          (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_'))
+        );
+      });
+    } else if (selectedFilter !== 'All') {
       result = result.filter((app) => getDerivedStatus(app).label === selectedFilter);
     }
 
@@ -439,10 +594,9 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
     matchScores,
   ]);
 
-  const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(filteredApplications.length / pageSize));
 
-  // Reset to first page when filtering or sorting changes
+  // Reset to first page when filtering, sorting, or page size changes
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -454,6 +608,7 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
     toDate,
     sortColumn,
     sortDirection,
+    pageSize,
   ]);
 
   const paginatedApplications = useMemo(() => {
@@ -485,7 +640,7 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
         <div className="flex items-center space-x-2.5 self-end sm:self-center">
           <div className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-800/60 text-xs font-bold text-indigo-700 dark:text-indigo-300">
             <span>Tracked:</span>
-            <span>{applications.length}</span>
+            <span>{stats.total}</span>
           </div>
 
           <button
@@ -985,21 +1140,31 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
 
                           {/* Match Score */}
                           <td className="py-3.5 px-4 align-top font-semibold text-xs text-slate-800 dark:text-slate-200">
-                            {matchScore !== undefined && matchScore > 0 ? (
-                              <span
-                                className={
-                                  matchScore >= 75
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : matchScore >= 60
-                                    ? 'text-indigo-600 dark:text-indigo-400'
-                                    : 'text-slate-600 dark:text-slate-400'
-                                }
+                            <div className="flex items-center space-x-1.5">
+                              {matchScore !== undefined && matchScore > 0 ? (
+                                <span
+                                  className={
+                                    matchScore >= 75
+                                      ? 'text-emerald-600 dark:text-emerald-400'
+                                      : matchScore >= 60
+                                      ? 'text-indigo-600 dark:text-indigo-400'
+                                      : 'text-slate-600 dark:text-slate-400'
+                                  }
+                                >
+                                  {Math.round(matchScore)}%
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">-</span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedAppForRationale(app)}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+                                title="Why Selected or Skipped?"
                               >
-                                {Math.round(matchScore)}%
-                              </span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
+                                Why?
+                              </button>
+                            </div>
                           </td>
 
                           {/* Date (Main + relative) */}
@@ -1014,8 +1179,73 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
 
                           {/* Action Column */}
                           <td className="py-3.5 px-4 align-top text-right whitespace-nowrap">
-                            {statusObj.label === 'Failed' || statusObj.label === 'Skipped' ? (
+                            {app.workflow_state === 'APPROVAL_REQUIRED' ||
+                            (typeof matchScore === 'number' && matchScore >= 65 && matchScore < 80 && app.workflow_state !== 'APPLIED') ? (
                               <div className="inline-flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={() => handleApprove(app.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 cursor-pointer"
+                                  title="Approve and execute application"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleReject(app.id)}
+                                  className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] font-semibold transition-colors cursor-pointer"
+                                  title="Dismiss from review queue"
+                                >
+                                  Dismiss
+                                </button>
+                                {applyUrl && (
+                                  <a
+                                    href={applyUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 flex items-center space-x-1"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                )}
+                              </div>
+                            ) : statusObj.label === 'Needs Verification' ? (
+                              <div className="inline-flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={() => setSelectedAppForReconciliation(app)}
+                                  className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 cursor-pointer flex items-center space-x-1"
+                                  title="Inspect submission and verify outcome"
+                                >
+                                  <AlertCircle className="w-3 h-3" />
+                                  <span>Verify Outcome</span>
+                                </button>
+                                <button
+                                  onClick={() => setExpandedReasonId(isExpanded ? null : app.id)}
+                                  className="text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
+                                >
+                                  <span>Reason</span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => setExpandedReasonId(isExpanded ? null : app.id)}
+                                  className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer transition-colors"
+                                  title="View execution audit & traces"
+                                >
+                                  <Layers className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : statusObj.label === 'Failed' || (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_')) ? (
+                              <div className="inline-flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={() => handleRetry(app)}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 cursor-pointer flex items-center space-x-1"
+                                  title="Retry application submission"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>Retry</span>
+                                </button>
                                 <button
                                   onClick={() => setExpandedReasonId(isExpanded ? null : app.id)}
                                   className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
@@ -1035,25 +1265,26 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
                                   <Layers className="w-3.5 h-3.5" />
                                 </button>
                               </div>
-                            ) : app.workflow_state === 'APPROVAL_REQUIRED' ? (
-                              <div className="inline-flex items-center space-x-2">
+                            ) : statusObj.label === 'Skipped' ? (
+                              <div className="inline-flex items-center justify-end space-x-2">
                                 <button
-                                  onClick={() => handleApprove(app.id)}
-                                  className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 cursor-pointer"
+                                  onClick={() => setExpandedReasonId(isExpanded ? null : app.id)}
+                                  className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
                                 >
-                                  Approve
+                                  <span>Reason</span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  )}
                                 </button>
-                                {applyUrl && (
-                                  <a
-                                    href={applyUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 flex items-center space-x-1"
-                                  >
-                                    <span>Open</span>
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </a>
-                                )}
+                                <button
+                                  onClick={() => setExpandedReasonId(isExpanded ? null : app.id)}
+                                  className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer transition-colors"
+                                  title="View execution audit & traces"
+                                >
+                                  <Layers className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             ) : applyUrl ? (
                               <div className="inline-flex items-center justify-end space-x-2.5">
@@ -1131,7 +1362,7 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
                                   <div className="flex items-center space-x-3">
                                     {app.screenshot_file_path && (
                                       <button
-                                        onClick={() => setSelectedScreenshot(app.screenshot_file_path!)}
+                                        onClick={() => openScreenshotPreview(app.id, app.screenshot_file_path!)}
                                         className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer"
                                       >
                                         <Camera className="w-3.5 h-3.5 text-indigo-500" />
@@ -1173,11 +1404,11 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
               </table>
             </div>
 
-            {/* Table Pagination Footer matching Image 2 & 3 */}
-            <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900">
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-slate-400 dark:text-slate-500 select-none">
-                  Page {currentPage} of {totalPages}
+            {/* Table Pagination Footer with Page Size Selector & Range */}
+            <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900">
+              <div className="flex items-center space-x-3">
+                <span className="text-xs text-slate-600 dark:text-slate-300 font-medium select-none">
+                  Showing {filteredApplications.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredApplications.length)} of {filteredApplications.length}
                 </span>
                 {filteredApplications.length !== applications.length && (
                   <button
@@ -1189,30 +1420,67 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
                       setFromDate('');
                       setToDate('');
                     }}
-                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium cursor-pointer ml-1"
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium cursor-pointer"
                   >
                     (Reset filters)
                   </button>
                 )}
               </div>
 
-              <div className="flex items-center space-x-1.5">
-                <button
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage <= 1}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 dark:text-slate-400 transition-colors cursor-pointer"
-                  title="Previous page"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 dark:text-slate-400 transition-colors cursor-pointer"
-                  title="Next page"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
+              <div className="flex items-center space-x-3">
+                {/* Rows per page selector */}
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-[11px] text-slate-400">Rows:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="text-xs py-1 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+
+                {/* Page Navigation */}
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs text-slate-400 dark:text-slate-500 mr-1 select-none">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage <= 1}
+                    className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 dark:text-slate-400 transition-colors cursor-pointer text-xs font-semibold"
+                    title="First page"
+                  >
+                    &laquo;
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 dark:text-slate-400 transition-colors cursor-pointer"
+                    title="Previous page"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                    className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 dark:text-slate-400 transition-colors cursor-pointer"
+                    title="Next page"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage >= totalPages}
+                    className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed text-slate-600 dark:text-slate-400 transition-colors cursor-pointer text-xs font-semibold"
+                    title="Last page"
+                  >
+                    &raquo;
+                  </button>
+                </div>
               </div>
             </div>
           </>
@@ -1220,24 +1488,411 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
       </div>
 
       {/* Screenshot Preview Modal */}
-      {selectedScreenshot && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-6">
-          <div className="max-w-4xl w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Application Step Screenshot</h3>
+      {selectedScreenshotApp && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-6 animate-fadeIn">
+          <div className="max-w-4xl w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Camera className="w-5 h-5 text-indigo-500" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Application Step Screenshot</h3>
+              </div>
               <button
-                onClick={() => setSelectedScreenshot(null)}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white cursor-pointer"
+                onClick={closeScreenshotPreview}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Close Preview
               </button>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 font-mono break-all">
-              Path: {selectedScreenshot}
+
+            <div className="flex-1 overflow-auto flex items-center justify-center min-h-[300px] bg-slate-950/5 dark:bg-slate-950 rounded-2xl p-2 border border-slate-200 dark:border-slate-800">
+              {screenshotLoading ? (
+                <div className="flex flex-col items-center justify-center space-y-2 text-slate-400 py-12">
+                  <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
+                  <span className="text-xs">Loading screenshot artifact...</span>
+                </div>
+              ) : screenshotImageUrl ? (
+                <img
+                  src={screenshotImageUrl}
+                  alt="Application Execution Screenshot"
+                  className="max-h-[65vh] w-auto max-w-full rounded-xl object-contain shadow-sm"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center space-y-2 text-slate-400 py-12">
+                  <AlertCircle className="w-8 h-8 text-amber-500" />
+                  <span className="text-xs font-medium">Screenshot file could not be displayed or was pruned.</span>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 font-mono break-all flex items-center justify-between">
+              <span>Path: {selectedScreenshotApp.path}</span>
+              {screenshotImageUrl && (
+                <a
+                  href={screenshotImageUrl}
+                  download={`screenshot_${selectedScreenshotApp.id}.png`}
+                  className="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 font-bold ml-4 shrink-0"
+                >
+                  Download Image
+                </a>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Why Selected / Skipped Modal */}
+      {selectedAppForRationale && (() => {
+        const app = selectedAppForRationale;
+        const score = app.match_score ?? matchScores.get(app.job_id);
+        const statusObj = getDerivedStatus(app);
+        const platformName = resolvePlatformName(app);
+        const jobTitle = app.job_title || app.job?.title || 'Position';
+        const companyRaw = app.company || app.job?.company;
+        const companyName = companyRaw && !isUuidString(companyRaw) ? companyRaw : 'Company';
+        const requiredSkills: string[] = ((app.job as any)?.required_skills || (app as any).required_skills || []);
+        const isReviewQueue =
+          app.workflow_state === 'APPROVAL_REQUIRED' ||
+          (typeof score === 'number' && score >= 65 && score < 80 && app.workflow_state !== 'APPLIED');
+        const isNeedsAttention =
+          app.workflow_state === 'FAILED' ||
+          (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_'));
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+            <div className="max-w-xl w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      AI Qualification &amp; Decision Rationale
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Why this position was qualified, held for review, or skipped
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedAppForRationale(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Job Summary Banner */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-bold text-slate-900 dark:text-white">{jobTitle}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {companyName} • {platformName} • {app.location || app.job?.location || 'Location Unspecified'}
+                    </div>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${statusObj.className}`}>
+                    {statusObj.label}
+                  </span>
+                </div>
+
+                <div className="flex items-center space-x-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-xs">
+                  <div>
+                    <span className="text-slate-400">Match Fit: </span>
+                    <strong className={
+                      score && score >= 75 ? 'text-emerald-600 dark:text-emerald-400' :
+                      score && score >= 60 ? 'text-indigo-600 dark:text-indigo-400' :
+                      'text-slate-600 dark:text-slate-400'
+                    }>
+                      {score !== undefined && score > 0 ? `${Math.round(score)}% Match` : 'Unscored'}
+                    </strong>
+                  </div>
+                  <span>•</span>
+                  <div>
+                    <span className="text-slate-400">Experience: </span>
+                    <strong className="text-slate-700 dark:text-slate-300">{formatExperience(app)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Policy Decision Explanation */}
+              <div className="space-y-2">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                  <Info className="w-4 h-4 text-indigo-500" />
+                  <span>Decision Routing Policy</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                  {score && score >= 80 ? (
+                    <div>
+                      <strong className="text-emerald-700 dark:text-emerald-400">⚡ Auto-Apply Threshold Satisfied (≥ 80%): </strong>
+                      This job satisfies your campaign threshold for high-confidence autonomous application. Browser automation initiates form-filling and submission without requiring manual intervention unless a CAPTCHA or OTP challenge arises.
+                    </div>
+                  ) : score && score >= 65 ? (
+                    <div>
+                      <strong className="text-indigo-700 dark:text-indigo-400">🛡️ Review Queue Routing (65% – 79%): </strong>
+                      This role scored between your review threshold (65%) and auto-apply threshold (80%). The system pre-selects the job and holds it in the candidate review queue for your 1-click approval.
+                    </div>
+                  ) : (
+                    <div>
+                      <strong className="text-amber-700 dark:text-amber-400">🛑 Low Match Fit / Excluded (&lt; 65%): </strong>
+                      This role fell below the minimum compatibility score or required criteria not reflected in your active profile. It was skipped to preserve daily application caps.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Required Skills & Keywords */}
+              {requiredSkills.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Required Skills from Job Description
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {requiredSkills.map((skill: string, idx: number) => (
+                      <span
+                        key={idx}
+                        className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 font-medium"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Execution Diagnostics / Failure Reason if any */}
+              {app.failure_reason && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-bold text-rose-700 dark:text-rose-400 flex items-center space-x-1.5">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Automation Diagnostics &amp; Status Note</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-800 dark:text-rose-300 font-mono">
+                    {app.failure_reason}
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAppForRationale(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                {isReviewQueue && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleApprove(app.id);
+                      setSelectedAppForRationale(null);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Approve &amp; Apply Now</span>
+                  </button>
+                )}
+                {isNeedsAttention && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleRetry(app);
+                      setSelectedAppForRationale(null);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/25 flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Retry Application</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Submission Outcome Verification (Reconciliation) Modal */}
+      {selectedAppForReconciliation && (() => {
+        const app = selectedAppForReconciliation;
+        const jobTitle = app.job_title || app.job?.title || 'Unknown Position';
+        const companyName = app.company || app.job?.company || 'Unknown Company';
+        const platformName = resolvePlatformName(app);
+        const externalUrl = app.apply_url || app.job?.apply_url;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
+              {/* Header */}
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Submission Outcome Verification
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Prevent accidental duplicate submission by verifying portal status
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedAppForReconciliation(null)}
+                  disabled={isReconciling}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Target Job Info Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-bold text-slate-900 dark:text-white">{jobTitle}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {companyName} • {platformName}
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold border bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60">
+                    Needs Verification
+                  </span>
+                </div>
+                {externalUrl && (
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                    <a
+                      href={externalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1.5 text-xs text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 font-medium"
+                    >
+                      <span>Inspect portal job page</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Uncertainty Reason / Diagnostics */}
+              <div className="space-y-1.5">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                  <Info className="w-4 h-4 text-amber-500" />
+                  <span>Recorded Uncertainty Diagnostics</span>
+                </div>
+                <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-900 dark:text-amber-200 font-mono break-words">
+                  {app.failure_reason || 'Playwright submit action timed out or post-submit confirmation was indeterminate.'}
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+                  The automation filled the application form, but browser automation encountered a timeout or unconfirmed status while submitting. Please check your applied jobs on {platformName} to see if it went through.
+                </p>
+              </div>
+
+              {/* Notes Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Verification Note (Optional)
+                </label>
+                <textarea
+                  value={reconcileNotes}
+                  onChange={(e) => setReconcileNotes(e.target.value)}
+                  placeholder="e.g. Checked portal, application is recorded under Submitted Applications..."
+                  rows={2}
+                  disabled={isReconciling}
+                  className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              {/* Resolution Actions */}
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Select Verified Resolution:
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  {/* Action 1: Confirm Submitted */}
+                  <button
+                    type="button"
+                    disabled={isReconciling}
+                    onClick={() => handleReconcileAction('CONFIRM_SUBMITTED')}
+                    className="flex items-center justify-between p-3 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 hover:bg-emerald-50 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 text-left transition-colors cursor-pointer group disabled:opacity-50"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                          Portal Confirmed: Application was Submitted
+                        </div>
+                        <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                          Mark as APPLIED in CRM. Will not submit again.
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform">
+                      Confirm &rarr;
+                    </span>
+                  </button>
+
+                  {/* Action 2: Verify Not Submitted and Retry */}
+                  <button
+                    type="button"
+                    disabled={isReconciling}
+                    onClick={() => handleReconcileAction('MARK_NOT_SUBMITTED_AND_RETRY')}
+                    className="flex items-center justify-between p-3 rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50/50 hover:bg-indigo-50 dark:bg-indigo-950/20 dark:hover:bg-indigo-950/40 text-left transition-colors cursor-pointer group disabled:opacity-50"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                        <RotateCcw className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                          Verified Not Submitted: Retry Safely
+                        </div>
+                        <div className="text-[11px] text-indigo-700 dark:text-indigo-400">
+                          Re-execute through canonical orchestrator with safety gates.
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 group-hover:translate-x-0.5 transition-transform">
+                      Retry &rarr;
+                    </span>
+                  </button>
+
+                  {/* Action 3: Dismiss */}
+                  <button
+                    type="button"
+                    disabled={isReconciling}
+                    onClick={() => handleReconcileAction('DISMISS')}
+                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer group disabled:opacity-50"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-slate-400 text-white flex items-center justify-center shrink-0">
+                        <X className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Dismiss / Skip this Application
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Mark as SKIPPED. No further attempts will be made.
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 group-hover:translate-x-0.5 transition-transform">
+                      Dismiss &rarr;
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

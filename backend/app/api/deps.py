@@ -72,6 +72,31 @@ async def get_connection_manager(
     return ConnectionManager(conn_repo, sess_repo)
 
 
+async def get_campaign_repository(session: Annotated[AsyncSession, Depends(get_db_session)]):
+    from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyCampaignRepository
+    return SqlAlchemyCampaignRepository(session)
+
+
+async def get_campaign_execution_repository(session: Annotated[AsyncSession, Depends(get_db_session)]):
+    from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyCampaignExecutionRepository
+    return SqlAlchemyCampaignExecutionRepository(session)
+
+
+async def get_campaign_activity_log_repository(session: Annotated[AsyncSession, Depends(get_db_session)]):
+    from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyCampaignActivityLogRepository
+    return SqlAlchemyCampaignActivityLogRepository(session)
+
+
+async def get_quota_reservation_repository(session: Annotated[AsyncSession, Depends(get_db_session)]):
+    from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyQuotaReservationRepository
+    return SqlAlchemyQuotaReservationRepository(session)
+
+
+async def get_matching_task_repository(session: Annotated[AsyncSession, Depends(get_db_session)]):
+    from app.infrastructure.database.repositories.matching_repository import SqlAlchemyMatchingTaskRepository
+    return SqlAlchemyMatchingTaskRepository(session)
+
+
 async def get_ai_gateway(session: Annotated[AsyncSession, Depends(get_db_session)]) -> AIGateway:
     return MultiTierAIGateway(session=session)
 

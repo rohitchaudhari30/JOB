@@ -16,6 +16,8 @@ from app.domain.profile.repositories import (
     SavedAnswerRepository,
 )
 from app.infrastructure.database.models.models import (
+    ApplicationModel,
+    CampaignModel,
     CandidateProfileModel,
     CandidateSkillModel,
     EducationModel,
@@ -273,7 +275,62 @@ class SqlAlchemyResumeRepository(ResumeRepository):
         await self._session.refresh(model)
         return self._to_entity(model)
 
+    async def can_delete(self, resume_id: str, user_id: str) -> tuple[bool, str | None]:
+        """
+        Validates if resume can be safely deleted.
+        Returns (False, reason) if active applications or running campaigns depend on it.
+        """
+        active_states = [
+            "APPROVED",
+            "QUEUED",
+            "APPLYING",
+            "FORM_DETECTED",
+            "FORM_FILLED",
+            "SUBMITTING",
+            "PAUSED_OTP",
+            "PAUSED_CAPTCHA",
+            "PAUSED_USER_INPUT",
+            "RECONCILIATION_REQUIRED",
+        ]
+        app_stmt = (
+            select(ApplicationModel.id)
+            .where(
+                ApplicationModel.user_id == user_id,
+                ApplicationModel.resume_id == resume_id,
+                ApplicationModel.workflow_state.in_(active_states),
+            )
+            .limit(1)
+        )
+        app_res = await self._session.execute(app_stmt)
+        if app_res.scalar_one_or_none():
+            return (
+                False,
+                "Cannot delete resume: actively in use by pending or active applications (RESUME_IN_USE).",
+            )
+
+        camp_stmt = (
+            select(CampaignModel.id)
+            .where(
+                CampaignModel.user_id == user_id,
+                CampaignModel.target_resume_id == resume_id,
+                CampaignModel.state == "RUNNING",
+            )
+            .limit(1)
+        )
+        camp_res = await self._session.execute(camp_stmt)
+        if camp_res.scalar_one_or_none():
+            return (
+                False,
+                "Cannot delete resume: actively assigned to a running campaign (RESUME_IN_USE).",
+            )
+
+        return (True, None)
+
     async def delete(self, resume_id: str, user_id: str) -> bool:
+        can_del, _ = await self.can_delete(resume_id, user_id)
+        if not can_del:
+            return False
+
         target = await self.get_by_id(resume_id)
         was_default = target.is_default if target else False
 

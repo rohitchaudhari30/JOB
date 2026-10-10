@@ -9,6 +9,10 @@ class PlatformConnectionRepository(ABC):
         """Fetch a user's platform connection."""
         pass
 
+    async def get_by_platform(self, user_id: str, platform: str) -> Optional[PlatformConnection]:
+        """Convenience alias for get_by_user_and_platform."""
+        return await self.get_by_user_and_platform(user_id, platform)
+
     @abstractmethod
     async def list_user_connections(self, user_id: str) -> List[PlatformConnection]:
         """List all platform connections for a user."""

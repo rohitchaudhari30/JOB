@@ -41,10 +41,59 @@ class AutomationSchedulerWorker:
                 loop = asyncio.get_running_loop()
                 self._scheduler = AsyncIOScheduler(event_loop=loop)
                 self._scheduler.start()
+                self._register_maintenance_jobs()
                 logger.info("APScheduler worker initialized and started.")
             except RuntimeError:
                 # No running loop at call time; scheduler will be initialized when loop is active
                 logger.warning("APScheduler initialized without active event loop. Will start when loop is ready.")
+
+    def _register_maintenance_jobs(self):
+        if self._scheduler and not self._scheduler.get_job("lease_reclamation_sweeper"):
+            async def _sweep():
+                try:
+                    from app.core.database import AsyncSessionLocal
+                    from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyCampaignExecutionRepository
+                    async with AsyncSessionLocal() as db_session:
+                        exec_repo = SqlAlchemyCampaignExecutionRepository(db_session)
+                        reclaimed = await exec_repo.reclaim_expired_leases()
+                        if reclaimed > 0:
+                            logger.info(f"Lease sweeper automatically reclaimed {reclaimed} abandoned execution leases.")
+                except Exception as e:
+                    logger.warning(f"Error during scheduled execution lease reclamation: {e}")
+
+            try:
+                self._scheduler.add_job(
+                    func=_sweep,
+                    trigger=IntervalTrigger(seconds=60),
+                    id="lease_reclamation_sweeper",
+                    replace_existing=True,
+                )
+            except Exception as e:
+                logger.warning(f"Could not register lease_reclamation_sweeper: {e}")
+
+        if self._scheduler and not self._scheduler.get_job("stale_submitting_sweeper"):
+            async def _sweep_stale_submitting():
+                try:
+                    from app.core.database import AsyncSessionLocal
+                    from app.infrastructure.database.repositories.application_repository import SqlAlchemyApplicationRepository
+                    async with AsyncSessionLocal() as db_session:
+                        app_repo = SqlAlchemyApplicationRepository(db_session)
+                        recovered = await app_repo.recover_stale_submitting_applications(older_than_seconds=300)
+                        if recovered > 0:
+                            await db_session.commit()
+                            logger.info(f"Crash recovery sweeper transitioned {recovered} stale SUBMITTING applications to RECONCILIATION_REQUIRED.")
+                except Exception as e:
+                    logger.warning(f"Error during scheduled stale SUBMITTING application recovery: {e}")
+
+            try:
+                self._scheduler.add_job(
+                    func=_sweep_stale_submitting,
+                    trigger=IntervalTrigger(seconds=120),
+                    id="stale_submitting_sweeper",
+                    replace_existing=True,
+                )
+            except Exception as e:
+                logger.warning(f"Could not register stale_submitting_sweeper: {e}")
 
     def shutdown(self):
         if self._scheduler and self._scheduler.running:

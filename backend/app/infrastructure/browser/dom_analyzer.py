@@ -27,6 +27,7 @@ class ScannedField:
     nearby_text: Optional[str] = None
     is_required: bool = False
     is_visible: bool = True
+    is_enabled: bool = True
     current_value: Optional[str] = None
     options: List[ScannedOption] = field(default_factory=list)
 
@@ -116,14 +117,42 @@ SCAN_DOM_JS = """
         const nearbyText = getNearbyContext(el);
         const currentValue = el.value || null;
 
-        // Build unique identifier or selector fallback
+        // Build robust, semantic, context-aware selector hierarchy
         let selector = '';
         if (idAttr) {
             selector = `#${CSS.escape(idAttr)}`;
         } else if (nameAttr) {
             selector = `${tagName}[name="${CSS.escape(nameAttr)}"]`;
+        } else if (ariaLabel) {
+            selector = `${tagName}[aria-label="${CSS.escape(ariaLabel)}"]`;
+        } else if (el.getAttribute('data-control-name')) {
+            selector = `${tagName}[data-control-name="${CSS.escape(el.getAttribute('data-control-name'))}"]`;
+        } else if (el.getAttribute('data-test-id') || el.getAttribute('data-testid')) {
+            const dt = el.getAttribute('data-test-id') || el.getAttribute('data-testid');
+            selector = `${tagName}[data-testid="${CSS.escape(dt)}"]`;
         } else {
-            selector = `${tagName}:nth-of-type(${idx + 1})`;
+            // Contextual / semantic selector based on form scoping or text
+            const formParent = el.closest('form, [role="form"], [role="dialog"], .jobs-easy-apply-modal, .apply-modal');
+            const cleanText = (el.innerText || el.value || '').trim();
+            if (cleanText && cleanText.length <= 40 && (tagName === 'button' || inputType === 'submit' || inputType === 'button')) {
+                // Playwright-compatible role and text-based locator
+                if (formParent && formParent.id) {
+                    selector = `#${CSS.escape(formParent.id)} button:has-text("${cleanText}")`;
+                } else {
+                    selector = `button:has-text("${cleanText}")`;
+                }
+            } else if (placeholder) {
+                selector = `${tagName}[placeholder="${CSS.escape(placeholder)}"]`;
+            } else {
+                // Sibling-scoped unique path fallback
+                const parentEl = el.parentElement;
+                if (parentEl && parentEl.id) {
+                    const siblingIdx = Array.from(parentEl.children).filter(c => c.tagName === el.tagName).indexOf(el);
+                    selector = `#${CSS.escape(parentEl.id)} > ${tagName}:nth-of-type(${siblingIdx + 1})`;
+                } else {
+                    selector = `${tagName}[type="${inputType || 'button'}"]`;
+                }
+            }
         }
 
         const options = [];
@@ -135,6 +164,8 @@ SCAN_DOM_JS = """
                 });
             }
         }
+
+        const isEnabled = !el.disabled && el.getAttribute('aria-disabled') !== 'true';
 
         const fieldData = {
             field_id: `f_${idx++}_${idAttr || nameAttr || tagName}`,
@@ -149,16 +180,35 @@ SCAN_DOM_JS = """
             nearby_text: nearbyText,
             is_required: isRequired,
             is_visible: isElementVisible(el) || inputType === 'file',
+            is_enabled: isEnabled,
             current_value: currentValue,
             options: options
         };
 
-        const btnText = (el.innerText || el.value || '').toLowerCase();
-        if (tagName === 'button' || inputType === 'submit' || inputType === 'button') {
-            if (btnText.includes('submit') || btnText.includes('apply') || btnText.includes('finish') || btnText.includes('send application')) {
+        const btnText = (el.innerText || el.value || ariaLabel || '').toLowerCase();
+        if ((tagName === 'button' || inputType === 'submit' || inputType === 'button') && isEnabled && (isElementVisible(el) || inputType === 'submit')) {
+            // High-confidence submit actions vs intermediate wizard next steps
+            const isSubmit = btnText.includes('submit') || 
+                             btnText.includes('apply now') || 
+                             btnText.includes('easy apply') || 
+                             btnText.includes('finish') || 
+                             btnText.includes('send application') || 
+                             btnText.includes('confirm') ||
+                             inputType === 'submit';
+
+            const isNext = btnText.includes('next') || 
+                           btnText.includes('continue') || 
+                           btnText.includes('proceed') || 
+                           btnText.includes('step') || 
+                           btnText.includes('review');
+
+            if (isSubmit && !btnText.includes('next')) {
                 submitButtons.push(fieldData);
-            } else if (btnText.includes('next') || btnText.includes('continue') || btnText.includes('proceed') || btnText.includes('step')) {
+            } else if (isNext) {
                 nextButtons.push(fieldData);
+            } else if (btnText.includes('apply')) {
+                // Secondary check for platform specific apply triggers
+                submitButtons.push(fieldData);
             }
         }
 
@@ -220,25 +270,26 @@ class DOMAnalyzer:
 
             fields = [
                 ScannedField(
-                    field_id=f["field_id"],
-                    selector=f["selector"],
-                    tag_name=f["tag_name"],
-                    input_type=f["input_type"],
-                    name_attr=f["name_attr"],
-                    id_attr=f["id_attr"],
-                    placeholder=f["placeholder"],
-                    aria_label=f["aria_label"],
-                    label_text=f["label_text"],
-                    nearby_text=f["nearby_text"],
-                    is_required=f["is_required"],
-                    is_visible=f["is_visible"],
-                    current_value=f["current_value"],
+                    field_id=f.get("field_id", f"f_{idx}"),
+                    selector=f.get("selector", ""),
+                    tag_name=f.get("tag_name", "input"),
+                    input_type=f.get("input_type", "text"),
+                    name_attr=f.get("name_attr"),
+                    id_attr=f.get("id_attr"),
+                    placeholder=f.get("placeholder"),
+                    aria_label=f.get("aria_label"),
+                    label_text=f.get("label_text"),
+                    nearby_text=f.get("nearby_text"),
+                    is_required=f.get("is_required", False),
+                    is_visible=f.get("is_visible", True),
+                    is_enabled=f.get("is_enabled", True),
+                    current_value=f.get("current_value"),
                     options=[
                         ScannedOption(text=o["text"], value=o["value"])
                         for o in f.get("options", [])
                     ],
                 )
-                for f in raw_data.get("fields", [])
+                for idx, f in enumerate(raw_data.get("fields", []))
             ]
 
             submit_buttons = [
@@ -247,8 +298,10 @@ class DOMAnalyzer:
                     selector=b["selector"],
                     tag_name=b["tag_name"],
                     input_type=b["input_type"],
-                    label_text=b["label_text"],
-                    nearby_text=b["nearby_text"],
+                    label_text=b.get("label_text"),
+                    nearby_text=b.get("nearby_text"),
+                    is_visible=b.get("is_visible", True),
+                    is_enabled=b.get("is_enabled", True),
                 )
                 for b in raw_data.get("submit_buttons", [])
             ]
@@ -259,8 +312,10 @@ class DOMAnalyzer:
                     selector=b["selector"],
                     tag_name=b["tag_name"],
                     input_type=b["input_type"],
-                    label_text=b["label_text"],
-                    nearby_text=b["nearby_text"],
+                    label_text=b.get("label_text"),
+                    nearby_text=b.get("nearby_text"),
+                    is_visible=b.get("is_visible", True),
+                    is_enabled=b.get("is_enabled", True),
                 )
                 for b in raw_data.get("next_buttons", [])
             ]

@@ -1,11 +1,11 @@
-import asyncio
+import inspect
 import logging
 import re
 import uuid
 from typing import AsyncGenerator, Optional
 from playwright.async_api import BrowserContext, Page
 from app.domain.jobs.entities import Job, SearchQueryFilter
-from app.infrastructure.browser.adapters.base import BaseJobSourceAdapter
+from app.infrastructure.browser.adapters.base import BaseApplicationAdapter, BaseJobSourceAdapter
 
 logger = logging.getLogger("app.adapters.greenhouse")
 
@@ -89,3 +89,51 @@ class GreenhouseAdapter(BaseJobSourceAdapter):
         finally:
             if page and not page.is_closed():
                 await page.close()
+
+
+class GreenhouseApplicationAdapter(BaseApplicationAdapter):
+    """Application adapter for Greenhouse ATS."""
+
+    @property
+    def source_type(self) -> str:
+        return "greenhouse"
+
+    async def open_application(self, page, apply_url: str) -> bool:
+        await page.goto(apply_url, timeout=30000, wait_until="domcontentloaded")
+        return True
+
+    async def handle_challenge(self, page) -> Optional[str]:
+        return None
+
+    async def submit_application(self, page) -> bool:
+        submit_btn = page.locator("#submit_app, input[type='submit']").first
+        await submit_btn.click(timeout=8000)
+        return True
+
+    async def verify_submission(self, page, original_url: str) -> Optional[tuple[bool, str]]:
+        curr_url = (getattr(page, "url", "") or "").lower()
+        if "/thanks" in curr_url or "#thanks" in curr_url:
+            return (True, f"Greenhouse confirmation URL reached: {curr_url}")
+        try:
+            if hasattr(page, "evaluate"):
+                check_script = """
+                () => {
+                    const text = ((document.body ? document.body.innerText : '') || '').toLowerCase();
+                    if (text.includes('thank you for applying') || 
+                        text.includes('application has been submitted') || 
+                        text.includes('application has been received') ||
+                        text.includes('thank you')) {
+                        return true;
+                    }
+                    return false;
+                }
+                """
+                res = page.evaluate(check_script)
+                if inspect.isawaitable(res):
+                    res = await res
+                if res:
+                    return (True, "Greenhouse confirmation text detected on page.")
+        except Exception as e:
+            logger.warning(f"Greenhouse verification error: {e}")
+        return None
+

@@ -63,3 +63,29 @@ class BrowserAutomationException(PlatformException):
             status_code=500,
             details={"adapter": adapter, **(details or {})},
         )
+
+
+class ValidationException(PlatformException):
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message=message, status_code=400, details=details)
+
+
+class StaleLeaseException(PlatformException):
+    """Raised when an operation is attempted with an outdated fencing token or expired lease."""
+    def __init__(self, execution_id: str, message: str = "Execution lease is stale or owned by another worker."):
+        super().__init__(
+            message=message,
+            status_code=409,
+            details={"execution_id": execution_id},
+        )
+
+
+class QuotaExhaustedException(PlatformException):
+    """Raised when daily or hourly application quota limits have been exhausted."""
+    def __init__(self, campaign_id: str, quota_type: str = "daily", limit: int = 0):
+        super().__init__(
+            message=f"{quota_type.capitalize()} quota limit ({limit}) exhausted for campaign [{campaign_id}].",
+            status_code=429,
+            details={"campaign_id": campaign_id, "quota_type": quota_type, "limit": limit},
+        )
+

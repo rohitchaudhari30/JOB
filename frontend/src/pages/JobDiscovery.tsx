@@ -31,7 +31,6 @@ import { api } from '../services/api';
 import { wsClient } from '../services/ws';
 import { useToast } from '../context/ToastContext';
 import { AutomationRunStatus, Job, Application, Resume, MatchResult } from '../types';
-import { LiveConsoleDrawer } from '../components/LiveConsoleDrawer';
 
 interface JobDiscoveryProps {
   activeRun?: AutomationRunStatus | null;
@@ -61,8 +60,6 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
 
   // Queue & Selection Management
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
-  const [isLiveDrawerOpen, setIsLiveDrawerOpen] = useState(false);
-  const [queuedJobsForDrawer, setQueuedJobsForDrawer] = useState<Job[]>([]);
   const [isStartingQueue, setIsStartingQueue] = useState(false);
   const [appliedJobMap, setAppliedJobMap] = useState<Map<string, { appliedAt?: string; status: string }>>(new Map());
   const [liveApplyingJobId, setLiveApplyingJobId] = useState<string | null>(null);
@@ -99,20 +96,36 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
 
   const loadAppliedJobs = async () => {
     try {
-      const apps = await api.listApplications();
+      const mapData = await api.getAppliedJobMap().catch(async () => {
+        // Fallback to listApplications if endpoint unavailable
+        const apps = await api.listApplications();
+        const fallback: Record<string, { status: string; applied_at?: string }> = {};
+        (apps || []).forEach((app: Application) => {
+          if (app.job_id) {
+            fallback[app.job_id] = {
+              status: app.workflow_state,
+              applied_at: app.applied_at || app.created_at,
+            };
+          }
+        });
+        return fallback;
+      });
+
       const map = new Map<string, { appliedAt?: string; status: string }>();
-      apps.forEach((app: Application) => {
-        if (app.job_id) {
-          map.set(app.job_id, { appliedAt: app.applied_at || app.created_at, status: app.workflow_state });
+      let countToday = 0;
+      const todayStr = new Date().toDateString();
+
+      Object.entries(mapData || {}).forEach(([jobId, info]) => {
+        map.set(jobId, {
+          appliedAt: info.applied_at,
+          status: info.status,
+        });
+        if (info.applied_at && new Date(info.applied_at).toDateString() === todayStr && info.status === 'APPLIED') {
+          countToday++;
         }
       });
-      setAppliedJobMap(map);
 
-      const countToday = apps.filter((app: Application) => {
-        const d = app.applied_at || app.created_at;
-        if (!d) return false;
-        return new Date(d).toDateString() === new Date().toDateString();
-      }).length;
+      setAppliedJobMap(map);
       setAppliedTodayCount(countToday);
     } catch {
       // Ignore if list fails
@@ -238,6 +251,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
         min_experience: Number(experience),
         max_experience: Number(experience) + 2,
         max_days_posted: days,
+        auto_evaluate: true,
       });
 
       showSuccess(`Found ${res.discovered_total} jobs (${res.new_jobs_count} new) matching ${experience} yrs on ${platform.toUpperCase()}.`, 'Discovery Complete');
@@ -291,7 +305,8 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     if (filterMinFit) {
       result = result.filter((j) => {
         const m = matchesMap.get(j.id);
-        return m && m.overall_score >= 80;
+        const score = m ? (m.match_score ?? m.overall_score) : 0;
+        return m && score >= 80;
       });
     }
     return result;
@@ -349,30 +364,34 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
 
     try {
       setIsStartingQueue(true);
-      setQueuedJobsForDrawer(targetJobs);
       setLiveQueueJobIds(new Set(targetJobs.map((j) => j.id)));
       if (targetJobs.length > 0) {
         setLiveApplyingJobId(targetJobs[0].id);
       }
-      setIsLiveDrawerOpen(true);
 
-      const rolesList = roles.split(',').map((r) => r.trim()).filter(Boolean);
-      const locList = location.split(',').map((l) => l.trim()).filter(Boolean);
-
-      await api.startAutomation({
-        source_type: platform,
-        roles: rolesList.length > 0 ? rolesList : [targetJobs[0].title],
-        locations: locList,
-        auto_apply_matches: true,
-        max_applications: targetJobs.length,
-        auto_apply_threshold: 75.0,
-        headless: localStorage.getItem('show_desktop_browser') === 'false',
+      const queueResult = await api.batchQueueApplications({
+        job_ids: targetJobs.map((j) => j.id),
+        source: 'JOB_DISCOVERY',
+        auto_execute: false,
       });
 
-      showSuccess(`Live Auto-Apply initiated for ${targetJobs.length} selected opportunities!`, 'Mission Control Launched');
+      if (queueResult.queued_count > 0) {
+        showSuccess(
+          `Successfully queued ${queueResult.queued_count} opportunities for Campaign execution! (${queueResult.skipped_count} skipped/duplicates)`,
+          'Added to Application Pipeline'
+        );
+      } else {
+        showWarning('Selected jobs were already applied or duplicate.');
+      }
+      setSelectedJobIds(new Set());
       onRefreshStatus();
+
+      // Transition to Review Queue or Applications CRM
+      if (onNavigate) {
+        onNavigate('applications');
+      }
     } catch (e: any) {
-      showError(`Failed to initiate auto-apply: ${e.response?.data?.detail || e.message}`);
+      showError(`Failed to queue applications: ${e.response?.data?.detail || e.message}`);
     } finally {
       setIsStartingQueue(false);
     }
@@ -795,14 +814,23 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
               const freshness = formatRelativeTime(job);
               const isSelected = selectedJobIds.has(job.id);
               const appInfo = appliedJobMap.get(job.id);
-              const isApplied = Boolean(appInfo) || liveSubmittedJobIds.has(job.id);
+              const isSubmissionUncertain =
+                appInfo?.status === 'RECONCILIATION_REQUIRED' || appInfo?.status === 'SUBMISSION_UNKNOWN';
+              const isApplied =
+                (Boolean(appInfo) && appInfo?.status === 'APPLIED') || liveSubmittedJobIds.has(job.id);
               const isCurrentlyApplying =
                 liveApplyingJobId === job.id ||
                 (activeRun?.status === 'RUNNING' &&
                   Boolean(activeRun?.current_job_title) &&
                   (job.title.toLowerCase().includes(activeRun.current_job_title!.toLowerCase()) ||
                     activeRun.current_job_title!.toLowerCase().includes(job.title.toLowerCase())));
-              const isQueued = !isCurrentlyApplying && !isApplied && liveQueueJobIds.has(job.id);
+              const isQueued =
+                !isCurrentlyApplying &&
+                !isApplied &&
+                !isSubmissionUncertain &&
+                (liveQueueJobIds.has(job.id) ||
+                  (Boolean(appInfo) &&
+                    ['APPROVAL_REQUIRED', 'APPROVED', 'SUBMITTING', 'READY_TO_SUBMIT'].includes(appInfo!.status)));
 
               return (
                 <div
@@ -810,6 +838,8 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                   className={`p-5 rounded-2xl bg-white border transition-all flex flex-col justify-between space-y-3 shadow-xs hover:shadow-md relative ${
                     isCurrentlyApplying
                       ? 'border-amber-400 ring-2 ring-amber-400/30 bg-amber-50/20 dark:bg-amber-950/25 dark:border-amber-500'
+                      : isSubmissionUncertain
+                      ? 'border-orange-400 ring-2 ring-orange-400/20 bg-orange-50/20 dark:bg-orange-950/25 dark:border-orange-500'
                       : isApplied
                       ? 'border-emerald-400/80 bg-emerald-50/15 dark:bg-emerald-950/20 dark:border-emerald-800'
                       : isQueued
@@ -830,6 +860,13 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                             title="Automation engine currently applying to this job"
                           >
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          </div>
+                        ) : isSubmissionUncertain ? (
+                          <div
+                            className="w-5 h-5 rounded-lg flex items-center justify-center bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/40"
+                            title="Submission uncertain on portal. Resolve in Application CRM before re-attempting."
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5" />
                           </div>
                         ) : isApplied ? (
                           <div
@@ -872,7 +909,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                           const isEvaluating = evaluatingJobIds.has(job.id);
 
                           if (match) {
-                            const score = Math.round(match.overall_score);
+                            const score = Math.round(match.match_score ?? match.overall_score);
                             const scoreColor =
                               score >= 80
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
@@ -883,7 +920,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                             return (
                               <span
                                 className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center space-x-1 ${scoreColor}`}
-                                title={`AI Fit Score: ${score}%\n${match.reasoning_summary || match.matched_skills?.slice(0, 3).join(', ') || ''}`}
+                                title={`Fit: ${score}% (Decision: ${match.decision})\n${match.reasoning_summary || match.matched_skills?.slice(0, 3).join(', ') || ''}`}
                               >
                                 <Zap className="w-2.5 h-2.5" />
                                 <span>{score}% Fit</span>
@@ -909,6 +946,11 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white flex items-center space-x-1 shadow-xs animate-pulse">
                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
                             <span>APPLYING NOW</span>
+                          </span>
+                        ) : isSubmissionUncertain ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800 border border-orange-300 dark:bg-orange-950/80 dark:text-orange-300 dark:border-orange-800 flex items-center space-x-1">
+                            <AlertTriangle className="w-3 h-3 text-orange-600 dark:text-orange-400" />
+                            <span>Needs Verification ⚠️</span>
                           </span>
                         ) : isQueued ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center space-x-1">
@@ -987,25 +1029,34 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
 
                       {isCurrentlyApplying ? (
                         <button
-                          onClick={() => setIsLiveDrawerOpen(true)}
+                          onClick={() => onNavigate && onNavigate('live_console')}
                           className="px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs cursor-pointer transition-all animate-pulse active:scale-95"
                           title="Automation actively interacting with browser for this job. Click to watch live stream."
                         >
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           <span>Watch Live ⚡</span>
                         </button>
+                      ) : isSubmissionUncertain ? (
+                        <button
+                          onClick={() => onNavigate && onNavigate('applications')}
+                          className="px-3 py-1 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:hover:bg-orange-900/80 dark:text-orange-400 text-xs font-bold border border-orange-200 dark:border-orange-800 flex items-center space-x-1 transition-all cursor-pointer active:scale-95"
+                          title="Submission uncertain on portal. Click to verify in Application CRM."
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                          <span>Verify (CRM)</span>
+                        </button>
                       ) : isQueued ? (
                         <button
-                          onClick={() => setIsLiveDrawerOpen(true)}
+                          onClick={() => onNavigate && onNavigate('live_console')}
                           className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 dark:text-indigo-300 text-xs font-semibold flex items-center space-x-1 cursor-pointer transition-all"
-                          title="Waiting in automation batch. Click to view console."
+                          title="Waiting in automation batch. Click to view mission control."
                         >
                           <Clock className="w-3 h-3" />
                           <span>Queued (View)</span>
                         </button>
                       ) : isApplied ? (
                         <button
-                          onClick={() => onNavigate && onNavigate('crm')}
+                          onClick={() => onNavigate && onNavigate('applications')}
                           className="px-3 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 dark:text-emerald-400 text-xs font-bold border border-emerald-200 dark:border-emerald-800 flex items-center space-x-1 transition-all cursor-pointer active:scale-95"
                           title="View Application Details in CRM"
                         >
@@ -1074,17 +1125,6 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
         </div>
       )}
 
-      {/* Slide-over Live Mission Control Drawer */}
-      <LiveConsoleDrawer
-        isOpen={isLiveDrawerOpen}
-        onClose={() => setIsLiveDrawerOpen(false)}
-        queuedJobs={queuedJobsForDrawer}
-        activeRun={activeRun}
-        onRefreshStatus={onRefreshStatus}
-        sourceType={platform}
-        activeResumeName={defaultResume?.file_name}
-        onNavigate={onNavigate}
-      />
     </div>
   );
 };

@@ -160,3 +160,45 @@ graph TD
 | **Event Bus** | In-Process Async Event Dispatcher | Redis PubSub |
 | **File Storage** | Local filesystem (`./storage`) | AWS S3 / MinIO Object Store |
 | **Live Stream** | In-Process WebSocket Broadcaster | Redis PubSub WebSocket Cluster |
+
+---
+
+## 6. Dashboard vs. Analytics Architectural Separation
+
+The platform enforces a strict separation of concerns between operational awareness and historical strategic analysis:
+
+### 6.1 Dashboard ("Operational Command Center")
+- **Responsibility**: "What do I need to know or do right now?"
+- **State**: Live, real-time, operational.
+- **Key Modules**:
+  - Active Campaign Run Status (`RUNNING`, `PAUSED`, `IDLE`).
+  - Active Execution Target & Platform.
+  - Interactive Operational Controls (`PAUSE`, `RESUME`, `STOP`).
+  - Active Human-in-the-Loop Blockers (`PAUSED_OTP`, `PAUSED_CAPTCHA`, `APPROVAL_REQUIRED`).
+  - Platform Connection & Health Status.
+  - Daily Safe Application Quota (`today_applications / effective_daily_limit`).
+  - User-Scoped Today's Discovered & Matched Jobs.
+  - Actionable Job Queue & Recent Application Activity Log.
+- **Strictly Excluded**: Historical time-series charts, lifetime application aggregates, deep resume comparisons, and matching strategy weight sliders.
+
+### 6.2 Analytics ("Historical Performance & Strategic Decision Workspace")
+- **Responsibility**: "How well is my job search strategy performing over time?"
+- **State**: Purely read-only, historical, aggregated across selectable date ranges (`Today`, `7D`, `30D`, `90D`, `Custom`, `All Time`).
+- **Strictly Enforced Rules**:
+  1. **Read-Only Strategic Surface**: No mutation buttons or execution triggers. Direct links route users to dedicated settings pages (e.g. `Configure Matching Strategy →`).
+  2. **Full 7-Stage Conversion Funnel**:
+     - `Discovered`: Jobs extracted/associated with user campaigns.
+     - `AI Matched`: Jobs passing multi-stage cascade criteria.
+     - `Applications Triggered`: Applications queued or initiated.
+     - `Confirmed Submissions`: Applications successfully submitted on platform/ATS.
+     - `Employer Responses`: Positive or neutral initial responses/acknowledgments.
+     - `Interviews`: Scheduled screens, technical rounds, or hiring manager conversations.
+     - `Offers`: Formal job offers received.
+  3. **Decoupled Executive Outcome KPIs**:
+     - `Confirmed Submissions`
+     - `Employer Response Rate` (`total_responded / total_submitted`)
+     - `Interview Rate` (`total_interviewed / total_submitted`)
+     - `Offer Rate` (`total_offered / total_submitted`)
+  4. **Observational Performance Integrity**:
+     - Strictly observational comparison without pseudo-scientific "A/B Testing", "Experiment", "Winner", or "Statistically Significant" claims.
+     - Labeled as `Resume Performance Comparison` with `Highest Observed Interview Rate` / `Best Observed Outcome` alongside rigorous sample sizes.

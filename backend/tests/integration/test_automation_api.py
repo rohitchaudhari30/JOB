@@ -100,3 +100,21 @@ async def test_automation_api_and_schedules_flow(client: AsyncClient):
     # 10. Delete Schedule
     del_resp = await client.delete(f"/api/v1/automation/schedules/{sched_id}", headers=headers)
     assert del_resp.status_code == 204
+
+    # 11. Verify Run Persistence and Database Rehydration
+    # Query run events while in memory
+    events_mem_resp = await client.get(f"/api/v1/automation/runs/{run_id}/events", headers=headers)
+    assert events_mem_resp.status_code == 200
+
+    # Evict session from orchestrator memory to test database fallback & rehydration
+    from app.application.automation.orchestrator import orchestrator
+    if run_id in orchestrator._sessions:
+        del orchestrator._sessions[run_id]
+
+    status_db_resp = await client.get(f"/api/v1/automation/runs/{run_id}", headers=headers)
+    assert status_db_resp.status_code == 200
+    assert status_db_resp.json()["run_id"] == run_id
+
+    events_db_resp = await client.get(f"/api/v1/automation/runs/{run_id}/events", headers=headers)
+    assert events_db_resp.status_code == 200
+    assert isinstance(events_db_resp.json(), list)

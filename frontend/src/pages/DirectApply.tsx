@@ -23,9 +23,15 @@ import {
   Trash2,
   Calendar,
   Settings,
+  Pause,
+  Square,
+  Shield,
+  Activity,
+  BarChart3,
+  RotateCcw,
 } from 'lucide-react';
 import { api } from '../services/api';
-import { CandidateProfile, Resume, PlatformConnectionInfo, ScheduleJobConfig } from '../types';
+import { CandidateProfile, Resume, PlatformConnectionInfo, Campaign, CampaignPacingStatus, CampaignActivityLog } from '../types';
 import { useToast } from '../context/ToastContext';
 
 interface DirectApplyProps {
@@ -67,38 +73,118 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
   const [maxApplications, setMaxApplications] = useState<number>(10);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
 
-  // 24/7 Automated Schedules State
-  const [schedules, setSchedules] = useState<ScheduleJobConfig[]>([]);
-  const [isCreatingSchedule, setIsCreatingSchedule] = useState(false);
-  const [schedulePlatform, setSchedulePlatform] = useState('naukri');
-  const [scheduleRoles, setScheduleRoles] = useState('');
-  const [scheduleLocations, setScheduleLocations] = useState('');
-  const [schedulePreset, setSchedulePreset] = useState<'3hours' | 'morning' | 'evening' | 'custom'>('3hours');
+  // Autonomous Campaign Schedule Cadence
+  const [schedulePreset, setSchedulePreset] = useState<'manual' | '3hours' | 'morning' | 'evening' | 'custom'>('3hours');
   const [scheduleIntervalMins, setScheduleIntervalMins] = useState(180);
-  const [scheduleCron, setScheduleCron] = useState('');
-  const [scheduleMaxApps, setScheduleMaxApps] = useState(10);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
+
+  // Autonomous Campaign Engine State
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [pacingStatus, setPacingStatus] = useState<CampaignPacingStatus | null>(null);
+  const [campaignLogs, setCampaignLogs] = useState<CampaignActivityLog[]>([]);
+  const [activeCampaignTab, setActiveCampaignTab] = useState<'rules' | 'safety' | 'logs'>('rules');
+  const [showNewCampaignModal, setShowNewCampaignModal] = useState(false);
+  const [newCampaignName, setNewCampaignName] = useState('');
+  const [campaignActionLoading, setCampaignActionLoading] = useState(false);
+
+  // Safety Policy State
+  const [dailyLimit, setDailyLimit] = useState(20);
+  const [hourlyLimit, setHourlyLimit] = useState(5);
+  const [cooldownSecs, setCooldownSecs] = useState(90);
+  const [operatingStart, setOperatingStart] = useState('09:00');
+  const [operatingEnd, setOperatingEnd] = useState('18:00');
+
+  // Rule State
+  const [autoApplyThreshold, setAutoApplyThreshold] = useState(80);
+  const [reviewThreshold, setReviewThreshold] = useState(65);
+  const [minExpYears, setMinExpYears] = useState(0);
+  const [maxExpYears, setMaxExpYears] = useState(10);
+  const [mandatorySkillsInput, setMandatorySkillsInput] = useState('');
 
   useEffect(() => {
     loadSetupData();
     if (initialTab === 'schedules') {
-      setShowScheduleModal(true);
+      setActiveCampaignTab('safety');
     }
   }, [initialTab]);
+
+  useEffect(() => {
+    if (!selectedCampaign?.id) return;
+    const interval = setInterval(() => {
+      loadCampaignPacingAndLogs(selectedCampaign.id);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [selectedCampaign?.id]);
+
+  const loadCampaignPacingAndLogs = async (campId: string) => {
+    try {
+      const [pacing, logs] = await Promise.all([
+        api.getCampaignPacing(campId).catch(() => null),
+        api.getCampaignLogs(campId).catch(() => []),
+      ]);
+      if (pacing) setPacingStatus(pacing);
+      setCampaignLogs(logs || []);
+    } catch (e) {
+      console.error('Failed to load campaign pacing/logs:', e);
+    }
+  };
+
+  const syncFormFromCampaign = (camp: Campaign) => {
+    setSelectedCampaign(camp);
+    if (camp.rule) {
+      setAutoApplyThreshold(camp.rule.auto_apply_threshold || 80);
+      setReviewThreshold(camp.rule.review_threshold || 65);
+      setMinExpYears(camp.rule.min_experience_years || 0);
+      setMaxExpYears(camp.rule.max_experience_years || 10);
+      if (camp.rule.target_roles && camp.rule.target_roles.length > 0) {
+        setTargetRoles(camp.rule.target_roles);
+      }
+      if (camp.rule.target_locations && camp.rule.target_locations.length > 0) {
+        setLocations(camp.rule.target_locations);
+      }
+      if (camp.rule.mandatory_skills) {
+        setMandatorySkillsInput(camp.rule.mandatory_skills.join(', '));
+      }
+      if (camp.rule.target_platforms && camp.rule.target_platforms.length > 0) {
+        setSelectedSources(camp.rule.target_platforms);
+      }
+    }
+    if (camp.safety_policy) {
+      setDailyLimit(camp.safety_policy.daily_application_limit || 20);
+      setHourlyLimit(camp.safety_policy.hourly_application_limit || 5);
+      setCooldownSecs(camp.safety_policy.cooldown_seconds || 90);
+      setOperatingStart(camp.safety_policy.operating_start_time || '09:00');
+      setOperatingEnd(camp.safety_policy.operating_end_time || '18:00');
+    }
+    if (camp.schedule) {
+      if (!camp.schedule.is_active) {
+        setSchedulePreset('manual');
+      } else if (camp.schedule.cron_expression === '0 9 * * 1-5') {
+        setSchedulePreset('morning');
+      } else if (camp.schedule.cron_expression === '0 19 * * *') {
+        setSchedulePreset('evening');
+      } else if (camp.schedule.interval_minutes === 180) {
+        setSchedulePreset('3hours');
+      } else if (camp.schedule.interval_minutes) {
+        setSchedulePreset('custom');
+        setScheduleIntervalMins(camp.schedule.interval_minutes);
+      }
+    }
+    loadCampaignPacingAndLogs(camp.id);
+  };
 
   const loadSetupData = async () => {
     try {
       setLoading(true);
-      const [profData, resumesData, connsData, schedulesData] = await Promise.all([
+      const [profData, resumesData, connsData, campsData] = await Promise.all([
         api.getProfile().catch(() => null),
         api.listResumes().catch(() => []),
         api.listConnections().catch(() => []),
-        api.listSchedules().catch(() => []),
+        api.listCampaigns().catch(() => []),
       ]);
 
       if (profData) {
         setProfile(profData);
-        // Pre-populate roles
         const initialRoles: string[] = [];
         if (profData.headline) initialRoles.push(profData.headline);
         if (profData.skills && profData.skills.length > 0) {
@@ -109,15 +195,12 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
         }
         if (initialRoles.length === 0) initialRoles.push('Software Engineer');
         setTargetRoles(initialRoles);
-        setScheduleRoles(initialRoles.join(', '));
 
-        // Pre-populate locations
         const initialLocs: string[] = [];
         if (profData.location) initialLocs.push(profData.location);
         initialLocs.push('Remote');
         const uniqueLocs = Array.from(new Set(initialLocs));
         setLocations(uniqueLocs);
-        setScheduleLocations(uniqueLocs.join(', '));
       }
 
       setResumes(resumesData || []);
@@ -127,7 +210,41 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
       }
 
       setConnections(connsData || []);
-      setSchedules(schedulesData || []);
+
+      // Initialize or load campaigns
+      if (campsData && campsData.length > 0) {
+        setCampaigns(campsData);
+        syncFormFromCampaign(campsData[0]);
+      } else {
+        // Auto-initialize standard default campaign
+        try {
+          const defaultRes = (resumesData || []).find((r: Resume) => r.is_default) || resumesData?.[0];
+          const newCamp = await api.createCampaign({
+            name: 'Primary Software Engineering Campaign',
+            target_resume_id: defaultRes?.id || undefined,
+            rule: {
+              auto_apply_threshold: 80,
+              review_threshold: 65,
+              min_experience_years: 1,
+              max_experience_years: 8,
+              target_roles: ['Software Engineer'],
+              target_locations: ['Bangalore', 'Remote'],
+              target_platforms: ['naukri', 'linkedin'],
+            },
+            safety_policy: {
+              daily_application_limit: 20,
+              hourly_application_limit: 5,
+              cooldown_seconds: 90,
+              operating_start_time: '09:00',
+              operating_end_time: '18:00',
+            },
+          });
+          setCampaigns([newCamp]);
+          syncFormFromCampaign(newCamp);
+        } catch (err) {
+          console.warn('Could not auto-create campaign:', err);
+        }
+      }
     } catch (e) {
       console.error('Failed to load direct apply defaults:', e);
     } finally {
@@ -135,70 +252,202 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
     }
   };
 
-  const handleSelectPreset = (preset: '3hours' | 'morning' | 'evening' | 'custom') => {
-    setSchedulePreset(preset);
-    if (preset === '3hours') {
-      setScheduleIntervalMins(180);
-      setScheduleCron('');
-    } else if (preset === 'morning') {
-      setScheduleCron('0 9 * * 1-5');
-    } else if (preset === 'evening') {
-      setScheduleCron('0 19 * * *');
+  const handleCreateNewCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCampaignName.trim()) {
+      showWarning('Please enter a campaign name');
+      return;
+    }
+    try {
+      setCampaignActionLoading(true);
+      const created = await api.createCampaign({
+        name: newCampaignName.trim(),
+        target_resume_id: selectedResumeId || undefined,
+        rule: {
+          auto_apply_threshold: autoApplyThreshold,
+          review_threshold: reviewThreshold,
+          min_experience_years: minExpYears,
+          max_experience_years: maxExpYears,
+          target_roles: targetRoles,
+          target_locations: locations,
+          mandatory_skills: mandatorySkillsInput.split(',').map((s) => s.trim()).filter(Boolean),
+          target_platforms: selectedSources,
+        },
+        safety_policy: {
+          daily_application_limit: dailyLimit,
+          hourly_application_limit: hourlyLimit,
+          cooldown_seconds: cooldownSecs,
+          operating_start_time: operatingStart,
+          operating_end_time: operatingEnd,
+        },
+        schedule: {
+          is_active: schedulePreset !== 'manual',
+          interval_minutes: schedulePreset === '3hours' ? 180 : schedulePreset === 'custom' ? scheduleIntervalMins : undefined,
+          cron_expression: schedulePreset === 'morning' ? '0 9 * * 1-5' : schedulePreset === 'evening' ? '0 19 * * *' : undefined,
+        },
+      });
+      showSuccess(`Campaign "${created.name}" created!`, 'Campaign Initialized');
+      setCampaigns([created, ...campaigns]);
+      syncFormFromCampaign(created);
+      setShowNewCampaignModal(false);
+      setNewCampaignName('');
+    } catch (err: any) {
+      showError(`Campaign creation failed: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setCampaignActionLoading(false);
     }
   };
 
-  const handleCreateSchedule = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveCampaignConfig = async () => {
+    if (!selectedCampaign) return;
     try {
-      setIsCreatingSchedule(true);
-      const rolesList = scheduleRoles
-        ? scheduleRoles.split(',').map((r) => r.trim()).filter(Boolean)
-        : targetRoles;
-      const locList = scheduleLocations
-        ? scheduleLocations.split(',').map((l) => l.trim()).filter(Boolean)
-        : locations;
+      setCampaignActionLoading(true);
+      const updated = await api.updateCampaign(selectedCampaign.id, {
+        rule: {
+          auto_apply_threshold: autoApplyThreshold,
+          review_threshold: reviewThreshold,
+          min_experience_years: minExpYears,
+          max_experience_years: maxExpYears,
+          target_roles: targetRoles,
+          target_locations: locations,
+          mandatory_skills: mandatorySkillsInput.split(',').map((s) => s.trim()).filter(Boolean),
+          target_platforms: selectedSources,
+        },
+        safety_policy: {
+          daily_application_limit: dailyLimit,
+          hourly_application_limit: hourlyLimit,
+          cooldown_seconds: cooldownSecs,
+          operating_start_time: operatingStart,
+          operating_end_time: operatingEnd,
+        },
+        schedule: {
+          is_active: schedulePreset !== 'manual',
+          interval_minutes: schedulePreset === '3hours' ? 180 : schedulePreset === 'custom' ? scheduleIntervalMins : undefined,
+          cron_expression: schedulePreset === 'morning' ? '0 9 * * 1-5' : schedulePreset === 'evening' ? '0 19 * * *' : undefined,
+        },
+        target_resume_id: selectedResumeId || undefined,
+      });
+      showSuccess('Campaign schedule, rules, and safety limits persisted!', 'Campaign Saved');
+      setCampaigns(campaigns.map((c) => (c.id === updated.id ? updated : c)));
+      syncFormFromCampaign(updated);
+    } catch (err: any) {
+      showError(`Failed to save campaign: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setCampaignActionLoading(false);
+    }
+  };
 
-      if (rolesList.length === 0) {
-        showWarning('Please enter at least one target role for this schedule.');
+  const handleStartCampaignExecution = async () => {
+    if (!selectedCampaign) return;
+    try {
+      setCampaignActionLoading(true);
+
+      // 1. Acquire campaign execution lease & pre-flight verification
+      const execution = await api.startCampaign(selectedCampaign.id);
+
+      // 2. Prepare declarative campaign parameters for the Playwright runner
+      const primarySource = (selectedCampaign.rule?.target_platforms?.[0] || selectedSources[0] || 'naukri').toLowerCase();
+      const campaignRoles = selectedCampaign.rule?.target_roles && selectedCampaign.rule.target_roles.length > 0
+        ? selectedCampaign.rule.target_roles
+        : targetRoles.length > 0
+        ? targetRoles
+        : ['Software Engineer'];
+      const campaignLocations = selectedCampaign.rule?.target_locations && selectedCampaign.rule.target_locations.length > 0
+        ? selectedCampaign.rule.target_locations
+        : locations.length > 0
+        ? locations
+        : undefined;
+
+      const targetResumeId = selectedCampaign.target_resume_id || selectedResumeId || undefined;
+      if (!targetResumeId && resumes.length === 0) {
+        showWarning('Please upload and select a resume in Candidate Profile before running this campaign.');
         return;
       }
 
-      const useCron =
-        schedulePreset === 'morning' ||
-        schedulePreset === 'evening' ||
-        (schedulePreset === 'custom' && Boolean(scheduleCron));
+      const runReq = {
+        source_type: primarySource,
+        roles: campaignRoles,
+        locations: campaignLocations,
+        auto_apply_matches: applicationMode === 'AUTO',
+        max_applications: selectedCampaign.safety_policy?.daily_application_limit || dailyLimit || 10,
+        auto_apply_threshold: selectedCampaign.rule?.auto_apply_threshold || autoApplyThreshold || 80.0,
+        approval_threshold: selectedCampaign.rule?.review_threshold || reviewThreshold || 65.0,
+        max_job_age_hours: freshnessHours > 0 ? freshnessHours : null,
+        headless: true,
+        execution_id: execution.id,
+        campaign_id: selectedCampaign.id,
+        worker_id: execution.worker_id || 'worker-1',
+        resume_id: targetResumeId,
+      };
 
-      await api.createSchedule({
-        source_type: schedulePlatform,
-        roles: rolesList,
-        locations: locList,
-        cron_expression: useCron ? (scheduleCron || '0 9 * * 1-5') : undefined,
-        interval_minutes: !useCron ? Number(scheduleIntervalMins || 180) : undefined,
-        auto_apply: true,
-        max_applications_per_run: Number(scheduleMaxApps || 10),
-      });
+      // 3. Launch the active browser runner
+      await api.startAutomation(runReq);
 
-      showSuccess('24/7 Autopilot Schedule registered successfully!', 'Background Worker Active');
-      setShowScheduleModal(false);
-      const updatedSchedules = await api.listSchedules();
-      setSchedules(updatedSchedules || []);
-    } catch (e: any) {
-      showError(`Failed to create schedule: ${e.response?.data?.detail || e.message}`);
+      const updated = { ...selectedCampaign, state: 'RUNNING' as const };
+      setSelectedCampaign(updated);
+      setCampaigns(campaigns.map((c) => (c.id === updated.id ? updated : c)));
+      showSuccess(`Campaign "${selectedCampaign.name}" launched with Live Telemetry!`);
+      await loadCampaignPacingAndLogs(selectedCampaign.id);
+      onNavigate('live_console');
+    } catch (err: any) {
+      showError(`Execution failed: ${err.response?.data?.detail || err.message}`);
     } finally {
-      setIsCreatingSchedule(false);
+      setCampaignActionLoading(false);
     }
   };
 
-  const handleDeleteSchedule = async (scheduleId: string) => {
-    if (!confirm('Are you sure you want to cancel and remove this automation schedule?')) return;
+  const handlePauseCampaignExecution = async () => {
+    if (!selectedCampaign) return;
     try {
-      await api.deleteSchedule(scheduleId);
-      setSchedules((prev) => prev.filter((s) => s.schedule_id !== scheduleId));
-      showSuccess('Schedule cancelled and removed', 'Schedule Removed');
-    } catch (e: any) {
-      showError(`Delete failed: ${e.response?.data?.detail || e.message}`);
+      setCampaignActionLoading(true);
+      await api.pauseCampaign(selectedCampaign.id);
+      showSuccess('Campaign paused safely.');
+      const updated = { ...selectedCampaign, state: 'PAUSED' as const };
+      setSelectedCampaign(updated);
+      setCampaigns(campaigns.map((c) => (c.id === updated.id ? updated : c)));
+      await loadCampaignPacingAndLogs(selectedCampaign.id);
+    } catch (err: any) {
+      showError(`Pause failed: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setCampaignActionLoading(false);
     }
   };
+
+  const handleResumeCampaignExecution = async () => {
+    if (!selectedCampaign) return;
+    try {
+      setCampaignActionLoading(true);
+      await api.resumeCampaign(selectedCampaign.id);
+      showSuccess('Campaign execution resumed.');
+      const updated = { ...selectedCampaign, state: 'RUNNING' as const };
+      setSelectedCampaign(updated);
+      setCampaigns(campaigns.map((c) => (c.id === updated.id ? updated : c)));
+      await loadCampaignPacingAndLogs(selectedCampaign.id);
+    } catch (err: any) {
+      showError(`Resume failed: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setCampaignActionLoading(false);
+    }
+  };
+
+  const handleStopCampaignExecution = async () => {
+    if (!selectedCampaign) return;
+    if (!confirm('Are you sure you want to stop the active campaign execution?')) return;
+    try {
+      setCampaignActionLoading(true);
+      await api.stopCampaign(selectedCampaign.id);
+      showSuccess('Campaign execution stopped.');
+      const updated = { ...selectedCampaign, state: 'COMPLETED' as const };
+      setSelectedCampaign(updated);
+      setCampaigns(campaigns.map((c) => (c.id === updated.id ? updated : c)));
+      await loadCampaignPacingAndLogs(selectedCampaign.id);
+    } catch (err: any) {
+      showError(`Stop failed: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setCampaignActionLoading(false);
+    }
+  };
+
 
   const handleAddRole = () => {
     if (newRoleInput.trim() && !targetRoles.includes(newRoleInput.trim())) {
@@ -242,6 +491,11 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
       return;
     }
 
+    if (resumes.length === 0 && !selectedResumeId) {
+      showWarning('Please upload a resume in Candidate Profile before auto-applying.');
+      return;
+    }
+
     try {
       setStarting(true);
       const primarySource = selectedSources[0] || 'naukri';
@@ -254,7 +508,8 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
         auto_apply_threshold: minMatchScore,
         approval_threshold: applicationMode === 'APPROVAL' ? minMatchScore : 65.0,
         max_job_age_hours: freshnessHours > 0 ? freshnessHours : null,
-        headless: localStorage.getItem('show_desktop_browser') === 'false',
+        headless: true,
+        resume_id: selectedResumeId || undefined,
       };
 
       await api.startAutomation(runReq);
@@ -275,82 +530,390 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
 
   return (
     <div className="space-y-6 w-full animate-fadeIn pb-12">
-      {/* Modern SaaS Header with [+ New Schedule] Button (Image 1 style) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80 dark:border-slate-800">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs shrink-0">
+      {/* Top Header: Campaign Selector & Control Suite */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800">
+        <div className="flex items-center space-x-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs shrink-0">
             <Rocket className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              Autopilot Campaigns
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Autonomous application pipelines &amp; recurrent background schedules
+            <div className="flex items-center space-x-2.5">
+              <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                Automation Campaigns
+              </h1>
+              {selectedCampaign && (
+                <span className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider border shadow-2xs ${
+                  selectedCampaign.state === 'RUNNING'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800'
+                    : selectedCampaign.state === 'PAUSED'
+                    ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    selectedCampaign.state === 'RUNNING'
+                      ? 'bg-emerald-500 animate-pulse'
+                      : selectedCampaign.state === 'PAUSED'
+                      ? 'bg-amber-500'
+                      : 'bg-slate-400'
+                  }`} />
+                  {selectedCampaign.state}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Persistent autonomous campaigns, declarative rules &amp; account safety pacing
             </p>
           </div>
         </div>
 
-        {/* Right Actions: Status Badge & [+ New Schedule] Button */}
-        <div className="flex items-center space-x-2.5">
-          <div className="hidden md:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Autopilot Engine: Ready</span>
-          </div>
+        {/* Campaign Dropdown & Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          {campaigns.length > 0 && (
+            <select
+              value={selectedCampaign?.id || ''}
+              onChange={(e) => {
+                const found = campaigns.find((c) => c.id === e.target.value);
+                if (found) syncFormFromCampaign(found);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 shadow-xs outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.state})
+                </option>
+              ))}
+            </select>
+          )}
 
           <button
             type="button"
-            onClick={() => setShowScheduleModal(true)}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer"
+            onClick={() => setShowNewCampaignModal(true)}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5 transition-colors cursor-pointer shadow-xs"
           >
-            <Plus className="w-4 h-4" />
-            <span>New Schedule</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Campaign</span>
           </button>
+
+          {selectedCampaign && (
+            <>
+              {selectedCampaign.state === 'RUNNING' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePauseCampaignExecution}
+                    disabled={campaignActionLoading}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+                  >
+                    <Pause className="w-3.5 h-3.5 fill-current" />
+                    <span>Pause</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleStopCampaignExecution}
+                    disabled={campaignActionLoading}
+                    className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Stop Execution"
+                  >
+                    <Square className="w-3.5 h-3.5" />
+                    <span>Stop</span>
+                  </button>
+                </>
+              ) : selectedCampaign.state === 'PAUSED' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleResumeCampaignExecution}
+                    disabled={campaignActionLoading}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Resume</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleStopCampaignExecution}
+                    disabled={campaignActionLoading}
+                    className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Stop Execution"
+                  >
+                    <Square className="w-3.5 h-3.5" />
+                    <span>Stop</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleStartCampaignExecution}
+                  disabled={campaignActionLoading}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Run Campaign</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveCampaignConfig}
+                disabled={campaignActionLoading}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs shadow-xs flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Save Settings</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Hero Action Header */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-800 dark:from-indigo-950 dark:via-purple-950 dark:to-slate-900 p-7 text-white shadow-xl shadow-indigo-600/15 border border-indigo-500/20">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/15 dark:bg-indigo-500/20 text-indigo-100 text-[11px] font-bold border border-white/20 backdrop-blur-xs">
-              <Rocket className="w-3.5 h-3.5" />
-              <span>Autopilot Engine Hub</span>
+      {/* P1: Operational Cockpit - Current Automation Status & Next Action */}
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm p-5 md:p-6 relative overflow-hidden transition-all">
+        {/* Subtle accent gradient bar */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-500" />
+
+        <div className="flex flex-col space-y-5">
+          {/* Top Bar: Operational Status & Execution State */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/80 pb-4">
+            <div className="flex items-center space-x-3">
+              <span className="relative flex h-3 w-3">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  pacingStatus?.attention_required
+                    ? 'bg-amber-400'
+                    : selectedCampaign?.state === 'RUNNING' || pacingStatus?.active_execution_status === 'RUNNING'
+                    ? 'bg-emerald-400'
+                    : 'bg-slate-400'
+                }`} />
+                <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                  pacingStatus?.attention_required
+                    ? 'bg-amber-500'
+                    : selectedCampaign?.state === 'RUNNING' || pacingStatus?.active_execution_status === 'RUNNING'
+                    ? 'bg-emerald-500'
+                    : 'bg-slate-400'
+                }`} />
+              </span>
+              <span className="text-xs font-black tracking-wider uppercase text-slate-700 dark:text-slate-300">
+                Current Automation Status
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                pacingStatus?.attention_required
+                  ? 'bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                  : selectedCampaign?.state === 'RUNNING' || pacingStatus?.active_execution_status === 'RUNNING'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                  : 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+              }`}>
+                {pacingStatus?.active_execution_status || selectedCampaign?.state || 'IDLE'}
+              </span>
             </div>
-            <h2 className="text-2xl font-black tracking-tight text-white">
-              Launch Automated Job Application Run
-            </h2>
-            <p className="text-xs text-indigo-100 dark:text-slate-300 leading-relaxed font-normal">
-              Your profile, resume, and saved screening answers are loaded automatically. Review your search criteria below and start applying in 1-Click.
-            </p>
+
+            <div className="text-xs font-medium text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60">
+                Operating Window: <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">{operatingStart} - {operatingEnd}</strong>
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60">
+                Pacing Delay: <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">{cooldownSecs}s</strong>
+              </span>
+            </div>
           </div>
 
-          <div className="shrink-0 flex flex-col sm:flex-row gap-2.5">
-            <button
-              type="button"
-              onClick={() => setShowScheduleModal(true)}
-              className="px-5 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs backdrop-blur-xs border border-white/25 flex items-center justify-center space-x-2 transition-transform active:scale-95 cursor-pointer"
-            >
-              <Clock className="w-4 h-4 text-indigo-200" />
-              <span>Schedule 24/7 Autopilot</span>
-            </button>
+          {/* Operational Matrix: 4 Pillars */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Pillar 1: Current Operation */}
+            <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center space-x-1.5 mb-2">
+                  <Briefcase className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Current Operation</span>
+                </div>
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
+                  {pacingStatus?.active_job_title ? (
+                    <span>
+                      Applying to <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">{pacingStatus.active_job_title}</span>
+                      {pacingStatus.active_job_company && <span> at {pacingStatus.active_job_company}</span>}
+                    </span>
+                  ) : pacingStatus?.active_execution_status === 'RUNNING' ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">Evaluating next qualified candidate in queue</span>
+                  ) : (
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">Standby (Waiting for next cycle or trigger)</span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                {pacingStatus?.active_execution_id ? `Exec ID: ${pacingStatus.active_execution_id.slice(0, 8)}...` : 'No active execution lease'}
+              </div>
+            </div>
 
-            <button
-              onClick={handleStartApply}
-              disabled={starting}
-              className="px-6 py-3 rounded-2xl bg-white text-indigo-700 hover:bg-slate-100 font-black text-xs shadow-xl shadow-black/20 flex items-center justify-center space-x-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
-            >
-              <Play className="w-4 h-4 fill-current text-indigo-600" />
-              <span>{starting ? 'Initializing Engine...' : 'START APPLY NOW'}</span>
-            </button>
+            {/* Pillar 2: Progress Today */}
+            <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center space-x-1.5 mb-2">
+                  <BarChart3 className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Progress Today</span>
+                </div>
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-base font-black text-slate-900 dark:text-white">
+                    {pacingStatus?.today_count ?? 0} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">/ {dailyLimit} applications</span>
+                  </span>
+                  <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                    {Math.round(((pacingStatus?.today_count ?? 0) / (dailyLimit || 1)) * 100)}%
+                  </span>
+                </div>
+                {/* Progress bar */}
+                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.round(((pacingStatus?.today_count ?? 0) / (dailyLimit || 1)) * 100))}%` }}
+                  />
+                </div>
+              </div>
+              <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px] text-slate-500 dark:text-slate-400">
+                Hourly velocity: <strong className="text-slate-800 dark:text-slate-200 font-bold">{pacingStatus?.hourly_count ?? 0}/{hourlyLimit}</strong> max
+              </div>
+            </div>
+
+            {/* Pillar 3: Next Action / Cooldown */}
+            <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center space-x-1.5 mb-2">
+                  <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Next Action</span>
+                </div>
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
+                  {pacingStatus?.next_action_label || (
+                    pacingStatus?.can_apply_now
+                      ? 'Ready for dispatch'
+                      : pacingStatus?.status_reason || 'Holding cooldown'
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px] text-slate-500 dark:text-slate-400 flex items-center space-x-1">
+                {pacingStatus?.cooldown_remaining_seconds && pacingStatus.cooldown_remaining_seconds > 0 ? (
+                  <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                    Cooldown: {pacingStatus.cooldown_remaining_seconds}s remaining
+                  </span>
+                ) : (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                    ✓ Pacing window open
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Pillar 4: Human Attention & Live Intervention */}
+            <div className={`p-4 rounded-xl border flex flex-col justify-between transition-colors ${
+              pacingStatus?.attention_required
+                ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+                : 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/60'
+            }`}>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5 mb-2">
+                  {pacingStatus?.attention_required ? (
+                    <>
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      <span className="text-amber-800 dark:text-amber-300 font-bold">Action Needed</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-emerald-800 dark:text-emerald-300 font-bold">Guardian Status</span>
+                    </>
+                  )}
+                </div>
+                <div className={`text-xs font-semibold line-clamp-2 ${
+                  pacingStatus?.attention_required
+                    ? 'text-amber-900 dark:text-amber-200'
+                    : 'text-slate-700 dark:text-slate-200'
+                }`}>
+                  {pacingStatus?.attention_required || 'Zero blockers detected. Autopilot running in verified safe zone.'}
+                </div>
+              </div>
+
+              {pacingStatus?.attention_required ? (
+                <div className="mt-3 pt-2 border-t border-amber-200/70 dark:border-amber-800/70 flex items-center space-x-2">
+                  {pacingStatus.attention_required.includes('OTP') || pacingStatus.attention_required.includes('CAPTCHA') ? (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('live_console')}
+                      className="w-full px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                      <span>Open Live Console</span>
+                    </button>
+                  ) : pacingStatus.attention_required.includes('Session') ? (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('connections')}
+                      className="w-full px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>Reconnect Platform</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('live_console')}
+                      className="w-full px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                      <span>Inspect Session</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-3 pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
+                  <span>✓ 100% Autonomous</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-
-        {/* Ambient Glow */}
-        <div className="absolute right-0 top-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
       </div>
 
-      {/* Pre-flight System Health Bar */}
+      {/* Campaign Feature Tabs */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800 space-x-6 text-xs font-bold">
+        <button
+          onClick={() => setActiveCampaignTab('rules')}
+          className={`pb-2.5 transition-colors cursor-pointer flex items-center space-x-1.5 ${
+            activeCampaignTab === 'rules'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Targeting &amp; Declarative Rules</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCampaignTab('safety')}
+          className={`pb-2.5 transition-colors cursor-pointer flex items-center space-x-1.5 ${
+            activeCampaignTab === 'safety'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>Schedule &amp; Safety Policy</span>
+        </button>
+
+        <button
+          onClick={() => setActiveCampaignTab('logs')}
+          className={`pb-2.5 transition-colors cursor-pointer flex items-center space-x-1.5 ${
+            activeCampaignTab === 'logs'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+          }`}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span>Activity Stream ({campaignLogs.length})</span>
+        </button>
+      </div>
+
+      {/* Rules Tab Body */}
+      {activeCampaignTab === 'rules' && (
+        <>
+          {/* Pre-flight System Health Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="flex items-center space-x-3 p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
           <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
@@ -654,11 +1217,11 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
             <button
               type="button"
-              onClick={() => setShowScheduleModal(true)}
+              onClick={() => setActiveCampaignTab('safety')}
               className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center space-x-2 transition-transform active:scale-95 cursor-pointer border border-slate-200 dark:border-slate-700"
             >
               <Clock className="w-4 h-4 text-indigo-500" />
-              <span>Schedule 24/7 Autopilot</span>
+              <span>Configure Schedule & Safety</span>
             </button>
 
             <button
@@ -672,139 +1235,338 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
           </div>
         </div>
       </div>
+      </>
+      )}
 
-      {/* Active 24/7 Autopilot Schedules Section */}
-      <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-              <span>Active 24/7 Autopilot Schedules</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                {schedules.length}
-              </span>
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              These recurring background pipelines automatically discover fresh postings and submit applications on your set schedule
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowScheduleModal(true)}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Schedule</span>
-          </button>
-        </div>
-
-        {schedules.length === 0 ? (
-          <div className="text-center py-12 bg-slate-50 dark:bg-slate-950/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3 p-6">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-2xs">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                No recurring schedules active yet
-              </h4>
-              <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-                Set up an automated schedule to periodically discover fresh postings on Naukri, LinkedIn, Greenhouse, and more. ApplyFlow applies autonomously while respecting your safety caps.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowScheduleModal(true)}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 inline-flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Schedule</span>
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {schedules.map((s) => (
-              <div
-                key={s.schedule_id}
-                className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 hover:border-slate-300 dark:border-slate-700/80 dark:hover:border-slate-600 transition-all flex flex-col justify-between space-y-4 shadow-2xs"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-indigo-100/80 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/80 dark:text-indigo-300 dark:border-indigo-800">
-                      {s.source_type.toUpperCase()}
-                    </span>
-                    <div className="flex items-center space-x-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                        Active
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
-                      Target Roles:
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {s.roles.map((r, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200"
-                        >
-                          {r}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                    <span>📍 {s.locations.join(', ') || 'Any Location'}</span>
-                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                      ⏱ {s.interval_minutes
-                        ? `Every ${s.interval_minutes} mins`
-                        : `Cron: ${s.cron_expression}`}
-                    </span>
-                    <span>🛡️ Max {s.max_applications_per_run} apps/run</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                  <button
-                    onClick={() => handleDeleteSchedule(s.schedule_id)}
-                    className="px-3 py-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer inline-flex items-center space-x-1.5"
-                    title="Cancel Schedule"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete</span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Modern Backdrop Modal for [+ New Schedule] (Image 1 Industry Standard) */}
-      {showScheduleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
+      {/* Schedule & Safety Policy Tab Body */}
+      {activeCampaignTab === 'safety' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                  <Clock className="w-4 h-4" />
-                </div>
+              <div className="flex items-center space-x-2.5">
+                <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Create 24/7 Autopilot Schedule
-                  </h3>
+                  <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    Schedule &amp; Safety Policy Configuration
+                  </h2>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Background worker will periodically apply to matching jobs
+                    Recurring execution cadence, account protection, cooldown intervals, velocity limits, and daily operating windows
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowScheduleModal(false)}
+                onClick={handleSaveCampaignConfig}
+                disabled={campaignActionLoading}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Save Schedule &amp; Safety Policy</span>
+              </button>
+            </div>
+
+            {/* Recurring Execution Cadence (Background Autopilot) */}
+            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                    <Clock className="w-4 h-4 text-indigo-500" />
+                    <span>Recurring Execution Cadence (Background Autopilot)</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Choose how frequently the autonomous worker wakes up to discover matching jobs and submit applications.
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  {schedulePreset === 'manual' ? 'Manual Only' : 'Autopilot Active'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1">
+                {[
+                  { id: 'manual', label: 'Manual Only', desc: 'Trigger on-demand' },
+                  { id: '3hours', label: 'Every 3 Hours', desc: 'Continuous stream (Recommended)' },
+                  { id: 'morning', label: 'Weekdays 9 AM', desc: 'Recruiter morning peak' },
+                  { id: 'evening', label: 'Daily 7 PM', desc: 'Evening sync' },
+                  { id: 'custom', label: 'Custom Interval', desc: 'User-defined frequency' },
+                ].map((preset) => {
+                  const active = schedulePreset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setSchedulePreset(preset.id as any)}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        active
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/25'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{preset.label}</div>
+                      <div className={`text-[10px] mt-1 ${active ? 'text-indigo-100' : 'text-slate-400'}`}>
+                        {preset.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {schedulePreset === 'custom' && (
+                <div className="pt-2 flex items-center space-x-3">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Run Every (minutes):
+                  </label>
+                  <input
+                    type="number"
+                    min="30"
+                    max="1440"
+                    step="15"
+                    value={scheduleIntervalMins}
+                    onChange={(e) => setScheduleIntervalMins(Math.max(15, Number(e.target.value)))}
+                    className="w-32 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <span className="text-[11px] text-slate-500">
+                    ({Math.round(scheduleIntervalMins / 60 * 10) / 10} hours)
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Daily Limit */}
+              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                    <span>Daily Application Limit</span>
+                  </label>
+                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
+                    {dailyLimit} apps / day
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={dailyLimit}
+                  onChange={(e) => setDailyLimit(Number(e.target.value))}
+                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Maximum total submissions allowed per 24 hours across all job boards to keep recruiter standing natural.
+                </p>
+              </div>
+
+              {/* Hourly Velocity */}
+              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+                    <Activity className="w-4 h-4 text-indigo-500" />
+                    <span>Hourly Velocity Cap</span>
+                  </label>
+                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
+                    {hourlyLimit} apps / hour
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={hourlyLimit}
+                  onChange={(e) => setHourlyLimit(Number(e.target.value))}
+                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Prevents bursts of submissions within any rolling 60-minute window.
+                </p>
+              </div>
+
+              {/* Cooldown Interval */}
+              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+                    <Clock className="w-4 h-4 text-amber-500" />
+                    <span>Cooldown Between Applications</span>
+                  </label>
+                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
+                    {cooldownSecs} seconds ({Math.round(cooldownSecs / 60 * 10) / 10} min)
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min="30"
+                  max="600"
+                  step="15"
+                  value={cooldownSecs}
+                  onChange={(e) => setCooldownSecs(Number(e.target.value))}
+                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Deliberate pause between successive browser sessions for account safety and rate moderation.
+                </p>
+              </div>
+
+              {/* Operating Window */}
+              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+                    <Calendar className="w-4 h-4 text-sky-500" />
+                    <span>Permitted Operating Window</span>
+                  </label>
+                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
+                    {operatingStart} - {operatingEnd}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Start Time</label>
+                    <input
+                      type="time"
+                      value={operatingStart}
+                      onChange={(e) => setOperatingStart(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">End Time</label>
+                    <input
+                      type="time"
+                      value={operatingEnd}
+                      onChange={(e) => setOperatingEnd(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Applications will only execute during these active recruiter business hours.
+                </p>
+              </div>
+            </div>
+
+            {/* Account Protection Explanatory Box */}
+            <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/60 flex items-start space-x-3">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              <div className="text-xs text-emerald-900 dark:text-emerald-300 space-y-1">
+                <div className="font-bold">Enterprise Safety &amp; Integrity Compliance</div>
+                <p className="text-[11px] text-emerald-800/80 dark:text-emerald-400/80">
+                  AutoApply.ai enforces server-side rate limits, daily caps, and operating windows to ensure high recruiter delivery rates, prevent spam flagging, and guarantee account health across job boards. CAPTCHAs and OTPs always trigger human intervention.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Activity Stream Tab Body */}
+      {activeCampaignTab === 'logs' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center space-x-2.5">
+                <Activity className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <div>
+                  <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    Campaign Activity Stream &amp; Audit Trail
+                  </h2>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Real-time execution telemetry, safety pacer enforcement, and filter decisions
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => selectedCampaign && loadCampaignPacingAndLogs(selectedCampaign.id)}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Refresh Logs</span>
+              </button>
+            </div>
+
+            {campaignLogs.length === 0 ? (
+              <div className="text-center py-16 bg-slate-50 dark:bg-slate-950/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3 p-6">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-2xs">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                    No Campaign Activity Recorded Yet
+                  </h4>
+                  <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                    Activity logs will appear here when this campaign runs, showing pacing evaluations, safety limit checks, matched job qualification, and submission milestones.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-3 pr-4">Timestamp</th>
+                      <th className="pb-3 px-4">Level</th>
+                      <th className="pb-3 px-4">Event</th>
+                      <th className="pb-3 pl-4">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {campaignLogs.map((log) => {
+                      const isError = log.level === 'ERROR';
+                      const isWarn = log.level === 'WARNING';
+                      return (
+                        <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                          <td className="py-3 pr-4 text-[11px] font-mono text-slate-500 whitespace-nowrap">
+                            {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase border ${
+                              isError
+                                ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800'
+                                : isWarn
+                                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800'
+                                : 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800'
+                            }`}>
+                              {log.level}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap font-bold text-slate-800 dark:text-slate-200">
+                            {log.event_type}
+                          </td>
+                          <td className="py-3 pl-4 text-slate-600 dark:text-slate-300">
+                            {log.message}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modern Backdrop Modal for [+ New Campaign] */}
+      {showNewCampaignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                  <Rocket className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Create Automation Campaign
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Define a target role campaign with custom pacing
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewCampaignModal(false)}
                 className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -812,135 +1574,36 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleCreateSchedule} className="space-y-4">
-              {/* Platform Selection */}
+            <form onSubmit={handleCreateNewCampaign} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Source Platform
-                </label>
-                <select
-                  value={schedulePlatform}
-                  onChange={(e) => setSchedulePlatform(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs cursor-pointer"
-                >
-                  <option value="naukri">Naukri.com</option>
-                  <option value="linkedin">LinkedIn Jobs</option>
-                  <option value="greenhouse">Greenhouse ATS</option>
-                  <option value="lever">Lever ATS</option>
-                  <option value="workday">Workday</option>
-                  <option value="ashby">Ashby</option>
-                </select>
-              </div>
-
-              {/* Target Roles */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Target Job Roles (Comma-separated)
+                  Campaign Name
                 </label>
                 <input
                   type="text"
-                  value={scheduleRoles}
-                  onChange={(e) => setScheduleRoles(e.target.value)}
-                  placeholder="e.g. Data Engineer, Python Developer"
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
+                  value={newCampaignName}
+                  onChange={(e) => setNewCampaignName(e.target.value)}
+                  placeholder="e.g. Senior Backend Engineer - Spring 2026"
+                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
                   required
                 />
               </div>
 
-              {/* Locations */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Target Locations (Comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={scheduleLocations}
-                  onChange={(e) => setScheduleLocations(e.target.value)}
-                  placeholder="e.g. Pune, Mumbai, Remote"
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder-slate-400 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
-                />
-              </div>
-
-              {/* Execution Frequency Preset */}
-              <div className="space-y-2 pt-1">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Execution Frequency
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: '3hours', label: 'Every 3 Hours', desc: 'Real-time scout' },
-                    { id: 'morning', label: 'Weekdays 9 AM', desc: 'Peak recruiter window' },
-                    { id: 'evening', label: 'Daily 7 PM', desc: 'Evening digest batch' },
-                    { id: 'custom', label: 'Custom Interval', desc: 'User-specified period' },
-                  ].map((p) => {
-                    const isSelected = schedulePreset === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => handleSelectPreset(p.id as any)}
-                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
-                            : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <div className="text-xs font-bold">{p.label}</div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400">{p.desc}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {schedulePreset === 'custom' && (
-                  <div className="pt-2">
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                      Interval in Minutes:
-                    </label>
-                    <input
-                      type="number"
-                      min="30"
-                      max="1440"
-                      value={scheduleIntervalMins}
-                      onChange={(e) => setScheduleIntervalMins(Number(e.target.value))}
-                      className="w-full px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Safe Cap per run */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700">
-                <div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">Max Applications / Run</div>
-                  <div className="text-[10px] text-slate-500">Anti-ban rate protection safeguard</div>
-                </div>
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={scheduleMaxApps}
-                  onChange={(e) => setScheduleMaxApps(Number(e.target.value))}
-                  className="w-16 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-center text-slate-900 dark:text-white"
-                />
-              </div>
-
-              {/* Modal Actions */}
               <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowScheduleModal(false)}
+                  onClick={() => setShowNewCampaignModal(false)}
                   className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreatingSchedule}
+                  disabled={campaignActionLoading}
                   className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-1.5 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
                 >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>{isCreatingSchedule ? 'Registering...' : 'Create Schedule'}</span>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{campaignActionLoading ? 'Creating...' : 'Create Campaign'}</span>
                 </button>
               </div>
             </form>

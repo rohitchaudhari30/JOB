@@ -1,5 +1,6 @@
-from typing import List
-from fastapi import APIRouter, Depends
+from datetime import datetime
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
@@ -19,10 +20,19 @@ class FunnelStageDTO(BaseModel):
 class FunnelOverviewResponse(BaseModel):
     total_discovered: int
     total_matched: int
-    total_applied: int
+    total_triggered: int
+    total_submitted: int
+    total_responded: int
     total_interviewed: int
     total_offered: int
     total_rejected: int
+    match_rate_pct: float
+    trigger_rate_pct: float
+    submission_rate_pct: float
+    response_rate_pct: float
+    interview_rate_pct: float
+    offer_rate_pct: float
+    total_applied: int
     stages: List[FunnelStageDTO]
 
 
@@ -31,8 +41,12 @@ class ResumePerformanceDTO(BaseModel):
     label: str
     target_role: str
     applications_count: int
-    interview_count: int
-    offer_count: int
+    response_count: int = 0
+    interview_count: int = 0
+    offer_count: int = 0
+    response_rate_pct: float = 0.0
+    interview_rate_pct: float = 0.0
+    offer_rate_pct: float = 0.0
     conversion_rate_pct: float
 
 
@@ -40,6 +54,33 @@ class SourcePerformanceDTO(BaseModel):
     source_id: str
     source_type: str = "naukri"
     discovered_count: int
+    matched_count: int = 0
+    triggered_count: int = 0
+    submitted_count: int = 0
+    response_count: int = 0
+    interview_count: int = 0
+    offer_count: int = 0
+    response_rate_pct: float = 0.0
+    interview_rate_pct: float = 0.0
+    offer_rate_pct: float = 0.0
+    applied_count: int
+    success_rate_pct: float
+
+
+class CampaignPerformanceDTO(BaseModel):
+    campaign_id: str
+    campaign_name: str
+    state: str
+    discovered_count: int
+    matched_count: int = 0
+    triggered_count: int = 0
+    submitted_count: int = 0
+    response_count: int = 0
+    interview_count: int = 0
+    offer_count: int = 0
+    response_rate_pct: float = 0.0
+    interview_rate_pct: float = 0.0
+    offer_rate_pct: float = 0.0
     applied_count: int
     success_rate_pct: float
 
@@ -64,18 +105,37 @@ class WeightTuningResponse(BaseModel):
 
 @router.get("/funnel", response_model=FunnelOverviewResponse)
 async def get_funnel(
+    start_date: Optional[datetime] = Query(None, description="Start date filter"),
+    end_date: Optional[datetime] = Query(None, description="End date filter"),
+    platform: Optional[str] = Query(None, description="Platform filter (e.g. 'naukri', 'linkedin')"),
+    campaign_id: Optional[str] = Query(None, description="Campaign filter"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = AnalyticsService(session)
-    result = await service.get_funnel_overview(current_user.id)
+    result = await service.get_funnel_overview(
+        user_id=current_user.id,
+        start_date=start_date,
+        end_date=end_date,
+        platform=platform,
+        campaign_id=campaign_id,
+    )
     return FunnelOverviewResponse(
         total_discovered=result.total_discovered,
         total_matched=result.total_matched,
-        total_applied=result.total_applied,
+        total_triggered=result.total_triggered,
+        total_submitted=result.total_submitted,
+        total_responded=result.total_responded,
         total_interviewed=result.total_interviewed,
         total_offered=result.total_offered,
         total_rejected=result.total_rejected,
+        match_rate_pct=result.match_rate_pct,
+        trigger_rate_pct=result.trigger_rate_pct,
+        submission_rate_pct=result.submission_rate_pct,
+        response_rate_pct=result.response_rate_pct,
+        interview_rate_pct=result.interview_rate_pct,
+        offer_rate_pct=result.offer_rate_pct,
+        total_applied=result.total_applied,
         stages=[
             FunnelStageDTO(
                 stage_name=s.stage_name,
@@ -89,19 +149,29 @@ async def get_funnel(
 
 @router.get("/resumes", response_model=List[ResumePerformanceDTO])
 async def get_resume_performance(
+    start_date: Optional[datetime] = Query(None, description="Start date filter"),
+    end_date: Optional[datetime] = Query(None, description="End date filter"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = AnalyticsService(session)
-    res = await service.get_resume_performance(current_user.id)
+    res = await service.get_resume_performance(
+        user_id=current_user.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
     return [
         ResumePerformanceDTO(
             resume_id=r.resume_id,
             label=r.label,
             target_role=r.target_role,
             applications_count=r.applications_count,
+            response_count=r.response_count,
             interview_count=r.interview_count,
             offer_count=r.offer_count,
+            response_rate_pct=r.response_rate_pct,
+            interview_rate_pct=r.interview_rate_pct,
+            offer_rate_pct=r.offer_rate_pct,
             conversion_rate_pct=r.conversion_rate_pct,
         )
         for r in res
@@ -110,15 +180,31 @@ async def get_resume_performance(
 
 @router.get("/sources", response_model=List[SourcePerformanceDTO])
 async def get_source_performance(
+    start_date: Optional[datetime] = Query(None, description="Start date filter"),
+    end_date: Optional[datetime] = Query(None, description="End date filter"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = AnalyticsService(session)
-    res = await service.get_source_performance(current_user.id)
+    res = await service.get_source_performance(
+        user_id=current_user.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
     return [
         SourcePerformanceDTO(
             source_id=s.source_id,
+            source_type=s.source_type,
             discovered_count=s.discovered_count,
+            matched_count=s.matched_count,
+            triggered_count=s.triggered_count,
+            submitted_count=s.submitted_count,
+            response_count=s.response_count,
+            interview_count=s.interview_count,
+            offer_count=s.offer_count,
+            response_rate_pct=s.response_rate_pct,
+            interview_rate_pct=s.interview_rate_pct,
+            offer_rate_pct=s.offer_rate_pct,
             applied_count=s.applied_count,
             success_rate_pct=s.success_rate_pct,
         )
@@ -126,13 +212,54 @@ async def get_source_performance(
     ]
 
 
-@router.get("/skills", response_model=List[SkillDemandDTO])
-async def get_skill_insights(
+@router.get("/campaigns", response_model=List[CampaignPerformanceDTO])
+async def get_campaign_performance(
+    start_date: Optional[datetime] = Query(None, description="Start date filter"),
+    end_date: Optional[datetime] = Query(None, description="End date filter"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = AnalyticsService(session)
-    res = await service.get_skill_insights(current_user.id)
+    res = await service.get_campaign_performance(
+        user_id=current_user.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return [
+        CampaignPerformanceDTO(
+            campaign_id=c.campaign_id,
+            campaign_name=c.campaign_name,
+            state=c.state,
+            discovered_count=c.discovered_count,
+            matched_count=c.matched_count,
+            triggered_count=c.triggered_count,
+            submitted_count=c.submitted_count,
+            response_count=c.response_count,
+            interview_count=c.interview_count,
+            offer_count=c.offer_count,
+            response_rate_pct=c.response_rate_pct,
+            interview_rate_pct=c.interview_rate_pct,
+            offer_rate_pct=c.offer_rate_pct,
+            applied_count=c.applied_count,
+            success_rate_pct=c.success_rate_pct,
+        )
+        for c in res
+    ]
+
+
+@router.get("/skills", response_model=List[SkillDemandDTO])
+async def get_skill_insights(
+    start_date: Optional[datetime] = Query(None, description="Start date filter"),
+    end_date: Optional[datetime] = Query(None, description="End date filter"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    service = AnalyticsService(session)
+    res = await service.get_skill_insights(
+        user_id=current_user.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
     return [
         SkillDemandDTO(
             skill_name=s.skill_name,

@@ -39,6 +39,9 @@ class ApplicationResponseDTO(BaseModel):
     apply_url: Optional[str] = None
     platform: Optional[str] = None
     match_score: Optional[float] = None
+    retry_count: int = 0
+    error_category: Optional[str] = None
+    next_retry_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     questions: List[ApplicationQuestionDTO] = []
@@ -47,6 +50,17 @@ class ApplicationResponseDTO(BaseModel):
 class CreateApplicationDTO(BaseModel):
     job_id: str
     resume_id: Optional[str] = None
+    campaign_id: Optional[str] = None
+    source: Optional[str] = "DIRECT_APPLY"
+    auto_execute: bool = False
+
+
+class BatchQueueApplicationsDTO(BaseModel):
+    job_ids: List[str]
+    resume_id: Optional[str] = None
+    campaign_id: Optional[str] = None
+    source: Optional[str] = "CAMPAIGN"
+    auto_execute: bool = False
 
 
 class ApproveApplicationDTO(BaseModel):
@@ -66,9 +80,27 @@ class StopApplicationDTO(BaseModel):
     reason: Optional[str] = "User aborted run"
 
 
+class ReconcileApplicationDTO(BaseModel):
+    action: str  # "CONFIRM_SUBMITTED" | "MARK_NOT_SUBMITTED" | "MARK_NOT_SUBMITTED_AND_RETRY" | "DISMISS"
+    notes: Optional[str] = None
+
+
 class ApplicationStatsDTO(BaseModel):
     total: int
     applied: int
+    applied_today: int = 0
     paused: int
     failed: int
+    skipped: int = 0
     approval_required: int
+    reconciliation_required: int = 0
+    needs_attention: int = 0
+    success_rate: float = 0.0
+
+
+class PaginatedApplicationsDTO(BaseModel):
+    items: List[ApplicationResponseDTO]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

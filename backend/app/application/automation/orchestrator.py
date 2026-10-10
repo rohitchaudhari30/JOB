@@ -5,6 +5,8 @@ import logging
 from typing import Any, Dict, List, Optional
 import uuid
 from app.api.v1.ws import ws_manager
+from app.application.applications.application_orchestrator import ApplicationOrchestrator
+from app.application.applications.commands import ApplicationSource, QueueApplicationCommand
 from app.application.applications.use_cases import CreateApplicationUseCase, ExecuteApplicationUseCase
 from app.application.jobs.use_cases import DiscoverJobsUseCase
 from app.application.matching.use_cases import EvaluateJobMatchUseCase
@@ -32,15 +34,31 @@ class AutomationSession:
     Enforces deterministic state transitions via AutomationStateMachine.
     """
 
-    def __init__(self, run_id: str, user_id: str):
+    def __init__(
+        self,
+        run_id: str,
+        user_id: str,
+        execution_id: Optional[str] = None,
+        campaign_id: Optional[str] = None,
+        worker_id: Optional[str] = "worker-1",
+        lease_version: int = 1,
+        resume_id: Optional[str] = None,
+    ):
         self.run_id = run_id
         self.user_id = user_id
+        self.execution_id = execution_id or run_id
+        self.campaign_id = campaign_id
+        self.worker_id = worker_id
+        self.lease_version = lease_version
+        self.resume_id = resume_id
         self._state_machine = AutomationStateMachine(initial_state=AutomationState.IDLE)
         self.is_paused = False
         self.pause_event = asyncio.Event()
         self.pause_event.set()  # Not paused by default
         self.cancel_requested = False
         self.user_input_queue: asyncio.Queue = asyncio.Queue()
+        self.events: List[Dict[str, Any]] = []
+        self._event_seq: int = 0
         self.discovered_jobs_count = 0
         self.matched_jobs_count = 0
         self.applications_submitted_count = 0
@@ -86,6 +104,7 @@ class AutomationSession:
             self.transition_to(AutomationState.STOPPED)
         self.error_message = reason
         self.pause_event.set()  # Unblock if paused
+        logger.info("automation_cancelled", extra={"run_id": self.run_id, "user_id": self.user_id, "reason": reason})
         logger.info(f"Automation run [{self.run_id}] aborted: {reason}")
 
 
@@ -102,7 +121,19 @@ class AutomationOrchestrator:
     def __init__(self):
         self._sessions: Dict[str, AutomationSession] = {}
         self._user_active_runs: Dict[str, str] = {}
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
+        self._lock_loop = None
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if self._lock is None or self._lock_loop != loop:
+            self._lock = asyncio.Lock()
+            self._lock_loop = loop
+        return self._lock
 
     def get_session(self, run_id: str) -> Optional[AutomationSession]:
         return self._sessions.get(run_id)
@@ -132,14 +163,57 @@ class AutomationOrchestrator:
         user_repo: Optional[UserRepository] = None,
         session_repo: Optional[Any] = None,
         ai_gateway: Optional[AIGateway] = None,
-        headless: bool = False,
+        headless: bool = True,
+        execution_id: Optional[str] = None,
+        campaign_id: Optional[str] = None,
+        worker_id: Optional[str] = "worker-1",
+        lease_version: int = 1,
+        execution_repo: Optional[Any] = None,
+        quota_repo: Optional[Any] = None,
+        resume_id: Optional[str] = None,
     ) -> AutomationSession:
-        run_id = f"run_{uuid.uuid4().hex[:8]}"
-        session = AutomationSession(run_id=run_id, user_id=user_id)
+        run_id = execution_id or f"run_{uuid.uuid4().hex[:8]}"
+        session = AutomationSession(
+            run_id=run_id,
+            user_id=user_id,
+            execution_id=execution_id or run_id,
+            campaign_id=campaign_id,
+            worker_id=worker_id,
+            lease_version=lease_version,
+            resume_id=resume_id,
+        )
         session.transition_to(AutomationState.STARTING)
         session.transition_to(AutomationState.RUNNING)
 
-        async with self._lock:
+        # Persist AutomationRunModel to database to satisfy foreign key for events and enable historical rehydration
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.infrastructure.database.models.models import AutomationRunModel
+
+            async def _persist_run_initial():
+                try:
+                    async with AsyncSessionLocal() as db_sess:
+                        existing = await db_sess.get(AutomationRunModel, run_id)
+                        if not existing:
+                            run_m = AutomationRunModel(
+                                id=run_id,
+                                user_id=user_id,
+                                status=session.status.value,
+                                source_type=source_type,
+                                target_count=max_applications,
+                                worker_id=worker_id or "worker-1",
+                                started_at=session.created_at,
+                            )
+                            db_sess.add(run_m)
+                            await db_sess.commit()
+                except Exception as run_err:
+                    logger.warning(f"Could not persist initial AutomationRunModel [{run_id}]: {run_err}")
+
+            await _persist_run_initial()
+        except Exception as err:
+            logger.warning(f"Failed to schedule AutomationRunModel persistence: {err}")
+
+        async with self.lock:
             self._sessions[run_id] = session
             self._user_active_runs[user_id] = run_id
 
@@ -164,6 +238,8 @@ class AutomationOrchestrator:
                 session_repo=session_repo,
                 ai_gateway=ai_gateway,
                 headless=headless,
+                execution_repo=execution_repo,
+                quota_repo=quota_repo,
             )
         )
 
@@ -188,8 +264,16 @@ class AutomationOrchestrator:
         user_repo: Any = None,
         session_repo: Any = None,
         ai_gateway: Any = None,
-        headless: bool = False,
+        headless: bool = True,
+        execution_repo: Any = None,
+        quota_repo: Any = None,
     ):
+        heartbeat_task = None
+        if session.execution_id:
+            heartbeat_task = asyncio.create_task(
+                self._run_heartbeat_loop(session, interval_seconds=30, execution_repo=execution_repo)
+            )
+
         try:
             if job_repo is None or hasattr(job_repo, "_session"):
                 from app.core.database import AsyncSessionLocal
@@ -206,6 +290,7 @@ class AutomationOrchestrator:
                 )
                 from app.infrastructure.database.repositories.user_repository import SqlAlchemyUserRepository
                 from app.infrastructure.database.repositories.connection_repository import SqlAlchemyBrowserSessionRepository
+                from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyQuotaReservationRepository
 
                 async with AsyncSessionLocal() as db_session:
                     j_repo = SqlAlchemyJobRepository(db_session)
@@ -217,6 +302,7 @@ class AutomationOrchestrator:
                     u_repo = SqlAlchemyUserRepository(db_session)
                     sess_repo = SqlAlchemyBrowserSessionRepository(db_session)
                     ai_gw = MultiTierAIGateway(session=db_session)
+                    q_repo = SqlAlchemyQuotaReservationRepository(db_session)
 
                     await self._run_pipeline_core(
                         session=session,
@@ -237,6 +323,7 @@ class AutomationOrchestrator:
                         session_repo=sess_repo,
                         ai_gateway=ai_gw,
                         headless=headless,
+                        quota_repo=q_repo,
                     )
                     await db_session.commit()
             else:
@@ -259,6 +346,7 @@ class AutomationOrchestrator:
                     session_repo=session_repo,
                     ai_gateway=ai_gateway,
                     headless=headless,
+                    quota_repo=quota_repo,
                 )
         except Exception as e:
             logger.error(f"Automation run pipeline error: {e}", exc_info=True)
@@ -271,9 +359,93 @@ class AutomationOrchestrator:
                 message=f"Run failed: {e}",
             )
         finally:
-            async with self._lock:
+            if heartbeat_task and not heartbeat_task.done():
+                heartbeat_task.cancel()
+            if session.execution_id:
+                try:
+                    from app.core.database import AsyncSessionLocal
+                    from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyCampaignExecutionRepository
+
+                    async def _sync_final_state(repo):
+                        exec_model = await repo.get_by_id(session.execution_id)
+                        if exec_model:
+                            # Fencing guard: verify this worker still owns the execution
+                            if session.worker_id and exec_model.worker_id != session.worker_id:
+                                logger.warning(
+                                    f"Skipping final execution state sync for [{session.execution_id}]: "
+                                    f"current owner [{exec_model.worker_id}] != session worker [{session.worker_id}]"
+                                )
+                                return
+                            if hasattr(session, "lease_version") and exec_model.lease_version and session.lease_version < exec_model.lease_version:
+                                logger.warning(
+                                    f"Skipping final execution state sync for [{session.execution_id}]: "
+                                    f"stale session lease_version [{session.lease_version}] < current [{exec_model.lease_version}]"
+                                )
+                                return
+                            if exec_model.status in ("COMPLETED", "FAILED", "ABORTED") and exec_model.worker_id != session.worker_id:
+                                logger.warning(
+                                    f"Execution [{session.execution_id}] already finalized by another worker [{exec_model.worker_id}]."
+                                )
+                                return
+
+                            if session.status == AutomationState.COMPLETED:
+                                exec_model.status = "COMPLETED"
+                            elif session.status in (AutomationState.FAILED, AutomationState.ERROR):
+                                exec_model.status = "FAILED"
+                                exec_model.error_message = session.error_message
+                            elif session.status in (AutomationState.ABORTED, AutomationState.STOPPED):
+                                exec_model.status = "ABORTED"
+                            exec_model.completed_at = datetime.now(timezone.utc)
+                            exec_model.discovered_count = session.discovered_jobs_count
+                            exec_model.qualified_count = session.matched_jobs_count
+                            exec_model.submitted_count = session.applications_submitted_count
+                            exec_model.failed_count = session.failed_applications_count
+                            await repo.save(exec_model)
+
+                    if execution_repo:
+                        await _sync_final_state(execution_repo)
+                    else:
+                        async with AsyncSessionLocal() as db_session:
+                            await _sync_final_state(SqlAlchemyCampaignExecutionRepository(db_session))
+                except Exception as sync_err:
+                    logger.warning(f"Failed to synchronize final execution state for [{session.execution_id}]: {sync_err}")
+            async with self.lock:
                 if session.user_id in self._user_active_runs:
                     del self._user_active_runs[session.user_id]
+
+    async def _run_heartbeat_loop(
+        self,
+        session: AutomationSession,
+        interval_seconds: int = 30,
+        execution_repo: Optional[Any] = None,
+    ):
+        from app.core.database import AsyncSessionLocal
+        from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyCampaignExecutionRepository
+
+        while not session.cancel_requested:
+            try:
+                await asyncio.sleep(interval_seconds)
+                if session.status in (AutomationState.RUNNING, AutomationState.STARTING, AutomationState.PAUSED):
+                    if execution_repo:
+                        await execution_repo.record_heartbeat(
+                            execution_id=session.execution_id,
+                            worker_id=session.worker_id or "worker-1",
+                            lease_seconds=300,
+                            lease_version=getattr(session, "lease_version", None),
+                        )
+                    else:
+                        async with AsyncSessionLocal() as db_session:
+                            exec_repo = SqlAlchemyCampaignExecutionRepository(db_session)
+                            await exec_repo.record_heartbeat(
+                                execution_id=session.execution_id,
+                                worker_id=session.worker_id or "worker-1",
+                                lease_seconds=300,
+                                lease_version=getattr(session, "lease_version", None),
+                            )
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Failed to record worker heartbeat for execution [{session.execution_id}]: {e}")
 
     async def _run_pipeline_core(
         self,
@@ -294,8 +466,10 @@ class AutomationOrchestrator:
         user_repo: Any,
         session_repo: Optional[Any] = None,
         ai_gateway: Any = None,
-        headless: bool = False,
+        headless: bool = True,
+        quota_repo: Optional[Any] = None,
     ):
+        headless = True  # Strict enforcement: all automation runs headless and streams to in-UI canvas
         logger.info(f"Starting automation pipeline [{session.run_id}] for user [{session.user_id}] (headless={headless})...")
 
         mode_label = "Background Mode" if headless else "🖥️ Visible Desktop Browser Mode"
@@ -386,6 +560,7 @@ class AutomationOrchestrator:
                 match_res = await evaluate_uc.execute(
                     user_id=session.user_id,
                     job_id=job_id,
+                    resume_id=session.resume_id,
                     custom_rule=match_rule,
                 )
                 session.matched_jobs_count += 1
@@ -394,7 +569,18 @@ class AutomationOrchestrator:
                     session=session,
                     event_name="JOB_EVALUATED",
                     message=f"Evaluated [{job_title} at {job_company}]: Score {match_res.overall_score:.1f}% -> {match_res.decision.value}",
-                    payload={"score": match_res.overall_score, "decision": match_res.decision.value},
+                    payload={
+                        "score": round(match_res.overall_score, 1),
+                        "decision": match_res.decision.value,
+                        "job_id": job_id,
+                        "job_title": job_title,
+                        "company": job_company,
+                        "location": getattr(match_res, "location", None) or getattr(job_summary, "location", "") if isinstance(job_summary, dict) else "",
+                        "matched_skills": match_res.matched_skills[:5] if match_res.matched_skills else [],
+                        "missing_skills": match_res.missing_skills[:5] if match_res.missing_skills else [],
+                        "reasoning": match_res.reasoning_summary,
+                        "platform": source_type,
+                    },
                 )
 
                 if match_res.decision in (DecisionEnum.AUTO_APPLY, DecisionEnum.REQUIRE_APPROVAL):
@@ -413,9 +599,13 @@ class AutomationOrchestrator:
         if session.cancel_requested:
             return
 
+        if not shortlisted_jobs:
+            logger.info(
+                f"[{session.run_id}] Matching cascade completed. 0 of {len(jobs_list)} discovered jobs qualified for application (all scores below thresholds: auto-apply >= 80%, review >= 65%)."
+            )
+
         # Step 3: Application Automation Execution
         session.active_state = "APPLYING"
-        create_app_uc = CreateApplicationUseCase(app_repo=app_repo, job_repo=job_repo)
         exec_app_uc = ExecuteApplicationUseCase(
             app_repo=app_repo,
             job_repo=job_repo,
@@ -424,6 +614,15 @@ class AutomationOrchestrator:
             user_repo=user_repo,
             session_repo=session_repo,
             ai_provider=ai_gateway,
+        )
+        app_orchestrator = ApplicationOrchestrator(
+            app_repo=app_repo,
+            job_repo=job_repo,
+            profile_repo=profile_repo,
+            resume_repo=resume_repo,
+            campaign_repo=None,
+            connection_repo=session_repo,
+            execute_use_case=exec_app_uc,
         )
 
         for job_obj, match_res in shortlisted_jobs:
@@ -442,52 +641,124 @@ class AutomationOrchestrator:
             )
             initial_state = WorkflowStateEnum.APPROVED if should_apply else WorkflowStateEnum.APPROVAL_REQUIRED
 
-            # Prevent double-applying if already submitted in a previous run
-            existing_app = await app_repo.get_by_user_and_job(user_id=session.user_id, job_id=job_obj.id)
-            if existing_app and existing_app.workflow_state in (WorkflowStateEnum.APPLIED, WorkflowStateEnum.SUBMITTING):
-                logger.info(f"Already applied to {job_obj.title} at {job_obj.company}. Skipping.")
-                continue
-
-            app_entity = await create_app_uc.execute(
+            # Canonical application creation & validation through ApplicationOrchestrator
+            effective_resume_id = session.resume_id or match_res.resume_id
+            queue_cmd = QueueApplicationCommand(
                 user_id=session.user_id,
                 job_id=job_obj.id,
-                resume_id=match_res.resume_id,
+                source=ApplicationSource.CAMPAIGN if session.campaign_id else ApplicationSource.AUTOMATION,
+                campaign_id=session.campaign_id,
+                resume_id=effective_resume_id,
+                auto_execute=False,
                 initial_state=initial_state,
             )
+            queue_res = await app_orchestrator.queue_application(queue_cmd)
+            if not queue_res.is_queued or not queue_res.application:
+                logger.info(
+                    f"Application rejected/skipped for [{job_obj.title} at {job_obj.company}]: {queue_res.error_code} - {queue_res.error_message}"
+                )
+                continue
+
+            app_entity = queue_res.application
             session.current_application_id = app_entity.id
             session.current_job_title = f"{job_obj.title} @ {job_obj.company}"
 
             if should_apply:
+                reservation = None
+                if quota_repo and session.campaign_id:
+                    reservation = await quota_repo.reserve_slot(
+                        campaign_id=session.campaign_id,
+                        user_id=session.user_id,
+                        job_id=job_obj.id,
+                        daily_limit=max_applications,
+                        execution_id=session.execution_id or session.run_id,
+                        ttl_seconds=300,
+                    )
+                    if not reservation:
+                        logger.warning(
+                            f"Atomic quota reservation limit reached for campaign [{session.campaign_id}] (limit={max_applications}). Stopping run safely."
+                        )
+                        await self._broadcast_event(
+                            session=session,
+                            event_name="QUOTA_EXHAUSTED",
+                            message=f"Campaign daily application quota limit reached ({max_applications}). Stopping run safely.",
+                            payload={"campaign_id": session.campaign_id, "limit": max_applications},
+                        )
+                        break
+
                 await self._broadcast_event(
                     session=session,
                     event_name="AUTO_APPLYING",
                     message=f"Auto-applying to [{job_obj.title} at {job_obj.company}]...",
-                    payload={"job_id": job_obj.id, "job_title": job_obj.title, "company": job_obj.company},
+                    payload={
+                        "job_id": job_obj.id,
+                        "job_title": job_obj.title,
+                        "company": job_obj.company,
+                        "platform": job_obj.source_type or source_type,
+                        "apply_url": job_obj.apply_url,
+                        "score": round(match_res.overall_score, 1),
+                    },
                 )
-                executed_app = await exec_app_uc.execute(
-                    application_id=app_entity.id,
-                    run_id=session.run_id,
-                    headless=headless,
-                )
-                if executed_app.workflow_state == WorkflowStateEnum.APPLIED:
-                    session.applications_submitted_count += 1
-                    await self._broadcast_event(
-                        session=session,
-                        event_name="APPLICATION_SUBMITTED",
-                        message=f"Application submitted successfully for [{job_obj.title} at {job_obj.company}].",
-                        payload={"job_id": job_obj.id, "application_id": executed_app.id, "job_title": job_obj.title, "company": job_obj.company},
+                try:
+                    executed_app = await exec_app_uc.execute(
+                        application_id=app_entity.id,
+                        run_id=session.run_id,
+                        headless=headless,
                     )
-                elif executed_app.workflow_state in (
-                    WorkflowStateEnum.PAUSED_OTP,
-                    WorkflowStateEnum.PAUSED_CAPTCHA,
-                ):
-                    session.pause()
-                    await self._broadcast_event(
-                        session=session,
-                        event_name="PAUSED_FOR_USER",
-                        message=f"Challenge encountered on {job_obj.company}. Automation paused for verification.",
-                    )
-                    await session.pause_event.wait()
+                    if executed_app.workflow_state == WorkflowStateEnum.APPLIED:
+                        if reservation and quota_repo:
+                            await quota_repo.consume_slot(reservation.id)
+                        session.applications_submitted_count += 1
+                        await self._broadcast_event(
+                            session=session,
+                            event_name="APPLICATION_SUBMITTED",
+                            message=f"Application submitted successfully for [{job_obj.title} at {job_obj.company}].",
+                            payload={
+                                "job_id": job_obj.id,
+                                "application_id": executed_app.id,
+                                "job_title": job_obj.title,
+                                "company": job_obj.company,
+                                "platform": job_obj.source_type or source_type,
+                                "score": round(match_res.overall_score, 1),
+                            },
+                        )
+                    elif executed_app.workflow_state in (
+                        WorkflowStateEnum.PAUSED_OTP,
+                        WorkflowStateEnum.PAUSED_CAPTCHA,
+                    ):
+                        if reservation and quota_repo:
+                            await quota_repo.release_slot(reservation.id)
+                        session.pause()
+                        await self._broadcast_event(
+                            session=session,
+                            event_name="PAUSED_FOR_USER",
+                            message=f"Challenge encountered on {job_obj.company}. Automation paused for verification.",
+                        )
+                        challenge_timeout_seconds = 300
+                        try:
+                            await asyncio.wait_for(session.pause_event.wait(), timeout=challenge_timeout_seconds)
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"Challenge intervention timed out after {challenge_timeout_seconds}s for job [{job_obj.id}]"
+                            )
+                            session.failed_applications_count += 1
+                            await self._broadcast_event(
+                                session=session,
+                                event_name="CHALLENGE_TIMEOUT",
+                                message=f"Intervention timed out ({challenge_timeout_seconds}s) on {job_obj.company}. Resuming pipeline.",
+                            )
+                            session.is_paused = False
+                            session.pause_event.set()
+                    else:
+                        if reservation and quota_repo:
+                            await quota_repo.release_slot(reservation.id)
+                except Exception as app_err:
+                    if reservation and quota_repo:
+                        try:
+                            await quota_repo.release_slot(reservation.id)
+                        except Exception:
+                            pass
+                    raise app_err
 
         if session.cancel_requested:
             if session._state_machine.can_transition_to(AutomationState.STOPPED):
@@ -511,23 +782,81 @@ class AutomationOrchestrator:
         message: str,
         payload: Optional[Dict[str, Any]] = None,
     ):
+        logger.info(f"[{session.run_id}] [{event_name}] {message}")
+        session._event_seq = getattr(session, "_event_seq", 0) + 1
+        event_id = f"{session.run_id}_evt_{session._event_seq}"
+        event_dict = {
+            "type": "AUTOMATION_TIMELINE_EVENT",
+            "id": event_id,
+            "seq": session._event_seq,
+            "run_id": session.run_id,
+            "event_name": event_name,
+            "state": session.active_state,
+            "message": message,
+            "stats": {
+                "discovered": session.discovered_jobs_count,
+                "matched": session.matched_jobs_count,
+                "applied": session.applications_submitted_count,
+            },
+            "payload": payload or {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        if hasattr(session, "events"):
+            session.events.append(event_dict)
+
         await ws_manager.broadcast_to_user(
             user_id=session.user_id,
-            message={
-                "type": "AUTOMATION_TIMELINE_EVENT",
-                "run_id": session.run_id,
-                "event_name": event_name,
-                "state": session.active_state,
-                "message": message,
-                "stats": {
-                    "discovered": session.discovered_jobs_count,
-                    "matched": session.matched_jobs_count,
-                    "applied": session.applications_submitted_count,
-                },
-                "payload": payload or {},
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
+            message=event_dict,
         )
+
+        # Persistent log to automation_events table and state synchronization to automation_runs
+        try:
+            from app.core.database import AsyncSessionLocal
+            from app.infrastructure.database.models.models import AutomationEventModel, AutomationRunModel
+
+            async def _persist_event():
+                try:
+                    async with AsyncSessionLocal() as db_sess:
+                        # 1. Ensure run exists or update stats
+                        run_m = await db_sess.get(AutomationRunModel, session.run_id)
+                        if run_m:
+                            run_m.status = session.status.value
+                            run_m.discovered_count = session.discovered_jobs_count
+                            run_m.matched_count = session.matched_jobs_count
+                            run_m.applied_count = session.applications_submitted_count
+                            run_m.failed_count = session.failed_applications_count
+                            run_m.current_job_title = session.current_job_title
+                            if session.error_message:
+                                run_m.error_message = session.error_message
+                            if session.status in (AutomationState.COMPLETED, AutomationState.ABORTED, AutomationState.FAILED):
+                                run_m.finished_at = session.completed_at or datetime.now(timezone.utc)
+
+                        # 2. Persist timeline event
+                        evt_model = AutomationEventModel(
+                            id=event_id,
+                            run_id=session.run_id,
+                            event_name=event_name,
+                            payload={
+                                "seq": session._event_seq,
+                                "message": message,
+                                "state": session.active_state,
+                                "stats": {
+                                    "discovered": session.discovered_jobs_count,
+                                    "matched": session.matched_jobs_count,
+                                    "applied": session.applications_submitted_count,
+                                },
+                                **(payload or {}),
+                            },
+                        )
+                        db_sess.add(evt_model)
+                        await db_sess.commit()
+                except Exception as persist_err:
+                    logger.warning(f"Failed to persist automation event [{event_name}] for run [{session.run_id}]: {persist_err}")
+
+            asyncio.create_task(_persist_event())
+        except Exception:
+            pass
 
 
 orchestrator = AutomationOrchestrator()

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 
 @pytest.mark.asyncio
-async def test_application_lifecycle_and_api_flow(client: AsyncClient):
+async def test_application_lifecycle_and_api_flow(client: AsyncClient, monkeypatch):
     # 1. Register & Login User
     user_payload = {
         "email": "candidate.apply@example.com",
@@ -58,7 +58,7 @@ async def test_application_lifecycle_and_api_flow(client: AsyncClient):
     from app.application.jobs import use_cases
 
     adapter_registry.register_source("mock_naukri", MockNaukriSourceAdapter)
-    use_cases.browser_manager = MockBrowserManager()
+    monkeypatch.setattr(use_cases, "browser_manager", MockBrowserManager())
 
     disc_resp = await client.post(
         "/api/v1/jobs/discover",
@@ -80,7 +80,11 @@ async def test_application_lifecycle_and_api_flow(client: AsyncClient):
     # 5. List Applications
     list_resp = await client.get("/api/v1/applications", headers=headers)
     assert list_resp.status_code == 200
-    apps = list_resp.json()
+    list_data = list_resp.json()
+    assert "items" in list_data
+    assert list_data["total"] >= 1
+    assert list_data["page"] == 1
+    apps = list_data["items"]
     assert len(apps) >= 1
     assert any(a["id"] == app_id for a in apps)
 
@@ -114,6 +118,7 @@ async def test_application_lifecycle_and_api_flow(client: AsyncClient):
         mock_page.screenshot = AsyncMock(return_value=b"fake_jpeg")
         mock_locator = MagicMock()
         mock_locator.first = mock_locator
+        mock_locator.wait_for = AsyncMock()
         mock_locator.click = AsyncMock()
         mock_locator.fill = AsyncMock()
         mock_locator.type = AsyncMock()
@@ -153,3 +158,39 @@ async def test_application_lifecycle_and_api_flow(client: AsyncClient):
             assert exec_resp.status_code == 200
             assert exec_resp.json()["workflow_state"] == "APPLIED"
             assert exec_resp.json()["applied_at"] is not None
+
+    # 10. IDOR and Screenshot Endpoint Verification with Second User
+    other_user = {
+        "email": "intruder.user@example.com",
+        "password": "Password123!",
+        "full_name": "Intruder User",
+    }
+    await client.post("/api/v1/auth/register", json=other_user)
+    other_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": other_user["email"], "password": other_user["password"]},
+    )
+    other_token = other_login.json()["access_token"]
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+
+    # Verify IDOR blocked on GET
+    idor_get = await client.get(f"/api/v1/applications/{app_id}", headers=other_headers)
+    assert idor_get.status_code == 403
+
+    # Verify IDOR blocked on actions
+    idor_retry = await client.post(f"/api/v1/applications/{app_id}/retry", headers=other_headers)
+    assert idor_retry.status_code == 403
+
+    idor_stop = await client.post(
+        f"/api/v1/applications/{app_id}/stop",
+        json={"reason": "Malicious stop"},
+        headers=other_headers,
+    )
+    assert idor_stop.status_code == 403
+
+    idor_screenshot = await client.get(f"/api/v1/applications/{app_id}/screenshot", headers=other_headers)
+    assert idor_screenshot.status_code == 403
+
+    # Verify screenshot endpoint 404 for authorized user when file not on disk
+    auth_screenshot = await client.get(f"/api/v1/applications/{app_id}/screenshot", headers=headers)
+    assert auth_screenshot.status_code == 404

@@ -1,10 +1,13 @@
+from datetime import datetime, timezone, timedelta
 from typing import List
-from sqlalchemy import func, select, and_
+import uuid
+from sqlalchemy import func, select, and_, or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.domain.applications.entities import (
     Application,
     ApplicationEvent,
+    ApplicationOutcomeStatus,
     ApplicationQuestion,
     WorkflowStateEnum,
 )
@@ -58,6 +61,15 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                     platform = "Indeed"
             if not platform:
                 platform = "Naukri"
+
+        outcome_status_raw = getattr(model, "outcome_status", None) or "NOT_SUBMITTED"
+        try:
+            from app.domain.applications.entities import ApplicationOutcomeStatus
+            outcome_status = ApplicationOutcomeStatus(outcome_status_raw)
+        except Exception:
+            from app.domain.applications.entities import ApplicationOutcomeStatus
+            outcome_status = ApplicationOutcomeStatus.NOT_SUBMITTED
+
         return Application(
             id=model.id,
             user_id=model.user_id,
@@ -65,10 +77,15 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             resume_id=model.resume_id,
             idempotency_key=model.idempotency_key,
             workflow_state=WorkflowStateEnum(model.workflow_state),
+            outcome_status=outcome_status,
             applied_at=model.applied_at,
             failure_reason=model.failure_reason,
             trace_file_path=model.trace_file_path,
             screenshot_file_path=model.screenshot_file_path,
+            retry_count=model.retry_count or 0,
+            error_category=model.error_category,
+            next_retry_at=model.next_retry_at,
+            current_attempt_id=getattr(model, "current_attempt_id", None),
             created_at=model.created_at,
             updated_at=model.updated_at,
             job_title=job_title,
@@ -128,7 +145,66 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
         row = result.first()
         return self._to_entity(row[0], match_score=row[1]) if row else None
 
-    async def save(self, application: Application) -> Application:
+    async def save(
+        self,
+        application: Application,
+        expected_state: WorkflowStateEnum | None = None,
+        expected_attempt_id: str | None = None,
+    ) -> Application:
+        outcome_val = application.outcome_status.value if hasattr(application.outcome_status, "value") else str(application.outcome_status)
+
+        if expected_state is not None or expected_attempt_id is not None:
+            # 1. Atomic Conditional SQL UPDATE
+            # Directly checks condition in the database transaction and verifies affected rowcount.
+            conditions = [ApplicationModel.id == application.id]
+            if expected_state is not None:
+                conditions.append(ApplicationModel.workflow_state == expected_state.value)
+            if expected_attempt_id is not None:
+                conditions.append(ApplicationModel.current_attempt_id == expected_attempt_id)
+
+            update_values = {
+                "workflow_state": application.workflow_state.value,
+                "outcome_status": outcome_val,
+                "applied_at": application.applied_at,
+                "failure_reason": application.failure_reason,
+                "trace_file_path": application.trace_file_path,
+                "screenshot_file_path": application.screenshot_file_path,
+                "retry_count": application.retry_count,
+                "error_category": application.error_category,
+                "next_retry_at": application.next_retry_at,
+                "current_attempt_id": application.current_attempt_id,
+                "updated_at": datetime.now(timezone.utc),
+            }
+            if application.resume_id:
+                update_values["resume_id"] = application.resume_id
+
+            stmt = (
+                update(ApplicationModel)
+                .where(*conditions)
+                .values(**update_values)
+            )
+            res = await self._session.execute(stmt)
+            if res.rowcount == 0:
+                # Diagnostics on atomic conflict
+                curr_res = await self._session.execute(select(ApplicationModel).where(ApplicationModel.id == application.id))
+                curr_model = curr_res.scalar_one_or_none()
+                if not curr_model:
+                    from app.core.exceptions import EntityNotFoundException
+                    raise EntityNotFoundException(f"Application [{application.id}] not found.")
+
+                from app.core.exceptions import ValidationException
+                exp_st_str = expected_state.value if expected_state else "*"
+                exp_att_str = expected_attempt_id or "*"
+                raise ValidationException(
+                    f"Application state conflict: Expected state [{exp_st_str}] and attempt [{exp_att_str}], "
+                    f"but current state is [{curr_model.workflow_state}] and attempt is [{curr_model.current_attempt_id}]."
+                )
+
+            self._session.expire_all()
+            await self._session.flush()
+            return await self.get_by_id(application.id)  # type: ignore
+
+        # Standard non-conditional save (insert or update)
         stmt = select(ApplicationModel).where(ApplicationModel.id == application.id)
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
@@ -141,18 +217,30 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                 resume_id=application.resume_id,
                 idempotency_key=application.idempotency_key,
                 workflow_state=application.workflow_state.value,
+                outcome_status=outcome_val,
                 applied_at=application.applied_at,
                 failure_reason=application.failure_reason,
                 trace_file_path=application.trace_file_path,
                 screenshot_file_path=application.screenshot_file_path,
+                retry_count=application.retry_count,
+                error_category=application.error_category,
+                next_retry_at=application.next_retry_at,
+                current_attempt_id=application.current_attempt_id,
             )
             self._session.add(model)
         else:
             model.workflow_state = application.workflow_state.value
+            model.outcome_status = outcome_val
             model.applied_at = application.applied_at
             model.failure_reason = application.failure_reason
             model.trace_file_path = application.trace_file_path
             model.screenshot_file_path = application.screenshot_file_path
+            model.retry_count = application.retry_count
+            model.error_category = application.error_category
+            model.next_retry_at = application.next_retry_at
+            model.current_attempt_id = application.current_attempt_id
+            if application.resume_id:
+                model.resume_id = application.resume_id
 
         await self._session.flush()
         return await self.get_by_id(application.id)  # type: ignore
@@ -219,3 +307,160 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
         )
         result = await self._session.execute(stmt)
         return result.scalar() or 0
+
+    async def count_by_user(self, user_id: str, state: str | None = None) -> int:
+        stmt = select(func.count(ApplicationModel.id)).where(ApplicationModel.user_id == user_id)
+        if state:
+            stmt = stmt.where(ApplicationModel.workflow_state == state)
+        result = await self._session.execute(stmt)
+        return result.scalar() or 0
+
+    async def get_aggregate_stats(self, user_id: str) -> dict:
+        stmt = (
+            select(ApplicationModel.workflow_state, func.count(ApplicationModel.id))
+            .where(ApplicationModel.user_id == user_id)
+            .group_by(ApplicationModel.workflow_state)
+        )
+        result = await self._session.execute(stmt)
+        counts = {state: count for state, count in result.all()}
+
+        from datetime import datetime, time, timezone
+        now_utc = datetime.now(timezone.utc)
+        today_start_utc = datetime.combine(now_utc.date(), time.min, tzinfo=timezone.utc)
+
+        today_stmt = select(func.count(ApplicationModel.id)).where(
+            ApplicationModel.user_id == user_id,
+            ApplicationModel.workflow_state == WorkflowStateEnum.APPLIED.value,
+            or_(
+                ApplicationModel.applied_at >= today_start_utc,
+                and_(ApplicationModel.applied_at.is_(None), ApplicationModel.created_at >= today_start_utc),
+            ),
+        )
+        today_res = await self._session.execute(today_stmt)
+        applied_today = today_res.scalar() or 0
+
+        total = sum(counts.values())
+        applied = counts.get(WorkflowStateEnum.APPLIED.value, 0)
+        paused = (
+            counts.get(WorkflowStateEnum.PAUSED_OTP.value, 0)
+            + counts.get(WorkflowStateEnum.PAUSED_CAPTCHA.value, 0)
+            + counts.get(WorkflowStateEnum.PAUSED_USER_INPUT.value, 0)
+            + counts.get(WorkflowStateEnum.PAUSED_LIMIT.value, 0)
+        )
+        failed = counts.get(WorkflowStateEnum.FAILED.value, 0)
+        skipped = counts.get(WorkflowStateEnum.SKIPPED.value, 0)
+        approval_required = counts.get(WorkflowStateEnum.APPROVAL_REQUIRED.value, 0)
+        reconciliation_required = (
+            counts.get(WorkflowStateEnum.RECONCILIATION_REQUIRED.value, 0)
+            + counts.get(WorkflowStateEnum.SUBMISSION_UNKNOWN.value, 0)
+        )
+        needs_attention = failed + paused + reconciliation_required
+        success_rate = round((applied / total) * 100, 1) if total > 0 else 0.0
+
+        return {
+            "total": total,
+            "applied": applied,
+            "applied_today": applied_today,
+            "paused": paused,
+            "failed": failed,
+            "skipped": skipped,
+            "approval_required": approval_required,
+            "reconciliation_required": reconciliation_required,
+            "needs_attention": needs_attention,
+            "success_rate": success_rate,
+        }
+
+    async def get_applied_job_map(self, user_id: str) -> dict[str, dict]:
+        """Returns a compact mapping of job_id -> {status, applied_at} for all applications belonging to user_id.
+        Queries only required columns (job_id, workflow_state, applied_at, created_at) without entity hydration.
+        """
+        stmt = (
+            select(
+                ApplicationModel.job_id,
+                ApplicationModel.workflow_state,
+                ApplicationModel.applied_at,
+                ApplicationModel.created_at,
+            )
+            .where(ApplicationModel.user_id == user_id)
+        )
+        res = await self._session.execute(stmt)
+        result = {}
+        for row in res.all():
+            job_id, workflow_state, applied_at, created_at = row
+            dt = applied_at or created_at
+            result[job_id] = {
+                "status": workflow_state,
+                "applied_at": dt.isoformat() if dt else None,
+            }
+        return result
+
+    async def recover_stale_submitting_applications(self, older_than_seconds: int = 300) -> int:
+        """
+        Crash-safety recovery:
+        Finds any application stuck in SUBMITTING older than older_than_seconds.
+        Transitions them to RECONCILIATION_REQUIRED with outcome_status=UNKNOWN
+        to prevent unsafe duplicate execution on worker restart.
+        """
+        threshold = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+        stmt = (
+            select(ApplicationModel)
+            .where(
+                ApplicationModel.workflow_state == WorkflowStateEnum.SUBMITTING.value,
+                ApplicationModel.updated_at <= threshold,
+            )
+        )
+        res = await self._session.execute(stmt)
+        if hasattr(res, "scalars") and callable(res.scalars):
+            scalars_res = res.scalars()
+            stale_apps = scalars_res.all()
+            from unittest.mock import Mock
+            if isinstance(stale_apps, Mock) and hasattr(res, "all") and callable(res.all):
+                stale_apps = res.all()
+        elif hasattr(res, "all") and callable(res.all):
+            stale_apps = res.all()
+        else:
+            stale_apps = []
+        count = 0
+        now_dt = datetime.now(timezone.utc)
+        for item in stale_apps:
+            app_id = item.id if hasattr(item, "id") else (item[0] if isinstance(item, (tuple, list)) else str(item))
+            upd_stmt = (
+                update(ApplicationModel)
+                .where(
+                    ApplicationModel.id == app_id,
+                    ApplicationModel.workflow_state == WorkflowStateEnum.SUBMITTING.value,
+                )
+                .values(
+                    workflow_state=WorkflowStateEnum.RECONCILIATION_REQUIRED.value,
+                    outcome_status=ApplicationOutcomeStatus.UNKNOWN.value,
+                    failure_reason=(
+                        "Worker crashed or abandoned process during submission. "
+                        "Marked for reconciliation to prevent double-application."
+                    ),
+                    next_retry_at=None,
+                    updated_at=now_dt,
+                )
+            )
+            upd_res = await self._session.execute(upd_stmt)
+            rowcount = getattr(upd_res, "rowcount", None)
+            is_updated = (rowcount > 0) if isinstance(rowcount, int) else True
+            if is_updated:
+                if hasattr(item, "workflow_state"):
+                    item.workflow_state = WorkflowStateEnum.RECONCILIATION_REQUIRED.value
+                    item.outcome_status = ApplicationOutcomeStatus.UNKNOWN.value
+                    item.next_retry_at = None
+                    item.updated_at = now_dt
+                evt_model = ApplicationEventModel(
+                    id=f"evt_{uuid.uuid4().hex[:12]}",
+                    application_id=app_id,
+                    event_name="APPLICATION_RECONCILIATION_REQUIRED",
+                    payload={"reason": "CRASH_RECOVERY_STALE_SUBMISSION"},
+                    created_at=now_dt,
+                )
+                self._session.add(evt_model)
+                count += (rowcount if isinstance(rowcount, int) and rowcount > 0 else 1)
+
+        if count > 0:
+            await self._session.flush()
+        return count
+

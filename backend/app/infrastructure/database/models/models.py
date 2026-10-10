@@ -50,6 +50,7 @@ class UserModel(Base):
     applications = relationship("ApplicationModel", back_populates="user", cascade="all, delete-orphan")
     match_results = relationship("MatchResultModel", back_populates="user", cascade="all, delete-orphan")
     automation_runs = relationship("AutomationRunModel", back_populates="user", cascade="all, delete-orphan")
+    campaigns = relationship("CampaignModel", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserSessionModel(Base):
@@ -208,6 +209,8 @@ class JobModel(Base):
     posted_at_source = Column(String(64), nullable=True)
     freshness_bucket = Column(String(32), default="UNKNOWN", nullable=False, index=True)
     freshness_score = Column(Float, default=0.0, nullable=False)
+    canonical_job_key = Column(String(64), nullable=True, index=True)
+    canonical_confidence = Column(String(32), default="PLATFORM_EXACT", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -227,20 +230,54 @@ class MatchResultModel(Base):
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
     resume_id = Column(String(36), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
-    overall_score = Column(Float, default=0.0, nullable=False)
-    hard_filter_passed = Column(Boolean, default=True, nullable=False)
+    evaluation_key = Column(String(64), default="", nullable=False, index=True)
+
+    # Core Dual Scores
+    match_score = Column(Float, default=0.0, nullable=False, index=True)
+    recommendation_score = Column(Float, nullable=True, index=True)
+    overall_score = Column(Float, default=0.0, nullable=False)  # [DEPRECATED] Synced with match_score for backward compatibility
+
+    # Dimensional Breakdown Scores
     skill_match_score = Column(Float, default=0.0, nullable=False)
+    experience_score = Column(Float, default=0.0, nullable=False)
+    role_title_score = Column(Float, default=0.0, nullable=False)
+    location_score = Column(Float, default=0.0, nullable=False)
+    salary_score = Column(Float, default=0.0, nullable=False)
     semantic_score = Column(Float, default=0.0, nullable=False)
+    freshness_score = Column(Float, default=0.0, nullable=False)
+    ai_score = Column(Float, default=0.0, nullable=False)
+
+    # Immutable Snapshot Hashes & Version Metadata
+    resume_version = Column(Integer, default=1, nullable=False)
+    resume_snapshot_hash = Column(String(64), default="", nullable=False)
+    profile_version = Column(Integer, default=1, nullable=False)
+    profile_snapshot_hash = Column(String(64), default="", nullable=False)
+    job_snapshot_hash = Column(String(64), default="", nullable=False)
+    matching_engine_version = Column(String(32), default="4.0.0", nullable=False)
+    matching_config_version = Column(String(32), default="v1", nullable=False)
+    prompt_version = Column(String(32), default="match-v2", nullable=False)
+    embedding_model = Column(String(64), default="all-MiniLM-L6-v2", nullable=False)
+    embedding_version = Column(String(32), default="2026.1", nullable=False)
+
+    # Decisions & Explainability
+    hard_filter_passed = Column(Boolean, default=True, nullable=False)
+    decision = Column(String(32), default="REQUIRE_APPROVAL", nullable=False, index=True)
     reasoning_summary = Column(Text, default="", nullable=False)
+    recommendation_reasons = Column(JSON, default=list, nullable=False)
+    blocking_reasons = Column(JSON, default=list, nullable=False)
     matched_skills = Column(JSON, default=list, nullable=False)
     missing_skills = Column(JSON, default=list, nullable=False)
-    decision = Column(String(32), default="REQUIRE_APPROVAL", nullable=False)
+    breakdown_json = Column(JSON, default=dict, nullable=False)
+
+    # Telemetry
     ai_provider_used = Column(String(32), default="groq", nullable=False)
+    ai_model = Column(String(64), nullable=True)
+    duration_ms = Column(Integer, default=0, nullable=False)
     scoring_version = Column(String(16), default="v1", nullable=False)
-    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
 
     __table_args__ = (
-        UniqueConstraint("user_id", "job_id", name="uq_user_job_match"),
+        UniqueConstraint("user_id", "job_id", "evaluation_key", name="uq_user_job_evaluation_key"),
     )
 
     user = relationship("UserModel", back_populates="match_results")
@@ -297,10 +334,15 @@ class ApplicationModel(Base):
     resume_id = Column(String(36), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
     idempotency_key = Column(String(255), unique=True, nullable=False, index=True)
     workflow_state = Column(String(32), default="DISCOVERED", nullable=False, index=True)
+    outcome_status = Column(String(32), default="NOT_SUBMITTED", nullable=False, index=True)
     applied_at = Column(DateTime(timezone=True), nullable=True)
     failure_reason = Column(Text, nullable=True)
     trace_file_path = Column(String(512), nullable=True)
     screenshot_file_path = Column(String(512), nullable=True)
+    retry_count = Column(Integer, default=0, nullable=False)
+    error_category = Column(String(64), nullable=True)
+    next_retry_at = Column(DateTime(timezone=True), nullable=True)
+    current_attempt_id = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -392,4 +434,179 @@ class AutomationEventModel(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     run = relationship("AutomationRunModel", back_populates="events")
+
+
+class CampaignModel(Base):
+    __tablename__ = "campaigns"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    state = Column(String(32), default="DRAFT", nullable=False, index=True)
+    target_resume_id = Column(String(36), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    user = relationship("UserModel", back_populates="campaigns")
+    target_resume = relationship("ResumeModel")
+    rule = relationship("CampaignRuleModel", back_populates="campaign", uselist=False, cascade="all, delete-orphan")
+    safety_policy = relationship("CampaignSafetyPolicyModel", back_populates="campaign", uselist=False, cascade="all, delete-orphan")
+    schedule = relationship("CampaignScheduleModel", back_populates="campaign", uselist=False, cascade="all, delete-orphan")
+    executions = relationship("CampaignExecutionModel", back_populates="campaign", cascade="all, delete-orphan")
+
+
+class CampaignRuleModel(Base):
+    __tablename__ = "campaign_rules"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    campaign_id = Column(String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    auto_apply_threshold = Column(Float, default=80.0, nullable=False)
+    review_threshold = Column(Float, default=65.0, nullable=False)
+    min_experience_years = Column(Float, default=0.0, nullable=False)
+    max_experience_years = Column(Float, default=10.0, nullable=False)
+    target_roles = Column(JSON, default=list, nullable=False)
+    target_locations = Column(JSON, default=list, nullable=False)
+    mandatory_skills = Column(JSON, default=list, nullable=False)
+    excluded_keywords = Column(JSON, default=list, nullable=False)
+    target_platforms = Column(JSON, default=list, nullable=False)
+
+    campaign = relationship("CampaignModel", back_populates="rule")
+
+
+class CampaignSafetyPolicyModel(Base):
+    __tablename__ = "campaign_safety_policies"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    campaign_id = Column(String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    daily_application_limit = Column(Integer, default=20, nullable=False)
+    hourly_application_limit = Column(Integer, default=5, nullable=False)
+    cooldown_seconds = Column(Integer, default=90, nullable=False)
+    operating_start_time = Column(String(8), default="09:00", nullable=False)
+    operating_end_time = Column(String(8), default="18:00", nullable=False)
+    max_concurrent_applications = Column(Integer, default=1, nullable=False)
+
+    campaign = relationship("CampaignModel", back_populates="safety_policy")
+
+
+class CampaignScheduleModel(Base):
+    __tablename__ = "campaign_schedules"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    campaign_id = Column(String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    is_active = Column(Boolean, default=False, nullable=False)
+    cron_expression = Column(String(64), nullable=True)
+    interval_minutes = Column(Integer, default=240, nullable=True)
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    next_run_at = Column(DateTime(timezone=True), nullable=True)
+
+    campaign = relationship("CampaignModel", back_populates="schedule")
+
+
+class CampaignExecutionModel(Base):
+    __tablename__ = "campaign_executions"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    campaign_id = Column(String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(32), default="RUNNING", nullable=False, index=True)
+    worker_id = Column(String(64), nullable=True, default="worker-1")
+    heartbeat_at = Column(DateTime(timezone=True), default=utc_now, nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    lease_version = Column(Integer, default=1, nullable=False)
+    started_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    discovered_count = Column(Integer, default=0, nullable=False)
+    qualified_count = Column(Integer, default=0, nullable=False)
+    queued_count = Column(Integer, default=0, nullable=False)
+    submitted_count = Column(Integer, default=0, nullable=False)
+    failed_count = Column(Integer, default=0, nullable=False)
+    error_message = Column(Text, nullable=True)
+
+    campaign = relationship("CampaignModel", back_populates="executions")
+    job_items = relationship("CampaignJobItemModel", back_populates="execution", cascade="all, delete-orphan")
+    activity_logs = relationship("CampaignActivityLogModel", back_populates="execution", cascade="all, delete-orphan")
+
+
+class CampaignJobItemModel(Base):
+    __tablename__ = "campaign_job_items"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    execution_id = Column(String(36), ForeignKey("campaign_executions.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    match_score = Column(Float, default=0.0, nullable=False)
+    decision = Column(String(32), default="AUTO_APPLY", nullable=False)
+    queue_status = Column(String(32), default="PENDING", nullable=False, index=True)
+    retry_count = Column(Integer, default=0, nullable=False)
+    error_category = Column(String(64), nullable=True)
+    next_retry_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    failure_reason = Column(Text, nullable=True)
+    processed_at = Column(DateTime(timezone=True), nullable=True)
+
+    execution = relationship("CampaignExecutionModel", back_populates="job_items")
+
+
+class CampaignActivityLogModel(Base):
+    __tablename__ = "campaign_activity_logs"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    execution_id = Column(String(36), ForeignKey("campaign_executions.id", ondelete="CASCADE"), nullable=False, index=True)
+    level = Column(String(16), default="INFO", nullable=False)
+    event_type = Column(String(64), default="GENERAL", nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    payload = Column(JSON, default=dict, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    execution = relationship("CampaignExecutionModel", back_populates="activity_logs")
+
+
+class QuotaReservationModel(Base):
+    __tablename__ = "campaign_quota_reservations"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    campaign_id = Column(String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    execution_id = Column(String(36), ForeignKey("campaign_executions.id", ondelete="CASCADE"), nullable=True, index=True)
+    job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(32), default="RESERVED", nullable=False, index=True)  # RESERVED | CONSUMED | RELEASED | EXPIRED
+    reserved_at = Column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    released_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "job_id", name="uq_campaign_job_reservation"),
+    )
+
+
+class MatchingTaskModel(Base):
+    __tablename__ = "matching_tasks"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    campaign_id = Column(String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=True, index=True)
+    resume_id = Column(String(36), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
+
+    task_idempotency_key = Column(String(64), nullable=False, index=True)
+    status = Column(String(32), default="QUEUED", nullable=False, index=True)  # QUEUED | LEASED | COMPLETED | RETRY | FAILED
+    attempt_count = Column(Integer, default=0, nullable=False)
+    max_attempts = Column(Integer, default=3, nullable=False)
+
+    # Worker Lease & Fencing (Phase 3.5 contract reuse)
+    worker_id = Column(String(64), nullable=True, index=True)
+    lease_version = Column(Integer, default=1, nullable=False)
+    leased_at = Column(DateTime(timezone=True), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "job_id", "task_idempotency_key", name="uq_user_job_task_idempotency"),
+    )
+
+
 

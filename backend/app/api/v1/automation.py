@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Optional
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger("app.api.v1.automation")
 from app.api.deps import (
     get_ai_gateway,
     get_application_repository,
@@ -13,6 +16,8 @@ from app.api.deps import (
     get_profile_repository,
     get_resume_repository,
     get_user_repository,
+    get_campaign_execution_repository,
+    get_campaign_repository,
 )
 from app.application.automation.orchestrator import (
     AutomationRunStatus,
@@ -43,7 +48,11 @@ class StartRunRequest(BaseModel):
     prefer_fresh_hours: Optional[float] = 6.0
     auto_apply_threshold: float = 85.0
     approval_threshold: float = 70.0
-    headless: bool = False  # False = 🖥️ Visible Desktop Window (Default), True = Silent Background
+    headless: bool = True  # True = ⚡ Silent Background (Default), False = 🖥️ Visible Desktop Window
+    execution_id: Optional[str] = None
+    campaign_id: Optional[str] = None
+    worker_id: Optional[str] = "worker-1"
+    resume_id: Optional[str] = None
 
 
 class RunStatusResponse(BaseModel):
@@ -109,6 +118,7 @@ async def start_automation_run(
     match_repo=Depends(get_matching_repository),
     app_repo=Depends(get_application_repository),
     user_repo=Depends(get_user_repository),
+    campaign_repo=Depends(get_campaign_repository),
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)] = None,
 ):
     existing_run = orchestrator.get_active_user_run(current_user.id)
@@ -117,6 +127,27 @@ async def start_automation_run(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"An active automation run [{existing_run.run_id}] is already in progress.",
         )
+
+    # Determine effective resume: explicit request resume > campaign target resume
+    effective_resume_id = req.resume_id
+    if not effective_resume_id and req.campaign_id and campaign_repo:
+        campaign = await campaign_repo.get_by_id(req.campaign_id)
+        if campaign and campaign.target_resume_id:
+            effective_resume_id = campaign.target_resume_id
+
+    # Strict multi-tenancy & existence verification for effective resume
+    if effective_resume_id:
+        resume_entity = await resume_repo.get_by_id(effective_resume_id)
+        if not resume_entity:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Resume [{effective_resume_id}] not found.",
+            )
+        if resume_entity.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unauthorized access to specified resume.",
+            )
 
     rule = MatchRule(
         skills_weight=req.skills_weight,
@@ -148,6 +179,10 @@ async def start_automation_run(
         user_repo=user_repo,
         ai_gateway=ai_gateway,
         headless=req.headless,
+        execution_id=req.execution_id,
+        campaign_id=req.campaign_id,
+        worker_id=req.worker_id or "worker-1",
+        resume_id=effective_resume_id,
     )
     return _to_run_response(session)
 
@@ -157,13 +192,49 @@ async def get_active_user_run(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     session = orchestrator.get_active_user_run(current_user.id)
-    if not session or session.status in (
+    if session and session.status not in (
         AutomationRunStatus.COMPLETED,
         AutomationRunStatus.ABORTED,
         AutomationRunStatus.FAILED,
     ):
-        return None
-    return _to_run_response(session)
+        return _to_run_response(session)
+
+    # Database fallback for active runs across worker restarts
+    from app.core.database import AsyncSessionLocal
+    from app.infrastructure.database.models.models import AutomationRunModel
+    from sqlalchemy import select, desc
+
+    async with AsyncSessionLocal() as db_session:
+        active_statuses = ["RUNNING", "STARTING", "PAUSED"]
+        stmt = (
+            select(AutomationRunModel)
+            .where(
+                AutomationRunModel.user_id == current_user.id,
+                AutomationRunModel.status.in_(active_statuses),
+            )
+            .order_by(desc(AutomationRunModel.created_at))
+            .limit(1)
+        )
+        res = await db_session.execute(stmt)
+        model = res.scalar_one_or_none()
+        if model:
+            status_enum = AutomationRunStatus(model.status) if model.status in AutomationRunStatus._value2member_map_ else AutomationRunStatus.RUNNING
+            return RunStatusResponse(
+                run_id=model.id,
+                user_id=model.user_id,
+                status=status_enum,
+                active_state=model.status,
+                is_paused=(model.status == "PAUSED"),
+                discovered_jobs_count=model.discovered_count,
+                matched_jobs_count=model.matched_count,
+                applications_submitted_count=model.applied_count,
+                current_job_title=model.current_job_title,
+                current_application_id=model.current_job_id,
+                error_message=model.error_message,
+                created_at=model.created_at,
+                completed_at=model.finished_at,
+            )
+    return None
 
 
 @router.get("/runs/{run_id}", response_model=RunStatusResponse)
@@ -172,20 +243,109 @@ async def get_run_status(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     session = orchestrator.get_session(run_id)
-    if not session or session.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
-    return _to_run_response(session)
+    if session:
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
+        return _to_run_response(session)
+
+    # Database fallback for completed or persisted runs
+    from app.core.database import AsyncSessionLocal
+    from app.infrastructure.database.models.models import AutomationRunModel
+    from sqlalchemy import select
+
+    async with AsyncSessionLocal() as db_session:
+        stmt = select(AutomationRunModel).where(AutomationRunModel.id == run_id)
+        res = await db_session.execute(stmt)
+        model = res.scalar_one_or_none()
+        if not model or model.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
+
+        status_enum = AutomationRunStatus(model.status) if model.status in AutomationRunStatus._value2member_map_ else AutomationRunStatus.COMPLETED
+        return RunStatusResponse(
+            run_id=model.id,
+            user_id=model.user_id,
+            status=status_enum,
+            active_state=model.status,
+            is_paused=(model.status == "PAUSED"),
+            discovered_jobs_count=model.discovered_count,
+            matched_jobs_count=model.matched_count,
+            applications_submitted_count=model.applied_count,
+            current_job_title=model.current_job_title,
+            current_application_id=model.current_job_id,
+            error_message=model.error_message,
+            created_at=model.created_at,
+            completed_at=model.finished_at,
+        )
+
+
+@router.get("/runs/{run_id}/events", response_model=List[Dict[str, Any]])
+async def get_run_events(
+    run_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    session = orchestrator.get_session(run_id)
+    if session:
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access to run.")
+        return getattr(session, "events", [])
+
+    # Database fallback for finished/historical runs
+    from app.core.database import AsyncSessionLocal
+    from app.infrastructure.database.models.models import AutomationEventModel, AutomationRunModel
+    from sqlalchemy import select
+
+    async with AsyncSessionLocal() as db_session:
+        run_stmt = select(AutomationRunModel).where(AutomationRunModel.id == run_id)
+        run_res = await db_session.execute(run_stmt)
+        run_model = run_res.scalar_one_or_none()
+        if run_model and run_model.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access to run.")
+
+        stmt = (
+            select(AutomationEventModel)
+            .where(AutomationEventModel.run_id == run_id)
+            .order_by(AutomationEventModel.created_at.asc())
+        )
+        res = await db_session.execute(stmt)
+        events = res.scalars().all()
+        return [
+            {
+                "type": "AUTOMATION_TIMELINE_EVENT",
+                "id": e.id,
+                "seq": (e.payload or {}).get("seq"),
+                "run_id": e.run_id,
+                "event_name": e.event_name,
+                "state": (e.payload or {}).get("state", "RUNNING"),
+                "message": (e.payload or {}).get("message", e.event_name),
+                "stats": (e.payload or {}).get("stats", {}),
+                "payload": e.payload or {},
+                "timestamp": e.created_at.isoformat() if e.created_at else "",
+            }
+            for e in events
+        ]
 
 
 @router.post("/runs/{run_id}/pause", response_model=RunStatusResponse)
 async def pause_run(
     run_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
+    execution_repo=Depends(get_campaign_execution_repository),
 ):
     session = orchestrator.get_session(run_id)
     if not session or session.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
     session.pause()
+
+    # Synchronize database CampaignExecution if linked
+    if session.execution_id:
+        try:
+            exec_model = await execution_repo.get_by_id(session.execution_id)
+            if exec_model:
+                exec_model.status = "PAUSED_USER"
+                await execution_repo.save(exec_model)
+        except Exception as e:
+            logger.warning(f"Failed to sync pause state to execution [{session.execution_id}]: {e}")
+
     return _to_run_response(session)
 
 
@@ -194,11 +354,23 @@ async def resume_run(
     run_id: str,
     req: ResumeRunRequest,
     current_user: Annotated[User, Depends(get_current_user)],
+    execution_repo=Depends(get_campaign_execution_repository),
 ):
     session = orchestrator.get_session(run_id)
     if not session or session.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
     session.resume(user_input=req.user_input)
+
+    # Synchronize database CampaignExecution if linked
+    if session.execution_id:
+        try:
+            exec_model = await execution_repo.get_by_id(session.execution_id)
+            if exec_model:
+                exec_model.status = "RUNNING"
+                await execution_repo.save(exec_model)
+        except Exception as e:
+            logger.warning(f"Failed to sync resume state to execution [{session.execution_id}]: {e}")
+
     return _to_run_response(session)
 
 
@@ -207,11 +379,24 @@ async def stop_run(
     run_id: str,
     req: StopRunRequest,
     current_user: Annotated[User, Depends(get_current_user)],
+    execution_repo=Depends(get_campaign_execution_repository),
 ):
     session = orchestrator.get_session(run_id)
     if not session or session.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
     session.abort(reason=req.reason or "Aborted by user")
+
+    # Synchronize database CampaignExecution if linked
+    if session.execution_id:
+        try:
+            exec_model = await execution_repo.get_by_id(session.execution_id)
+            if exec_model:
+                exec_model.status = "ABORTED"
+                exec_model.completed_at = datetime.now(timezone.utc)
+                await execution_repo.save(exec_model)
+        except Exception as e:
+            logger.warning(f"Failed to sync stop state to execution [{session.execution_id}]: {e}")
+
     return _to_run_response(session)
 
 

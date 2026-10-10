@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from app.domain.applications.entities import Application, ApplicationEvent, ApplicationQuestion
+from app.domain.applications.entities import Application, ApplicationEvent, ApplicationQuestion, WorkflowStateEnum
 
 
 class ApplicationRepository(ABC):
@@ -13,7 +13,12 @@ class ApplicationRepository(ABC):
         pass
 
     @abstractmethod
-    async def save(self, application: Application) -> Application:
+    async def save(
+        self,
+        application: Application,
+        expected_state: WorkflowStateEnum | None = None,
+        expected_attempt_id: str | None = None,
+    ) -> Application:
         pass
 
     @abstractmethod
@@ -37,3 +42,20 @@ class ApplicationRepository(ABC):
     @abstractmethod
     async def count_by_state(self, user_id: str, state: str) -> int:
         pass
+
+    @abstractmethod
+    async def count_by_user(self, user_id: str, state: str | None = None) -> int:
+        pass
+
+    @abstractmethod
+    async def get_aggregate_stats(self, user_id: str) -> dict:
+        pass
+
+    @abstractmethod
+    async def get_applied_job_map(self, user_id: str) -> dict:
+        pass
+
+    @abstractmethod
+    async def recover_stale_submitting_applications(self, older_than_seconds: int = 300) -> int:
+        pass
+

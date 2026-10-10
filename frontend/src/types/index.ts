@@ -16,13 +16,17 @@ export type WorkflowState =
   | 'PAUSED_CAPTCHA'
   | 'PAUSED_USER_INPUT'
   | 'PAUSED_AUTH_EXPIRED'
+  | 'PAUSED_SESSION'
+  | 'PAUSED_LIMIT'
   | 'RETRY_QUEUED'
+  | 'SUBMISSION_UNKNOWN'
+  | 'RECONCILIATION_REQUIRED'
   | 'FAILED'
   | 'SKIPPED'
   | 'REJECTED'
   | 'EXPIRED';
 
-export type DecisionType = 'AUTO_APPLY' | 'REQUIRE_APPROVAL' | 'SAVE' | 'SKIP' | 'REJECT';
+export type DecisionType = 'AUTO_APPLY' | 'REQUIRE_APPROVAL' | 'SAVE' | 'REJECT';
 
 export interface User {
   id: string;
@@ -82,6 +86,8 @@ export interface Job {
   source_id: string;
   source_type?: string;
   external_job_id: string;
+  canonical_job_key?: string | null;
+  canonical_confidence?: number | null;
   title: string;
   company: string;
   location: string;
@@ -105,16 +111,42 @@ export interface Job {
   updated_at?: string;
 }
 
+export interface MatchBreakdown {
+  skill_score: number;
+  experience_score: number;
+  role_title_score: number;
+  location_score: number;
+  salary_score: number;
+  semantic_score: number;
+  freshness_score: number;
+  ai_score: number;
+}
+
 export interface MatchResult {
   id: string;
   user_id: string;
   job_id: string;
   resume_id?: string;
+  evaluation_key?: string;
+  match_score?: number;
+  recommendation_score?: number | null;
   overall_score: number;
   hard_filter_passed: boolean;
   skill_match_score: number;
+  experience_score?: number;
+  role_title_score?: number;
+  location_score?: number;
+  salary_score?: number;
   semantic_score: number;
   freshness_score?: number;
+  ai_score?: number;
+  breakdown?: MatchBreakdown | Record<string, number>;
+  recommendation_reasons?: string[];
+  blocking_reasons?: string[];
+  resume_version?: number;
+  matching_engine_version?: string;
+  embedding_model?: string;
+  embedding_version?: string;
   reasoning_summary: string;
   matched_skills: string[];
   missing_skills: string[];
@@ -145,6 +177,7 @@ export interface Application {
   resume_id?: string;
   idempotency_key: string;
   workflow_state: WorkflowState;
+  outcome_status?: string;
   applied_at?: string;
   failure_reason?: string;
   trace_file_path?: string;
@@ -164,14 +197,30 @@ export interface Application {
   apply_url?: string;
   platform?: string;
   match_score?: number;
+  retry_count?: number;
+  error_category?: string;
+  next_retry_at?: string;
 }
 
 export interface ApplicationStats {
   total: number;
   applied: number;
+  applied_today?: number;
   paused: number;
   failed: number;
+  skipped?: number;
   approval_required: number;
+  reconciliation_required?: number;
+  needs_attention?: number;
+  success_rate?: number;
+}
+
+export interface PaginatedApplicationsResponse {
+  items: Application[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 }
 
 export interface AutomationRunStatus {
@@ -191,6 +240,8 @@ export interface AutomationRunStatus {
 }
 
 export interface TimelineEvent {
+  id?: string;
+  seq?: number;
   run_id: string;
   event_name: string;
   state: string;
@@ -227,10 +278,19 @@ export interface FunnelStageMetric {
 export interface FunnelOverview {
   total_discovered: number;
   total_matched: number;
-  total_applied: number;
+  total_triggered: number;
+  total_submitted: number;
+  total_responded: number;
   total_interviewed: number;
   total_offered: number;
   total_rejected: number;
+  match_rate_pct: number;
+  trigger_rate_pct: number;
+  submission_rate_pct: number;
+  response_rate_pct: number;
+  interview_rate_pct: number;
+  offer_rate_pct: number;
+  total_applied: number;
   stages: FunnelStageMetric[];
 }
 
@@ -239,8 +299,12 @@ export interface ResumePerformanceMetric {
   label: string;
   target_role: string;
   applications_count: number;
+  response_count?: number;
   interview_count: number;
   offer_count: number;
+  response_rate_pct?: number;
+  interview_rate_pct?: number;
+  offer_rate_pct?: number;
   conversion_rate_pct: number;
 }
 
@@ -248,6 +312,33 @@ export interface SourcePerformanceMetric {
   source_id: string;
   source_type?: string;
   discovered_count: number;
+  matched_count?: number;
+  triggered_count?: number;
+  submitted_count?: number;
+  response_count?: number;
+  interview_count?: number;
+  offer_count?: number;
+  response_rate_pct?: number;
+  interview_rate_pct?: number;
+  offer_rate_pct?: number;
+  applied_count: number;
+  success_rate_pct: number;
+}
+
+export interface CampaignPerformanceMetric {
+  campaign_id: string;
+  campaign_name: string;
+  state: string;
+  discovered_count: number;
+  matched_count?: number;
+  triggered_count?: number;
+  submitted_count?: number;
+  response_count?: number;
+  interview_count?: number;
+  offer_count?: number;
+  response_rate_pct?: number;
+  interview_rate_pct?: number;
+  offer_rate_pct?: number;
   applied_count: number;
   success_rate_pct: number;
 }
@@ -284,3 +375,142 @@ export interface PlatformConnectionInfo {
   description: string;
 }
 
+export interface CampaignRule {
+  auto_apply_threshold: number;
+  review_threshold: number;
+  min_experience_years: number;
+  max_experience_years: number;
+  target_roles: string[];
+  target_locations: string[];
+  mandatory_skills: string[];
+  excluded_keywords: string[];
+  target_platforms: string[];
+}
+
+export interface CampaignSafetyPolicy {
+  daily_application_limit: number;
+  hourly_application_limit: number;
+  cooldown_seconds: number;
+  operating_start_time: string;
+  operating_end_time: string;
+  max_concurrent_applications: number;
+}
+
+export interface CampaignSchedule {
+  is_active: boolean;
+  cron_expression?: string | null;
+  interval_minutes?: number | null;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+}
+
+export interface Campaign {
+  id: string;
+  user_id: string;
+  name: string;
+  state: 'DRAFT' | 'SCHEDULED' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED';
+  target_resume_id?: string | null;
+  rule: CampaignRule;
+  safety_policy: CampaignSafetyPolicy;
+  schedule: CampaignSchedule;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignExecution {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  status: string;
+  started_at: string;
+  completed_at?: string | null;
+  discovered_count: number;
+  qualified_count: number;
+  queued_count: number;
+  submitted_count: number;
+  failed_count: number;
+  error_message?: string | null;
+  worker_id?: string | null;
+  heartbeat_at?: string | null;
+  lease_expires_at?: string | null;
+}
+
+export interface CampaignActivityLog {
+  id: string;
+  execution_id: string;
+  level: 'INFO' | 'WARNING' | 'ERROR' | 'CHALLENGE';
+  event_type: string;
+  message: string;
+  metadata: Record<string, any>;
+  created_at: string;
+}
+
+export interface CampaignPacingStatus {
+  campaign_id: string;
+  today_count: number;
+  daily_limit: number;
+  hourly_count: number;
+  hourly_limit: number;
+  cooldown_seconds: number;
+  is_within_window: boolean;
+  can_apply_now: boolean;
+  status_reason: string;
+  active_execution_id?: string | null;
+  active_execution_status?: string | null;
+  active_job_title?: string | null;
+  active_job_company?: string | null;
+  next_action_label?: string | null;
+  attention_required?: string | null;
+  cooldown_remaining_seconds?: number;
+}
+
+export interface DashboardActiveRun {
+  is_running: boolean;
+  run_id?: string | null;
+  campaign_id?: string | null;
+  campaign_name?: string | null;
+  status: string;
+  current_job_title?: string | null;
+  current_platform?: string | null;
+  progress_percentage: number;
+}
+
+export interface DashboardAttentionItem {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  action_label: string;
+  action_url: string;
+  severity: 'CRITICAL' | 'WARNING' | 'INFO' | string;
+}
+
+export interface DashboardReadinessItem {
+  key: string;
+  title: string;
+  is_ready: boolean;
+  action_label: string;
+  action_url: string;
+}
+
+export interface DashboardTopMatch {
+  job_id: string;
+  title: string;
+  company: string;
+  location: string;
+  platform: string;
+  match_score: number;
+  apply_url?: string | null;
+  decision: string;
+}
+
+export interface DashboardOverview {
+  today_applied_count: number;
+  effective_daily_limit: number;
+  quota_remaining: number;
+  quota_percentage: number;
+  active_run: DashboardActiveRun;
+  needs_attention: DashboardAttentionItem[];
+  readiness: DashboardReadinessItem[];
+  top_matches: DashboardTopMatch[];
+}

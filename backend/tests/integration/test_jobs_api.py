@@ -50,7 +50,21 @@ class MockNaukriSourceAdapter(BaseJobSourceAdapter):
 
 class MockBrowserManager:
     async def create_isolated_context(self, encrypted_storage_state=None, *args, **kwargs):
+        class MockPage:
+            def is_closed(self):
+                return False
+            async def close(self):
+                pass
+            async def goto(self, *a, **k):
+                pass
+            async def wait_for_selector(self, *a, **k):
+                pass
+            async def query_selector_all(self, *a, **k):
+                return []
         class MockContext:
+            pages = []
+            async def new_page(self):
+                return MockPage()
             async def close(self):
                 pass
         return MockContext()

@@ -61,6 +61,10 @@ class ResumeRepository(ABC):
     async def set_default(self, resume_id: str, user_id: str) -> Resume | None:
         pass
 
+    @abstractmethod
+    async def can_delete(self, resume_id: str, user_id: str) -> tuple[bool, str | None]:
+        pass
+
 
 class SavedAnswerRepository(ABC):
     @abstractmethod

@@ -13,7 +13,9 @@ from app.api.v1.analytics import router as analytics_router
 from app.api.v1.applications import router as applications_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.automation import router as automation_router
+from app.api.v1.campaigns import router as campaigns_router
 from app.api.v1.connections import router as connections_router
+from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.health import router as health_router
 from app.api.v1.jobs import router as jobs_router
 from app.api.v1.matching import router as matching_router, matching_weights_alias_router
@@ -35,9 +37,12 @@ async def lifespan(app: FastAPI):
     await init_db()
     scheduler_worker.initialize()
     from app.workers.automation_worker import automation_worker
+    from app.workers.matching_worker import matching_worker
     automation_worker.start()
+    matching_worker.start()
     yield
     logger.info(f"Shutting down {settings.APP_NAME}...")
+    matching_worker.stop()
     automation_worker.stop()
     scheduler_worker.shutdown()
     await browser_manager.shutdown()
@@ -80,6 +85,8 @@ app.include_router(matching_weights_alias_router, prefix="/api/v1")
 app.include_router(jobs_router, prefix="/api/v1")
 app.include_router(applications_router, prefix="/api/v1")
 app.include_router(automation_router, prefix="/api/v1")
+app.include_router(campaigns_router, prefix="/api/v1")
+app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(ws_router, prefix="/api/v1")
 # Also mount WebSocket at root for proxy compatibility

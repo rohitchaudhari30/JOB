@@ -93,3 +93,72 @@ async def test_dom_analyzer_detects_otp_challenge():
 
     assert form.has_challenge is True
     assert form.challenge_type == "OTP"
+
+
+def test_dom_analyzer_script_forbids_positional_indexing():
+    """Verify that SCAN_DOM_JS does not contain fragile nth-of-type(${idx + 1}) indexing."""
+    from app.infrastructure.browser.dom_analyzer import SCAN_DOM_JS
+
+    assert "nth-of-type(${idx + 1})" not in SCAN_DOM_JS
+    assert "nth-of-type(${idx+1})" not in SCAN_DOM_JS
+    # Verify presence of resilient semantic selector strategies
+    assert "data-testid" in SCAN_DOM_JS
+    assert "data-control-name" in SCAN_DOM_JS
+    assert "aria-label" in SCAN_DOM_JS
+    assert "has-text" in SCAN_DOM_JS
+
+
+@pytest.mark.asyncio
+async def test_dom_analyzer_parses_enabled_and_visible_states():
+    analyzer = DOMAnalyzer()
+
+    mock_page = AsyncMock()
+    mock_page.evaluate.return_value = {
+        "fields": [
+            {
+                "field_id": "f_submit",
+                "selector": "button[data-testid='submit-application']",
+                "tag_name": "button",
+                "input_type": "submit",
+                "label_text": "Submit Application",
+                "is_visible": True,
+                "is_enabled": True,
+            },
+            {
+                "field_id": "f_disabled_btn",
+                "selector": "#disabled_submit",
+                "tag_name": "button",
+                "input_type": "submit",
+                "label_text": "Please wait...",
+                "is_visible": True,
+                "is_enabled": False,
+            },
+        ],
+        "submit_buttons": [
+            {
+                "field_id": "b_submit",
+                "selector": "button[data-testid='submit-application']",
+                "tag_name": "button",
+                "input_type": "submit",
+                "label_text": "Submit Application",
+                "is_visible": True,
+                "is_enabled": True,
+            }
+        ],
+        "next_buttons": [],
+        "wizard_step_text": None,
+        "has_challenge": False,
+        "challenge_type": None,
+    }
+
+    form = await analyzer.scan_form(mock_page)
+
+    assert len(form.fields) == 2
+    assert form.fields[0].is_enabled is True
+    assert form.fields[0].is_visible is True
+    assert form.fields[1].is_enabled is False
+
+    assert len(form.submit_buttons) == 1
+    assert form.submit_buttons[0].is_enabled is True
+    assert "data-testid" in form.submit_buttons[0].selector
+

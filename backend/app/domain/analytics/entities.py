@@ -13,11 +13,21 @@ class FunnelStageMetric:
 class FunnelOverview:
     total_discovered: int
     total_matched: int
-    total_applied: int
-    total_interviewed: int
-    total_offered: int
+    total_triggered: int
+    total_submitted: int  # Confirmed Submissions
+    total_responded: int  # Employer Responses
+    total_interviewed: int  # Interviews
+    total_offered: int  # Offers
     total_rejected: int
-    stages: List[FunnelStageMetric]
+    # Explicit Rates
+    match_rate_pct: float = 0.0
+    trigger_rate_pct: float = 0.0
+    submission_rate_pct: float = 0.0
+    response_rate_pct: float = 0.0
+    interview_rate_pct: float = 0.0
+    offer_rate_pct: float = 0.0
+    total_applied: int = 0  # alias for backwards compatibility
+    stages: List[FunnelStageMetric] = field(default_factory=list)
 
 
 @dataclass
@@ -26,9 +36,13 @@ class ResumePerformanceMetric:
     label: str
     target_role: str
     applications_count: int
-    interview_count: int
-    offer_count: int
-    conversion_rate_pct: float
+    response_count: int = 0
+    interview_count: int = 0
+    offer_count: int = 0
+    response_rate_pct: float = 0.0
+    interview_rate_pct: float = 0.0
+    offer_rate_pct: float = 0.0
+    conversion_rate_pct: float = 0.0
 
 
 @dataclass
@@ -36,6 +50,15 @@ class SourcePerformanceMetric:
     source_id: str
     source_type: str = "naukri"
     discovered_count: int = 0
+    matched_count: int = 0
+    triggered_count: int = 0
+    submitted_count: int = 0
+    response_count: int = 0
+    interview_count: int = 0
+    offer_count: int = 0
+    response_rate_pct: float = 0.0
+    interview_rate_pct: float = 0.0
+    offer_rate_pct: float = 0.0
     applied_count: int = 0
     success_rate_pct: float = 0.0
 
@@ -58,3 +81,22 @@ class WeightTuningRecommendation:
     recommended_experience_weight: float
     confidence_score: float
     rationale: str
+
+
+@dataclass
+class CampaignPerformanceMetric:
+    campaign_id: str
+    campaign_name: str
+    state: str
+    discovered_count: int = 0
+    matched_count: int = 0
+    triggered_count: int = 0
+    submitted_count: int = 0
+    response_count: int = 0
+    interview_count: int = 0
+    offer_count: int = 0
+    response_rate_pct: float = 0.0
+    interview_rate_pct: float = 0.0
+    offer_rate_pct: float = 0.0
+    applied_count: int = 0
+    success_rate_pct: float = 0.0

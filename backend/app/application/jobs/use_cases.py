@@ -17,10 +17,12 @@ class DiscoverJobsUseCase:
         self,
         job_repo: JobRepository,
         job_source_repo: JobSourceRepository,
+        matching_task_repo=None,
         browser_mgr=None,
     ):
         self._job_repo = job_repo
         self._source_repo = job_source_repo
+        self._matching_task_repo = matching_task_repo
         self._browser_mgr = browser_mgr or browser_manager
 
     async def execute(
@@ -31,7 +33,11 @@ class DiscoverJobsUseCase:
         encrypted_storage_state: Optional[str] = None,
         run_id: Optional[str] = None,
         headless: bool = True,
+        auto_evaluate: bool = False,
     ) -> Dict[str, Any]:
+        from app.domain.jobs.identity import CanonicalJobIdentifier
+        import hashlib
+
         # 1. Ensure JobSource exists in catalog
         source = await self._source_repo.get_by_type(source_type)
         if not source:
@@ -60,6 +66,7 @@ class DiscoverJobsUseCase:
         discovered_total = 0
         new_saved = 0
         duplicates = 0
+        enqueued_count = 0
         saved_jobs: List[Job] = []
 
         try:
@@ -83,6 +90,16 @@ class DiscoverJobsUseCase:
                 raw_job.source_id = source.id
                 raw_job.source_type = source.source_type
 
+                # Compute canonical cross-portal fingerprint
+                canonical_key, confidence = CanonicalJobIdentifier.compute_canonical_key(
+                    company=raw_job.company or "",
+                    title=raw_job.title or "",
+                    location=raw_job.location or "",
+                    description=raw_job.raw_description or "",
+                )
+                raw_job.canonical_job_key = canonical_key
+                raw_job.canonical_confidence = confidence.value
+
                 # Deduplication Check (source_id + external_job_id)
                 existing = await self._job_repo.get_by_external_id(source.id, raw_job.external_job_id)
                 if existing:
@@ -90,6 +107,14 @@ class DiscoverJobsUseCase:
                     await self._job_repo.touch_seen(existing.id)
                     logger.debug(f"Updated last_seen_at on duplicate job: {raw_job.external_job_id} ({raw_job.title})")
                     saved_jobs.append(existing)
+                    if auto_evaluate and self._matching_task_repo:
+                        task_idem_key = hashlib.sha256(f"{user_id}:{existing.id}".encode()).hexdigest()
+                        await self._matching_task_repo.enqueue_task(
+                            user_id=user_id,
+                            job_id=existing.id,
+                            task_idempotency_key=task_idem_key,
+                        )
+                        enqueued_count += 1
                     continue
 
                 # Save new job to database
@@ -97,6 +122,23 @@ class DiscoverJobsUseCase:
                 saved_jobs.append(saved)
                 new_saved += 1
                 logger.info(f"Saved new job: {saved.title} at {saved.company} (ID: {saved.id})")
+
+                # Asynchronous evaluation enqueuing
+                if auto_evaluate and self._matching_task_repo:
+                    task_idem_key = hashlib.sha256(f"{user_id}:{saved.id}".encode()).hexdigest()
+                    await self._matching_task_repo.enqueue_task(
+                        user_id=user_id,
+                        job_id=saved.id,
+                        task_idempotency_key=task_idem_key,
+                    )
+                    enqueued_count += 1
+
+            if enqueued_count > 0:
+                try:
+                    from app.workers.matching_worker import matching_worker
+                    matching_worker.notify_new_task()
+                except Exception:
+                    pass
 
         except Exception as e:
             logger.error(f"Job discovery failed during execution on [{source_type}]: {e}", exc_info=True)
@@ -109,6 +151,8 @@ class DiscoverJobsUseCase:
             "discovered_total": discovered_total,
             "new_jobs_count": new_saved,
             "skipped_duplicates": duplicates,
+            "enqueued_count": enqueued_count,
+            "evaluation_status": "ENQUEUED" if enqueued_count > 0 else "SKIPPED",
             "jobs": [
                 {
                     "id": j.id,
@@ -120,6 +164,7 @@ class DiscoverJobsUseCase:
                     "min_salary": j.min_salary,
                     "max_salary": j.max_salary,
                     "apply_url": j.apply_url,
+                    "canonical_job_key": getattr(j, "canonical_job_key", None),
                     "posted_at": j.posted_at.isoformat() if j.posted_at else None,
                     "raw_posted_text": j.raw_posted_text,
                     "freshness_bucket": j.freshness_bucket,

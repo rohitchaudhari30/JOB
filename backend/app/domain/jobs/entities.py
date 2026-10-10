@@ -41,6 +41,8 @@ class Job:
     posted_at_source: str | None = None
     freshness_bucket: str = "UNKNOWN"
     freshness_score: float = 0.0
+    canonical_job_key: str | None = None
+    canonical_confidence: str = "PLATFORM_EXACT"  # PLATFORM_EXACT | CANONICAL_DERIVED | POSSIBLE_DUPLICATE
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

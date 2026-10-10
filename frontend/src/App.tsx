@@ -17,11 +17,12 @@ import { wsClient } from './services/ws';
 import { AutomationRunStatus, User } from './types';
 import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
+import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES } from './utils/navigation';
 
 export const App: React.FC = () => {
   const { theme } = useTheme();
   const { showSuccess, showError } = useToast();
-  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<NavTab>(() => getTabFromLocation());
   const [user, setUser] = useState<User | null>(null);
   const [activeRun, setActiveRun] = useState<AutomationRunStatus | null>(null);
   const [authEmail, setAuthEmail] = useState('');
@@ -30,12 +31,45 @@ export const App: React.FC = () => {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
 
+  // URL & Browser History Synchronization
+  useEffect(() => {
+    const handlePopState = () => {
+      const tab = getTabFromLocation();
+      setActiveTab(tab);
+      if (typeof document !== 'undefined') {
+        document.title = TAB_TITLES[tab] || 'AutoApply.ai';
+      }
+    };
+
+    // Ensure URL in browser matches activeTab on initial mount (e.g. normalize '/' to '/dashboard')
+    if (typeof window !== 'undefined') {
+      const currentPath = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
+      const targetPath = TAB_TO_PATH[activeTab] || '/dashboard';
+      if (currentPath === '/' || currentPath === '' || currentPath !== targetPath) {
+        window.history.replaceState({ tab: activeTab }, '', targetPath);
+      }
+      if (typeof document !== 'undefined') {
+        document.title = TAB_TITLES[activeTab] || 'AutoApply.ai';
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   useEffect(() => {
     // Check if user is logged in
     const token = localStorage.getItem('auth_token');
     if (token) {
       loadCurrentUser();
     }
+
+    const handleAuthExpired = () => {
+      setUser(null);
+      showError('Session expired. Please sign in again.');
+    };
+    window.addEventListener('auth:expired', handleAuthExpired);
+    return () => window.removeEventListener('auth:expired', handleAuthExpired);
   }, []);
 
   useEffect(() => {
@@ -76,13 +110,13 @@ export const App: React.FC = () => {
     try {
       if (isRegisterMode) {
         const res = await api.register(authEmail, authPassword, authFullName);
-        setAuthToken(res.access_token);
+        setAuthToken(res.access_token, res.refresh_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Account created successfully!');
       } else {
         const res = await api.login(authEmail, authPassword);
-        setAuthToken(res.access_token);
+        setAuthToken(res.access_token, res.refresh_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Welcome back!');
@@ -100,7 +134,7 @@ export const App: React.FC = () => {
       // Try login first
       try {
         const res = await api.login('demo.engineer@example.com', 'SecurePassword123!');
-        setAuthToken(res.access_token);
+        setAuthToken(res.access_token, res.refresh_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Logged in as demo user!');
@@ -112,7 +146,7 @@ export const App: React.FC = () => {
           'SecurePassword123!',
           'Lead Automation Engineer'
         );
-        setAuthToken(regRes.access_token);
+        setAuthToken(regRes.access_token, regRes.refresh_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Demo user registered and logged in!');
@@ -237,17 +271,22 @@ export const App: React.FC = () => {
     );
   }
 
-  const handleTabChange = (tab: NavTab | string) => {
-    if (tab === 'applications' || tab === 'application') {
-      setActiveTab('crm');
-    } else if (tab === 'ai-matches' || tab === 'ai_matches') {
-      setActiveTab('matches');
-    } else if (tab === 'job-discovery' || tab === 'job_discovery') {
-      setActiveTab('discovery');
-    } else if (tab === 'live-automation') {
-      setActiveTab('live_console');
-    } else {
-      setActiveTab(tab as NavTab);
+  const handleTabChange = (target: NavTab | string, replace = false) => {
+    const canonicalTab = resolveTab(target);
+    const targetPath = TAB_TO_PATH[canonicalTab] || '/dashboard';
+    setActiveTab(canonicalTab);
+
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname !== targetPath) {
+        if (replace) {
+          window.history.replaceState({ tab: canonicalTab }, '', targetPath);
+        } else {
+          window.history.pushState({ tab: canonicalTab }, '', targetPath);
+        }
+      }
+      if (typeof document !== 'undefined') {
+        document.title = TAB_TITLES[canonicalTab] || 'AutoApply.ai';
+      }
     }
   };
 

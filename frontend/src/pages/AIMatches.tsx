@@ -73,14 +73,13 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   const handleApplySingle = async (jobId: string) => {
     try {
       setApplyingJobId(jobId);
-      const app = await api.createApplication(jobId);
-      await api.approveApplication(app.id, true);
-      showSuccess('Application queued! Redirecting to Live Console...');
+      const app = await api.createApplication(jobId, undefined, undefined, 'AI_MATCHES', false);
+      showSuccess('Opportunity approved and queued for Campaign execution!');
       if (onNavigate) {
-        setTimeout(() => onNavigate('live_console'), 600);
+        setTimeout(() => onNavigate('applications'), 600);
       }
     } catch (e: any) {
-      showError(`Application failed: ${e.response?.data?.detail || e.message}`);
+      showError(`Queueing failed: ${e.response?.data?.detail || e.message}`);
     } finally {
       setApplyingJobId(null);
     }
@@ -464,20 +463,25 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
                       </div>
                     </div>
 
-                    {/* Overall Score Dial */}
+                    {/* Match Score & Recommendation Score Dial */}
                     <div className="text-right flex-shrink-0">
                       <div
                         className={`px-3.5 py-1.5 rounded-2xl border text-xl font-black font-mono shadow-xs ${scoreClass}`}
                       >
-                        {m.overall_score.toFixed(0)}%
+                        {(m.match_score ?? m.overall_score).toFixed(0)}%
                       </div>
                       <span className="text-[10px] text-slate-400 font-semibold block mt-1">Match Score</span>
+                      {m.recommendation_score !== undefined && m.recommendation_score !== null && (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 mt-0.5">
+                          Priority {m.recommendation_score.toFixed(0)}%
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   {/* 5-Stage Multi-stage Metrics Strip */}
-                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/60">
-                    <div className="text-center px-1">
+                  <div className="grid grid-cols-4 gap-2 p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800/60 text-center">
+                    <div className="px-1">
                       <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-tight">Hard Filters</div>
                       <div className="text-xs font-bold mt-0.5 flex items-center justify-center space-x-1">
                         {m.hard_filter_passed ? (
@@ -492,17 +496,24 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
                       </div>
                     </div>
 
-                    <div className="text-center px-1 border-x border-slate-200/60 dark:border-slate-800/60">
+                    <div className="px-1 border-l border-slate-200/60 dark:border-slate-800/60">
                       <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-tight">Skill Match</div>
                       <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono">
                         {(m.skill_match_score || 0).toFixed(0)}%
                       </div>
                     </div>
 
-                    <div className="text-center px-1">
+                    <div className="px-1 border-l border-slate-200/60 dark:border-slate-800/60">
                       <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-tight">Semantic Fit</div>
                       <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono">
                         {(m.semantic_score || 0).toFixed(0)}%
+                      </div>
+                    </div>
+
+                    <div className="px-1 border-l border-slate-200/60 dark:border-slate-800/60">
+                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-tight">Experience</div>
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5 font-mono">
+                        {m.experience_score !== undefined ? `${m.experience_score.toFixed(0)}%` : '—'}
                       </div>
                     </div>
                   </div>
@@ -512,12 +523,32 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
                     <div className="flex items-center justify-between text-[11px] font-bold text-indigo-700 dark:text-indigo-300">
                       <div className="flex items-center space-x-1.5">
                         <Brain className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                        <span>AI Match Analysis:</span>
+                        <span>AI Match Analysis ({m.ai_provider_used || 'groq'}):</span>
                       </div>
                     </div>
                     <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans">
                       {m.reasoning_summary || 'Evaluated against candidate qualifications, requirements, and domain skills.'}
                     </p>
+                    {m.recommendation_reasons && m.recommendation_reasons.length > 0 && (
+                      <div className="pt-1.5 border-t border-slate-200/50 dark:border-slate-800/50 space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Recommendation Drivers:</span>
+                        <ul className="text-[11px] text-slate-600 dark:text-slate-300 list-disc list-inside space-y-0.5">
+                          {m.recommendation_reasons.map((r, i) => (
+                            <li key={i}>{r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {m.blocking_reasons && m.blocking_reasons.length > 0 && (
+                      <div className="pt-1 space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Caution / Disqualifiers:</span>
+                        <ul className="text-[11px] text-rose-600 dark:text-rose-400 list-disc list-inside space-y-0.5">
+                          {m.blocking_reasons.map((br, i) => (
+                            <li key={i}>{br}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   {/* Skill Gap & Overlap Analysis */}

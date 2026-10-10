@@ -66,6 +66,7 @@ class PlaywrightBrowserManager:
                 headless=True,
                 args=launch_args,
             )
+            logger.info("browser_created", extra={"browser": "chromium", "headless": True})
             logger.info("Playwright Chromium background browser launched (headless=True).")
 
     async def initialize(self):
@@ -119,6 +120,10 @@ class PlaywrightBrowserManager:
             timezone_id="Asia/Kolkata",
         )
 
+        if storage_state_dict:
+            logger.info("session_loaded", extra={"session_present": True})
+        logger.info("context_created", extra={"session_loaded": bool(storage_state_dict)})
+
         # Apply stealth overrides to context
         await context.add_init_script(
             """
@@ -130,6 +135,13 @@ class PlaywrightBrowserManager:
             };
             """
         )
+        orig_ctx_close = context.close
+        async def _wrapped_context_close():
+            try:
+                await orig_ctx_close()
+            finally:
+                logger.info("context_closed")
+        context.close = _wrapped_context_close  # type: ignore
         return context
 
     async def _create_headed_context_internal(
@@ -346,6 +358,7 @@ class PlaywrightBrowserManager:
         if self._playwright:
             await self._playwright.stop()
             self._playwright = None
+        logger.info("browser_closed", extra={"browser": "chromium"})
         logger.info("Playwright Chromium browser closed.")
 
     async def shutdown(self):

@@ -6,6 +6,7 @@ from app.api.deps import (
     get_current_user,
     get_job_repository,
     get_job_source_repository,
+    get_matching_task_repository,
 )
 from app.application.jobs.use_cases import (
     DiscoverJobsUseCase,
@@ -31,6 +32,7 @@ class DiscoverJobsRequest(BaseModel):
     max_experience: float = 10.0
     min_salary: Optional[float] = None
     max_days_posted: int = 7
+    auto_evaluate: bool = False
 
 
 class JobSummaryResponse(BaseModel):
@@ -48,6 +50,7 @@ class JobSummaryResponse(BaseModel):
     salary_currency: str = "INR"
     employment_type: str = "Full-time"
     apply_url: str
+    canonical_job_key: Optional[str] = None
     is_active: bool = True
     posted_at: Optional[datetime] = None
     first_seen_at: Optional[datetime] = None
@@ -79,6 +82,7 @@ async def discover_jobs(
     current_user: Annotated[User, Depends(get_current_user)],
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
     source_repo: Annotated[SqlAlchemyJobSourceRepository, Depends(get_job_source_repository)],
+    task_repo: Annotated[Any, Depends(get_matching_task_repository)],
 ):
     exp_val = req.experience if req.experience is not None else req.min_experience
     filters = SearchQueryFilter(
@@ -92,11 +96,17 @@ async def discover_jobs(
         sort_by_date=True,
     )
 
-    use_case = DiscoverJobsUseCase(job_repo=job_repo, job_source_repo=source_repo)
+    use_case = DiscoverJobsUseCase(
+        job_repo=job_repo,
+        job_source_repo=source_repo,
+        matching_task_repo=task_repo,
+    )
     result = await use_case.execute(
         user_id=current_user.id,
         source_type=req.source_type,
         filters=filters,
+        headless=True,
+        auto_evaluate=req.auto_evaluate,
     )
     return result
 

@@ -15,11 +15,19 @@ import {
   Lock,
   Monitor,
   Layers,
+  Maximize2,
+  Minimize2,
+  Columns,
+  Expand,
+  Shrink,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { wsClient } from '../services/ws';
 import { AutomationRunStatus, TimelineEvent } from '../types';
 import { useToast } from '../context/ToastContext';
+import { LiveTelemetryPanel } from '../components/LiveTelemetryPanel';
 
 interface LiveAutomationProps {
   activeRun: AutomationRunStatus | null;
@@ -38,19 +46,37 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
   const [otpValue, setOtpValue] = useState('');
   const [sourceType, setSourceType] = useState('naukri');
   const [isStarting, setIsStarting] = useState(false);
-  const [showDesktopBrowser, setShowDesktopBrowser] = useState<boolean>(() => {
-    return localStorage.getItem('show_desktop_browser') !== 'false';
-  });
 
-  const handleToggleDesktopBrowser = (val: boolean) => {
-    setShowDesktopBrowser(val);
-    localStorage.setItem('show_desktop_browser', val ? 'true' : 'false');
-    if (val) {
-      showSuccess('Visible Desktop Mode active — Chromium window will open on screen');
-    } else {
-      showSuccess('Background Mode active — Automation runs silently in background');
-    }
-  };
+  useEffect(() => {
+    // Clear legacy desktop window toggle to ensure pure in-UI streaming
+    localStorage.removeItem('show_desktop_browser');
+  }, []);
+
+  // Rehydrate historical timeline events on mount or when activeRun changes
+  useEffect(() => {
+    if (!activeRun?.run_id) return;
+    let isCancelled = false;
+
+    api.getRunEvents(activeRun.run_id)
+      .then((historicalEvents) => {
+        if (!isCancelled && Array.isArray(historicalEvents) && historicalEvents.length > 0) {
+          setTimelineEvents((prev) => {
+            if (prev.length === 0) return historicalEvents;
+            const getEventKey = (e: TimelineEvent) => e.id || `${e.timestamp}_${e.event_name}_${e.seq || ''}`;
+            const existingKeys = new Set(prev.map(getEventKey));
+            const freshHistory = historicalEvents.filter((e) => !existingKeys.has(getEventKey(e)));
+            return [...freshHistory, ...prev];
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not rehydrate historical events for run:', activeRun.run_id, err);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeRun?.run_id]);
 
   const [completedSummary, setCompletedSummary] = useState<{
     discovered: number;
@@ -64,6 +90,35 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
   const [hasReceivedFrame, setHasReceivedFrame] = useState<boolean>(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const timelineEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Industry-Standard Viewport Presentation Controls (Split vs Full Width vs Fullscreen)
+  const [viewMode, setViewMode] = useState<'split' | 'expanded'>('split');
+  const [showTelemetryInExpanded, setShowTelemetryInExpanded] = useState<boolean>(true);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const viewportContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const toggleFullscreen = async () => {
+    if (!viewportContainerRef.current) return;
+    try {
+      if (!document.fullscreenElement) {
+        await viewportContainerRef.current.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.error('Fullscreen toggle failed:', err);
+    }
+  };
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
 
   useEffect(() => {
     // 1. High-Performance Native CDP Binary Frame Listener (ImageBitmap + Hardware Canvas)
@@ -133,7 +188,14 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
 
     // 4. Live timeline events
     const unsubscribeEvent = wsClient.onEvent((event) => {
-      setTimelineEvents((prev) => [...prev, event]);
+      setTimelineEvents((prev) => {
+        const getEventKey = (e: TimelineEvent) => e.id || `${e.timestamp}_${e.event_name}_${e.seq || ''}`;
+        const key = getEventKey(event);
+        if (prev.some((e) => getEventKey(e) === key)) {
+          return prev;
+        }
+        return [...prev, event];
+      });
       if (event.state) {
         setCurrentExecutionState(event.state);
       }
@@ -171,7 +233,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
   }, []);
 
   useEffect(() => {
-    timelineEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    timelineEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [timelineEvents]);
 
   const handleStartProfileRun = async () => {
@@ -188,7 +250,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
         auto_apply_matches: true,
         max_applications: 10,
         auto_apply_threshold: 80.0,
-        headless: !showDesktopBrowser,
+        headless: true,
       });
 
       setTimelineEvents([
@@ -196,11 +258,11 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
           run_id: run.run_id,
           event_name: 'RUN_INITIALIZED',
           state: 'INITIALIZING',
-          message: `Profile Autopilot started for [${roles.join(', ')}] on [${sourceType.toUpperCase()}] in ${showDesktopBrowser ? '🖥️ Visible Desktop Window' : '⚡ Background'} mode.`,
+          message: `Profile Autopilot started for [${roles.join(', ')}] on [${sourceType.toUpperCase()}] with live in-UI streaming.`,
           timestamp: new Date().toISOString(),
         },
       ]);
-      showSuccess(`Profile Autopilot started (${showDesktopBrowser ? '🖥️ Desktop Window' : '⚡ Background'})!`);
+      showSuccess(`Profile Autopilot started with live in-UI streaming!`);
       onRefreshStatus();
     } catch (e: any) {
       showError(`Failed to start autopilot: ${e.response?.data?.detail || e.message}`);
@@ -277,8 +339,38 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
           </div>
         </div>
 
-        {/* Dynamic Controls based on run state */}
-        <div className="flex items-center space-x-3">
+        {/* Dynamic Controls based on run state & View Mode */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Industry Standard View Mode Segmented Switch */}
+          <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('split')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                viewMode === 'split'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Split View (Side-by-side Viewport + Live Telemetry Logs)"
+            >
+              <Columns className="w-3.5 h-3.5" />
+              <span>Split View</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('expanded')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                viewMode === 'expanded'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Full Width Viewport (Expanded Focus Mode)"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span>Full Viewport</span>
+            </button>
+          </div>
+
           {isRunning ? (
             <div className="flex items-center space-x-2">
               {isPaused ? (
@@ -309,34 +401,14 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
-              {/* Dual-Mode Toggle */}
-              <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs shadow-xs">
-                <button
-                  type="button"
-                  onClick={() => handleToggleDesktopBrowser(true)}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                    showDesktopBrowser
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                  }`}
-                  title="Launches a real visible Chromium window on your desktop to watch automation at native 60 FPS"
-                >
-                  <Monitor className="w-3.5 h-3.5" />
-                  <span>Visible Desktop (60 FPS)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleToggleDesktopBrowser(false)}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                    !showDesktopBrowser
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-                  }`}
-                  title="Runs silently in the background with in-memory canvas streaming"
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Silent Background</span>
-                </button>
+              {/* In-UI Streaming Status Badge */}
+              <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-bold shadow-xs">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <Layers className="w-3.5 h-3.5" />
+                <span>Live Viewport (In-UI Stream)</span>
               </div>
 
               {/* Option to navigate to Job Discovery to select specific jobs */}
@@ -408,8 +480,17 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
 
       {/* Dual Stream Grid: Browser Frame Canvas + Realtime Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Visual Frame Canvas (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+        {/* Visual Frame Canvas */}
+        <div
+          ref={viewportContainerRef}
+          className={`${
+            isFullscreen
+              ? 'fixed inset-0 z-50 rounded-none bg-slate-950 flex flex-col p-4 w-screen h-screen'
+              : viewMode === 'expanded'
+              ? 'col-span-12 flex flex-col rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm transition-all'
+              : 'lg:col-span-7 flex flex-col rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm transition-all'
+          }`}
+        >
           {/* Browser Chrome Header */}
           <div className="px-4 py-2.5 bg-slate-100/90 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
             <div className="flex items-center space-x-2 shrink-0">
@@ -426,18 +507,72 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
             </div>
 
             <div className="flex items-center space-x-2 shrink-0">
+              {/* Active Stage Indicator Badge in Chrome Header */}
+              {isRunning && (currentExecutionState === 'DISCOVERING' || activeRun?.active_state === 'DISCOVERING') && (
+                <span className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30 animate-in fade-in">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Stage 1: Job Discovery</span>
+                </span>
+              )}
+              {isRunning && (currentExecutionState === 'MATCHING' || activeRun?.active_state === 'MATCHING') && (
+                <span className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30 animate-in fade-in">
+                  <Sparkles className="w-3 h-3 text-indigo-500 animate-spin" />
+                  <span>Stage 2: AI Matching Active</span>
+                </span>
+              )}
+              {isRunning && (currentExecutionState === 'APPLYING' || activeRun?.active_state === 'APPLYING') && (
+                <span className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-500/30 animate-in fade-in">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>
+                  <span>Stage 3: Submitting Application</span>
+                </span>
+              )}
+
               {isRunning && (
                 <span className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>{showDesktopBrowser ? '🖥️ VISIBLE DESKTOP (60 FPS)' : '⚡ SILENT BACKGROUND'}</span>
+                  <span className="hidden md:inline">⚡ LIVE IN-UI STREAM</span>
+                  <span className="md:hidden">⚡ LIVE</span>
                 </span>
               )}
-              <span className="text-[10px] text-slate-400 font-mono">1280×800</span>
+              <span className="text-[10px] text-slate-400 font-mono hidden xl:inline">1280×800</span>
+
+              {/* Viewport Sizing & Presentation Action Controls */}
+              <div className="flex items-center space-x-1 pl-2 border-l border-slate-200 dark:border-slate-800">
+                {/* 1-Click Expand / Restore Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setViewMode(viewMode === 'expanded' ? 'split' : 'expanded')}
+                  title={viewMode === 'expanded' ? 'Restore Split View (Side by Side)' : 'Expand Viewport to Full Width'}
+                  className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                  aria-label={viewMode === 'expanded' ? 'Restore Split View' : 'Expand Viewport'}
+                >
+                  {viewMode === 'expanded' ? (
+                    <Minimize2 className="w-3.5 h-3.5 text-slate-700 dark:text-slate-200" />
+                  ) : (
+                    <Maximize2 className="w-3.5 h-3.5 text-slate-700 dark:text-slate-200" />
+                  )}
+                </button>
+
+                {/* Native Fullscreen Mode Button */}
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Enter Fullscreen Mode'}
+                  className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                  aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+                >
+                  {isFullscreen ? (
+                    <Shrink className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  ) : (
+                    <Expand className="w-3.5 h-3.5 text-slate-700 dark:text-slate-200" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Viewport Canvas with exact 16:10 aspect ratio */}
-          <div className="aspect-[16/10] w-full bg-slate-100 dark:bg-slate-950 flex items-center justify-center relative overflow-hidden">
+          {/* Viewport Canvas with exact 16:10 aspect ratio or fullscreen flex */}
+          <div className={`${isFullscreen ? 'flex-1 w-full' : 'aspect-[16/10] w-full'} bg-slate-100 dark:bg-slate-950 flex items-center justify-center relative overflow-hidden`}>
             <canvas
               ref={canvasRef}
               width={1280}
@@ -461,84 +596,70 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
                 </div>
               </div>
             )}
+          </div>
+        </div>
 
-            {/* Stage HUD Indicators on top of Viewport */}
-            {isRunning && (currentExecutionState === 'MATCHING' || activeRun?.active_state === 'MATCHING') && (
-              <div className="absolute top-3 left-3 right-3 bg-slate-900/90 text-white backdrop-blur-md border border-indigo-500/40 rounded-xl p-2.5 flex items-center justify-between shadow-xl z-20 animate-in fade-in">
-                <div className="flex items-center space-x-2.5">
-                  <Sparkles className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
-                  <div>
-                    <span className="text-[11px] font-bold text-indigo-200">Stage 2: AI Matching Active</span>
-                    <span className="text-[10px] text-slate-300 ml-2 hidden sm:inline">Evaluating skills &amp; profile fit... Browser will resume for auto-apply.</span>
-                  </div>
-                </div>
-                <span className="text-[10px] font-medium text-indigo-300 bg-indigo-500/15 px-2.5 py-0.5 rounded-full border border-indigo-500/30 flex items-center gap-1.5 shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
-                  Analyzing
+        {/* Live Timeline & Telemetry in Split View (5 cols) */}
+        {viewMode === 'split' && (
+          <div className="lg:col-span-5 flex flex-col rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900 dark:border-slate-800 overflow-hidden shadow-lg h-[560px]">
+            <LiveTelemetryPanel
+              events={timelineEvents}
+              activeRun={activeRun}
+              currentExecutionState={currentExecutionState}
+              onOpenOtpModal={() => setOtpModalOpen(true)}
+              onNavigate={onNavigate}
+              viewMode={viewMode}
+              onToggleViewMode={() => setViewMode('expanded')}
+            />
+          </div>
+        )}
+
+        {/* Collapsible Full-Width Telemetry in Expanded Mode */}
+        {viewMode === 'expanded' && (
+          <div className="col-span-12 flex flex-col rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900 dark:border-slate-800 overflow-hidden shadow-lg transition-all animate-fadeIn">
+            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200/80 dark:bg-slate-950 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-2 font-bold text-xs text-slate-800 dark:text-white">
+                <Terminal className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>Telemetry &amp; Audit Events</span>
+                <span className="text-[10px] font-mono text-slate-500 bg-slate-200/60 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                  {timelineEvents.length} events
                 </span>
               </div>
-            )}
-
-            {isRunning && (currentExecutionState === 'DISCOVERING' || activeRun?.active_state === 'DISCOVERING') && (
-              <div className="absolute top-3 left-3 bg-slate-900/85 text-white backdrop-blur-md border border-emerald-500/40 rounded-xl px-3 py-1.5 flex items-center space-x-2 shadow-lg z-20 animate-in fade-in">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="text-[11px] font-bold text-emerald-300">Stage 1: Job Discovery &amp; Live Search Scrolling</span>
-              </div>
-            )}
-
-            {isRunning && (currentExecutionState === 'APPLYING' || activeRun?.active_state === 'APPLYING') && (
-              <div className="absolute top-3 left-3 bg-slate-900/85 text-white backdrop-blur-md border border-sky-500/40 rounded-xl px-3 py-1.5 flex items-center space-x-2 shadow-lg z-20 animate-in fade-in">
-                <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
-                <span className="text-[11px] font-bold text-sky-300">Stage 3: Submitting Application via Browser</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Live Timeline & Telemetry (5 cols) */}
-        <div className="lg:col-span-5 flex flex-col rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900 dark:border-slate-800 overflow-hidden shadow-lg h-[560px]">
-          <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200/80 dark:bg-slate-950 dark:border-slate-800 flex items-center justify-between">
-            <div className="flex items-center space-x-2 font-bold text-xs text-slate-800 dark:text-white">
-              <Terminal className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-              <span>Telemetry &amp; Audit Events</span>
-            </div>
-            <span className="text-[10px] font-mono text-slate-500">{timelineEvents.length} events</span>
-          </div>
-
-          {/* Event Stream list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-xs">
-            {timelineEvents.length === 0 ? (
-              <div className="text-center py-20 text-slate-400 dark:text-slate-600 font-sans text-xs">
-                Awaiting telemetry events from orchestrator...
-              </div>
-            ) : (
-              timelineEvents.map((evt, idx) => (
-                <div
-                  key={idx}
-                  className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 dark:bg-slate-950/80 dark:border-slate-800/80 space-y-1.5 shadow-xs"
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowTelemetryInExpanded(!showTelemetryInExpanded)}
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 cursor-pointer flex items-center space-x-1"
                 >
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-bold border border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20">
-                      {evt.event_name}
-                    </span>
-                    <span className="text-slate-400">
-                      {new Date(evt.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <div className="text-slate-800 dark:text-slate-200 text-xs leading-relaxed font-sans">{evt.message}</div>
-                  {evt.stats && (
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center space-x-3 pt-1 border-t border-slate-200 dark:border-slate-800/50">
-                      <span>Found: {evt.stats.discovered}</span>
-                      <span>Matched: {evt.stats.matched}</span>
-                      <span>Applied: {evt.stats.applied}</span>
-                    </div>
-                  )}
-                </div>
-              ))
+                  <span>{showTelemetryInExpanded ? 'Hide Event Stream' : 'Show Event Stream'}</span>
+                  {showTelemetryInExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('split')}
+                  className="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer flex items-center space-x-1 pl-2 border-l border-slate-200 dark:border-slate-700"
+                >
+                  <Columns className="w-3.5 h-3.5" />
+                  <span>Restore Split View</span>
+                </button>
+              </div>
+            </div>
+
+            {showTelemetryInExpanded && (
+              <div className="h-[460px]">
+                <LiveTelemetryPanel
+                  events={timelineEvents}
+                  activeRun={activeRun}
+                  currentExecutionState={currentExecutionState}
+                  onOpenOtpModal={() => setOtpModalOpen(true)}
+                  onNavigate={onNavigate}
+                  viewMode={viewMode}
+                  onToggleViewMode={() => setViewMode('split')}
+                />
+              </div>
             )}
-            <div ref={timelineEndRef} />
           </div>
-        </div>
+        )}
       </div>
 
       {/* Challenge / OTP Modal (Human In The Loop) */}

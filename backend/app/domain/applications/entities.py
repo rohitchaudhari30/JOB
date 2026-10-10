@@ -24,11 +24,26 @@ class WorkflowStateEnum(str, Enum):
     PAUSED_CAPTCHA = "PAUSED_CAPTCHA"
     PAUSED_USER_INPUT = "PAUSED_USER_INPUT"
     PAUSED_AUTH_EXPIRED = "PAUSED_AUTH_EXPIRED"
+    PAUSED_SESSION = "PAUSED_SESSION"
+    PAUSED_LIMIT = "PAUSED_LIMIT"
     RETRY_QUEUED = "RETRY_QUEUED"
+    SUBMISSION_UNKNOWN = "SUBMISSION_UNKNOWN"
+    RECONCILIATION_REQUIRED = "RECONCILIATION_REQUIRED"
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
+
+
+class ApplicationOutcomeStatus(str, Enum):
+    NOT_SUBMITTED = "NOT_SUBMITTED"
+    UNKNOWN = "UNKNOWN"
+    SUBMITTED = "SUBMITTED"
+    RESPONDED = "RESPONDED"
+    INTERVIEWING = "INTERVIEWING"
+    OFFERED = "OFFERED"
+    REJECTED = "REJECTED"
+    ARCHIVED = "ARCHIVED"
 
 
 @dataclass
@@ -59,10 +74,15 @@ class Application:
     resume_id: str | None = None
     idempotency_key: str = ""
     workflow_state: WorkflowStateEnum = WorkflowStateEnum.DISCOVERED
+    outcome_status: ApplicationOutcomeStatus = ApplicationOutcomeStatus.NOT_SUBMITTED
     applied_at: datetime | None = None
     failure_reason: str | None = None
     trace_file_path: str | None = None
     screenshot_file_path: str | None = None
+    retry_count: int = 0
+    error_category: str | None = None
+    next_retry_at: datetime | None = None
+    current_attempt_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     job_title: str | None = None

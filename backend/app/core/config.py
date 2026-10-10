@@ -45,8 +45,8 @@ class Settings(BaseSettings):
 
     # Security & Session
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Short-lived access token
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7     # Revocable refresh token lifespan
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # Active session access token (60 mins)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7     # Revocable refresh token lifespan (7 days)
     SESSION_COOKIE_MAX_AGE_DAYS: int = 30
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     DEFAULT_MAX_CONCURRENT_SESSIONS: int = 2
     DEFAULT_COOLDOWN_SECONDS: int = 5
     MAX_DAILY_APPLICATIONS_DEFAULT: int = 25
+    GLOBAL_ACCOUNT_SAFE_CEILING: int = 50
+    PLATFORM_DAILY_CAP_DEFAULT: int = 30
 
     @property
     def cors_origin_list(self) -> List[str]:

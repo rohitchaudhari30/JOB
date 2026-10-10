@@ -11,6 +11,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { User } from '../types';
+import { getPathForTab } from '../utils/navigation';
 
 export type NavTab =
   | 'dashboard'
@@ -131,10 +132,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
             <nav className="space-y-0.5">
               {section.items.map((item) => {
                 const isActive = activeTab === item.id || (item.id === 'direct_apply' && activeTab === 'schedules');
+                const targetPath = getPathForTab(item.id);
                 return (
-                  <button
+                  <a
                     key={item.id}
-                    onClick={() => onTabChange(item.id)}
+                    href={targetPath}
+                    role="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onTabChange(item.id);
+                    }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer border ${
                       isActive
                         ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 font-bold border-indigo-200/80 dark:border-indigo-800 shadow-2xs'
@@ -168,7 +175,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
                         </span>
                       )}
                     </div>
-                  </button>
+                  </a>
                 );
               })}
             </nav>

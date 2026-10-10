@@ -21,7 +21,24 @@ async def test_analytics_api_endpoints_flow(client: AsyncClient):
     funnel_data = funnel_res.json()
     assert "stages" in funnel_data
     assert isinstance(funnel_data["stages"], list)
-    assert len(funnel_data["stages"]) == 4
+    assert len(funnel_data["stages"]) == 7
+    stage_names = [s["stage_name"] for s in funnel_data["stages"]]
+    assert stage_names == [
+        "Discovered",
+        "AI Matched",
+        "Applications Triggered",
+        "Confirmed Submissions",
+        "Employer Responses",
+        "Interviews",
+        "Offers",
+    ]
+    # Verify zero-denominator rates evaluate to exactly 0.0
+    assert funnel_data.get("match_rate_pct") == 0.0
+    assert funnel_data.get("trigger_rate_pct") == 0.0
+    assert funnel_data.get("submission_rate_pct") == 0.0
+    assert funnel_data.get("response_rate_pct") == 0.0
+    assert funnel_data.get("interview_rate_pct") == 0.0
+    assert funnel_data.get("offer_rate_pct") == 0.0
 
     # 2. Resume performance
     resumes_res = await client.get("/api/v1/analytics/resumes", headers=headers)
