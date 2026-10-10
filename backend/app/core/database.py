@@ -221,6 +221,131 @@ async def _migrate_sqlite_columns():
                             logger.info(f"Auto-migrated missing column: {tbl_name}.{col.name} ({col_type_str})")
                         except Exception as auto_col_err:
                             logger.debug(f"Column add notice for {tbl_name}.{col.name}: {auto_col_err}")
+
+            # Ensure automation_events has unique index on (run_id, seq) after cleaning any duplicates/nulls
+            if "automation_events" in existing_tables:
+                # Check if sequence repair is needed (null/0 sequences or duplicates)
+                dup_or_null_check = await conn.execute(text("""
+                    SELECT 1 FROM automation_events WHERE seq IS NULL OR seq <= 0
+                    UNION ALL
+                    SELECT 1 FROM automation_events GROUP BY run_id, seq HAVING COUNT(*) > 1
+                """))
+                if dup_or_null_check.fetchall():
+                    logger.info("Resolving invalid, non-contiguous, or duplicate sequence numbers in automation_events...")
+                    # Fetch all distinct run_ids to repair sequentially
+                    runs_res = await conn.execute(text("SELECT DISTINCT run_id FROM automation_events"))
+                    run_ids = [r[0] for r in runs_res.fetchall()]
+
+                    for rid in run_ids:
+                        rows_res = await conn.execute(text(f"""
+                            SELECT id, seq, created_at, rowid 
+                            FROM automation_events 
+                            WHERE run_id = '{rid}'
+                            ORDER BY 
+                                created_at ASC,
+                                CASE WHEN seq IS NOT NULL AND seq > 0 THEN seq ELSE 999999999 END ASC,
+                                rowid ASC
+                        """))
+                        event_rows = rows_res.fetchall()
+                        current_seqs = [r[1] for r in event_rows]
+                        expected_seqs = list(range(1, len(event_rows) + 1))
+                        if current_seqs != expected_seqs:
+                            for new_seq, (row_id, _, _, _) in enumerate(event_rows, start=1):
+                                await conn.execute(text(f"""
+                                    UPDATE automation_events 
+                                    SET seq = {new_seq} 
+                                    WHERE id = '{row_id}'
+                                """))
+
+                # Create unique index if not already present
+                await conn.execute(text("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_run_event_seq
+                    ON automation_events (run_id, seq)
+                """))
+
+                # 4. Synchronize last_event_seq in automation_runs to match max(seq)
+                if "automation_runs" in existing_tables:
+                    await conn.execute(text("""
+                        UPDATE automation_runs
+                        SET last_event_seq = COALESCE(
+                            (SELECT MAX(seq) FROM automation_events WHERE automation_events.run_id = automation_runs.id),
+                            0
+                        )
+                    """))
+
+            # Ensure jobs has unique index on canonical_job_key for active records
+            if "jobs" in existing_tables:
+                # Detect if any conflicting active jobs exist on canonical_job_key before indexing
+                conflicts_res = await conn.execute(text("""
+                    SELECT canonical_job_key, COUNT(*) 
+                    FROM jobs 
+                    WHERE canonical_job_key IS NOT NULL AND is_active = 1
+                    GROUP BY canonical_job_key 
+                    HAVING COUNT(*) > 1
+                """))
+                conflicts = conflicts_res.fetchall()
+                if conflicts:
+                    logger.warning(f"Found {len(conflicts)} canonical key duplicate groups in existing jobs; deactivating older duplicates to enforce uniqueness...")
+                    for c_key, _ in conflicts:
+                        dup_ids_res = await conn.execute(text(f"""
+                            SELECT id FROM jobs 
+                            WHERE canonical_job_key = '{c_key}' AND is_active = 1
+                            ORDER BY created_at ASC
+                        """))
+                        dup_ids = [r[0] for r in dup_ids_res.fetchall()]
+                        if len(dup_ids) <= 1:
+                            continue
+                        master_id = dup_ids[0]
+                        # Transactionally preserve dependent records across all referencing tables
+                        for stale_id in dup_ids[1:]:
+                            # 1. Update match_results: re-point to master_id if user doesn't already have one
+                            if "match_results" in existing_tables:
+                                await conn.execute(text(f"""
+                                    UPDATE match_results 
+                                    SET job_id = '{master_id}' 
+                                    WHERE job_id = '{stale_id}' 
+                                      AND user_id NOT IN (SELECT user_id FROM match_results WHERE job_id = '{master_id}')
+                                """))
+                            # 2. Update applications: re-point to master_id if user hasn't applied to master_id
+                            if "applications" in existing_tables:
+                                await conn.execute(text(f"""
+                                    UPDATE applications 
+                                    SET job_id = '{master_id}' 
+                                    WHERE job_id = '{stale_id}' 
+                                      AND user_id NOT IN (SELECT user_id FROM applications WHERE job_id = '{master_id}')
+                                """))
+                            # 3. Update campaign_job_items: re-point to master_id if execution doesn't have it
+                            if "campaign_job_items" in existing_tables:
+                                await conn.execute(text(f"""
+                                    UPDATE campaign_job_items 
+                                    SET job_id = '{master_id}' 
+                                    WHERE job_id = '{stale_id}' 
+                                      AND execution_id NOT IN (SELECT execution_id FROM campaign_job_items WHERE job_id = '{master_id}')
+                                """))
+                            # 4. Update campaign_quota_reservations: re-point to master_id
+                            if "campaign_quota_reservations" in existing_tables:
+                                await conn.execute(text(f"""
+                                    UPDATE campaign_quota_reservations 
+                                    SET job_id = '{master_id}' 
+                                    WHERE job_id = '{stale_id}' 
+                                      AND campaign_id NOT IN (SELECT campaign_id FROM campaign_quota_reservations WHERE job_id = '{master_id}')
+                                """))
+                            # 5. Update matching_tasks: re-point to master_id
+                            if "matching_tasks" in existing_tables:
+                                await conn.execute(text(f"""
+                                    UPDATE matching_tasks 
+                                    SET job_id = '{master_id}' 
+                                    WHERE job_id = '{stale_id}' 
+                                      AND user_id NOT IN (SELECT user_id FROM matching_tasks WHERE job_id = '{master_id}')
+                                """))
+                            # Soft-deactivate stale duplicate record after referencing tables are merged
+                            await conn.execute(text(f"UPDATE jobs SET is_active = 0 WHERE id = '{stale_id}'"))
+
+                await conn.execute(text("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_job_canonical_key
+                    ON jobs (canonical_job_key)
+                    WHERE canonical_job_key IS NOT NULL AND is_active = 1
+                """))
     except Exception as e:
         logger.warning(f"SQLite auto-migration notice: {e}")
 

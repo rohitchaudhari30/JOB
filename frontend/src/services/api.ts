@@ -367,8 +367,16 @@ export const api = {
     const res = await apiClient.get(`/automation/runs/${runId}`);
     return res.data;
   },
-  getRunEvents: async (runId: string): Promise<TimelineEvent[]> => {
-    const res = await apiClient.get(`/automation/runs/${runId}/events`);
+  createWsTicket: async (): Promise<{ ticket: string; expires_in: number }> => {
+    const res = await apiClient.post('/ws/ticket');
+    return res.data;
+  },
+  getRunEvents: async (runId: string, afterSeq?: number): Promise<TimelineEvent[]> => {
+    const params: Record<string, any> = {};
+    if (afterSeq !== undefined && afterSeq !== null) {
+      params.after_seq = afterSeq;
+    }
+    const res = await apiClient.get(`/automation/runs/${runId}/events`, { params });
     return res.data;
   },
   pauseRun: async (runId: string): Promise<AutomationRunStatus> => {

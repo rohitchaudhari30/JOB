@@ -216,6 +216,13 @@ class JobModel(Base):
 
     __table_args__ = (
         UniqueConstraint("source_id", "external_job_id", name="uq_source_external_job"),
+        Index(
+            "uq_job_canonical_key",
+            "canonical_job_key",
+            unique=True,
+            sqlite_where=(canonical_job_key.isnot(None) & (is_active == True)),
+            postgresql_where=(canonical_job_key.isnot(None) & (is_active == True)),
+        ),
     )
 
     source = relationship("JobSourceModel", back_populates="jobs")
@@ -415,6 +422,8 @@ class AutomationRunModel(Base):
     current_job_title = Column(String(255), nullable=True)
     worker_id = Column(String(64), default="local-worker-1", nullable=False)
     error_message = Column(Text, nullable=True)
+    last_event_seq = Column(Integer, default=0, nullable=False)
+    last_heartbeat_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     started_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
@@ -427,11 +436,16 @@ class AutomationRunModel(Base):
 class AutomationEventModel(Base):
     __tablename__ = "automation_events"
 
-    id = Column(String(36), primary_key=True, default=generate_uuid)
+    id = Column(String(64), primary_key=True, default=generate_uuid)
     run_id = Column(String(36), ForeignKey("automation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    seq = Column(Integer, default=1, nullable=False, index=True)
     event_name = Column(String(64), nullable=False)
     payload = Column(JSON, default=dict, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_run_event_seq"),
+    )
 
     run = relationship("AutomationRunModel", back_populates="events")
 

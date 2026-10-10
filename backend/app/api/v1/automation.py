@@ -67,6 +67,8 @@ class RunStatusResponse(BaseModel):
     current_job_title: Optional[str] = None
     current_application_id: Optional[str] = None
     error_message: Optional[str] = None
+    last_event_seq: int = 0
+    worker_health: str = "HEALTHY"
     created_at: datetime
     completed_at: Optional[datetime] = None
 
@@ -89,7 +91,7 @@ class CreateScheduleRequest(BaseModel):
     max_applications_per_run: int = 10
 
 
-def _to_run_response(session: AutomationSession) -> RunStatusResponse:
+def _to_run_response(session: AutomationSession, worker_health: str = "HEALTHY") -> RunStatusResponse:
     return RunStatusResponse(
         run_id=session.run_id,
         user_id=session.user_id,
@@ -102,6 +104,8 @@ def _to_run_response(session: AutomationSession) -> RunStatusResponse:
         current_job_title=session.current_job_title,
         current_application_id=session.current_application_id,
         error_message=session.error_message,
+        last_event_seq=getattr(session, "_event_seq", 0),
+        worker_health=worker_health,
         created_at=session.created_at,
         completed_at=session.completed_at,
     )
@@ -231,6 +235,8 @@ async def get_active_user_run(
                 current_job_title=model.current_job_title,
                 current_application_id=model.current_job_id,
                 error_message=model.error_message,
+                last_event_seq=getattr(model, "last_event_seq", 0),
+                worker_health="STALE" if (datetime.now(timezone.utc) - (model.last_heartbeat_at.replace(tzinfo=timezone.utc) if model.last_heartbeat_at and model.last_heartbeat_at.tzinfo is None else (model.last_heartbeat_at or datetime.now(timezone.utc)))).total_seconds() > 300 else "HEALTHY",
                 created_at=model.created_at,
                 completed_at=model.finished_at,
             )
@@ -261,6 +267,14 @@ async def get_run_status(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
 
         status_enum = AutomationRunStatus(model.status) if model.status in AutomationRunStatus._value2member_map_ else AutomationRunStatus.COMPLETED
+        # Lease expiry detection
+        time_diff = 0
+        if model.last_heartbeat_at:
+            hb = model.last_heartbeat_at.replace(tzinfo=timezone.utc) if model.last_heartbeat_at.tzinfo is None else model.last_heartbeat_at
+            time_diff = (datetime.now(timezone.utc) - hb).total_seconds()
+        is_stale = model.status in ("RUNNING", "STARTING") and time_diff > 300
+        health = "STALE" if is_stale else "HEALTHY"
+
         return RunStatusResponse(
             run_id=model.id,
             user_id=model.user_id,
@@ -273,6 +287,8 @@ async def get_run_status(
             current_job_title=model.current_job_title,
             current_application_id=model.current_job_id,
             error_message=model.error_message,
+            last_event_seq=getattr(model, "last_event_seq", 0),
+            worker_health=health,
             created_at=model.created_at,
             completed_at=model.finished_at,
         )
@@ -282,12 +298,16 @@ async def get_run_status(
 async def get_run_events(
     run_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
+    after_seq: Optional[int] = Query(None, description="Cursor: return only events with seq > after_seq"),
 ):
     session = orchestrator.get_session(run_id)
     if session:
         if session.user_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access to run.")
-        return getattr(session, "events", [])
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
+        all_events = sorted(getattr(session, "events", []), key=lambda e: e.get("seq") or 0)
+        if after_seq is not None:
+            return [e for e in all_events if (e.get("seq") or 0) > after_seq]
+        return all_events
 
     # Database fallback for finished/historical runs
     from app.core.database import AsyncSessionLocal
@@ -298,21 +318,21 @@ async def get_run_events(
         run_stmt = select(AutomationRunModel).where(AutomationRunModel.id == run_id)
         run_res = await db_session.execute(run_stmt)
         run_model = run_res.scalar_one_or_none()
-        if run_model and run_model.user_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access to run.")
+        if not run_model or run_model.user_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
 
-        stmt = (
-            select(AutomationEventModel)
-            .where(AutomationEventModel.run_id == run_id)
-            .order_by(AutomationEventModel.created_at.asc())
-        )
+        stmt = select(AutomationEventModel).where(AutomationEventModel.run_id == run_id)
+        if after_seq is not None:
+            stmt = stmt.where(AutomationEventModel.seq > after_seq)
+        stmt = stmt.order_by(AutomationEventModel.seq.asc())
+
         res = await db_session.execute(stmt)
         events = res.scalars().all()
         return [
             {
                 "type": "AUTOMATION_TIMELINE_EVENT",
                 "id": e.id,
-                "seq": (e.payload or {}).get("seq"),
+                "seq": e.seq,
                 "run_id": e.run_id,
                 "event_name": e.event_name,
                 "state": (e.payload or {}).get("state", "RUNNING"),

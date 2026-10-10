@@ -83,6 +83,59 @@ def test_canonical_identity_differentiation():
     assert key_de != key_sde
 
 
+def test_canonical_identity_edge_cases_and_distinct_vacancies():
+    # 1. Missing description with different external_job_ids preserves distinct vacancies
+    key_vac1, conf1 = CanonicalJobIdentifier.compute_canonical_key(
+        company="Microsoft",
+        title="Software Engineer",
+        location="Bengaluru",
+        description="",
+        external_job_id="msft_job_101",
+    )
+    key_vac2, conf2 = CanonicalJobIdentifier.compute_canonical_key(
+        company="Microsoft",
+        title="Software Engineer",
+        location="Bengaluru",
+        description="",
+        external_job_id="msft_job_102",
+    )
+    assert key_vac1 != key_vac2
+    assert conf1 == IdentityConfidenceEnum.POSSIBLE_DUPLICATE
+    assert conf2 == IdentityConfidenceEnum.POSSIBLE_DUPLICATE
+
+    # 2. Changed description across revisions produces distinct fingerprints
+    key_v1, _ = CanonicalJobIdentifier.compute_canonical_key(
+        company="Meta",
+        title="Production Engineer",
+        location="Bangalore",
+        description="Version 1: Focus on C++ and Linux kernel internals.",
+    )
+    key_v2, _ = CanonicalJobIdentifier.compute_canonical_key(
+        company="Meta",
+        title="Production Engineer",
+        location="Bangalore",
+        description="Version 2: Focus on Python and distributed systems reliability.",
+    )
+    assert key_v1 != key_v2
+
+    # 3. Same requisition cross-posted across portals with identical description produces exact same canonical key
+    key_naukri, conf_naukri = CanonicalJobIdentifier.compute_canonical_key(
+        company="Uber India Technologies Pvt Ltd",
+        title="Sr. Backend Developer",
+        location="Bengaluru, Karnataka, India",
+        description="Join Uber Core Services team building high-scale Kafka dispatching.",
+    )
+    key_linkedin, conf_linkedin = CanonicalJobIdentifier.compute_canonical_key(
+        company="Uber",
+        title="Senior Backend Developer",
+        location="Bangalore",
+        description="Join Uber Core Services team building high-scale Kafka dispatching.",
+    )
+    assert key_naukri == key_linkedin
+    assert conf_naukri == IdentityConfidenceEnum.CANONICAL_DERIVED
+    assert conf_linkedin == IdentityConfidenceEnum.CANONICAL_DERIVED
+
+
 # =============================================================================
 # 2. Stage 1: Hard Filter Short-Circuit (Zero AI Cost)
 # =============================================================================

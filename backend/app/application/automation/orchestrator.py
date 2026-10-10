@@ -1,4 +1,6 @@
 import asyncio
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 import logging
@@ -26,6 +28,13 @@ logger = logging.getLogger("app.automation.orchestrator")
 
 # Alias for backwards compatibility across existing API consumers
 AutomationRunStatus = AutomationState
+
+
+@dataclass
+class _RunLockEntry:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    ref_count: int = 0
+
 
 
 class AutomationSession:
@@ -123,6 +132,7 @@ class AutomationOrchestrator:
         self._user_active_runs: Dict[str, str] = {}
         self._lock: Optional[asyncio.Lock] = None
         self._lock_loop = None
+        self._run_locks: Dict[str, Any] = {}
 
     @property
     def lock(self) -> asyncio.Lock:
@@ -134,6 +144,69 @@ class AutomationOrchestrator:
             self._lock = asyncio.Lock()
             self._lock_loop = loop
         return self._lock
+
+    def get_run_lock(self, run_id: str) -> asyncio.Lock:
+        """
+        Backward-compatible helper returning the underlying asyncio.Lock for run_id.
+        Creates or returns the canonical lock instance stored in _run_locks.
+        Note: For guaranteed lifecycle safety and automatic ref-counting, callers
+        should prefer `async with orchestrator.run_lock(run_id):`.
+        """
+        entry = self._run_locks.get(run_id)
+        if entry is None:
+            entry = _RunLockEntry()
+            self._run_locks[run_id] = entry
+        return entry.lock
+
+    @asynccontextmanager
+    async def run_lock(self, run_id: str):
+        """
+        Safe reference-counted context manager for run-level synchronization.
+        
+        Guarantees that:
+        1. All concurrent producers, waiters, and callers for the same run_id share
+           the exact same asyncio.Lock instance.
+        2. Waiters increment refcount before waiting, preventing premature eviction.
+        3. Even if a coroutine is cancelled while waiting on entry.lock or self.lock,
+           reference count decrements are shielded, preventing counter leaks or negative counts.
+        4. The lock entry is safely removed from the dictionary ONLY when refcount reaches 0
+           and the lock is not currently held.
+        5. No two different locks can ever exist simultaneously for the same run_id.
+        """
+        async with self.lock:
+            entry = self._run_locks.get(run_id)
+            if entry is None:
+                entry = _RunLockEntry()
+                self._run_locks[run_id] = entry
+            entry.ref_count += 1
+
+        acquired = False
+        try:
+            await entry.lock.acquire()
+            acquired = True
+            yield entry.lock
+        finally:
+            if acquired:
+                entry.lock.release()
+            async def _release_entry():
+                async with self.lock:
+                    entry.ref_count = max(0, entry.ref_count - 1)
+                    if entry.ref_count == 0 and not entry.lock.locked():
+                        if self._run_locks.get(run_id) is entry:
+                            self._run_locks.pop(run_id, None)
+
+            await asyncio.shield(_release_entry())
+
+    def cleanup_run_lock(self, run_id: str) -> None:
+        """
+        Safely attempts to clean up run lock when no holders or waiters exist.
+        If any coroutine is holding or waiting (ref_count > 0 or lock is held),
+        cleanup is safely skipped.
+        """
+        entry = self._run_locks.get(run_id)
+        if entry is not None:
+            if entry.ref_count <= 0 and not entry.lock.locked():
+                self._run_locks.pop(run_id, None)
 
     def get_session(self, run_id: str) -> Optional[AutomationSession]:
         return self._sessions.get(run_id)
@@ -186,32 +259,31 @@ class AutomationOrchestrator:
         session.transition_to(AutomationState.RUNNING)
 
         # Persist AutomationRunModel to database to satisfy foreign key for events and enable historical rehydration
+        from app.core.database import AsyncSessionLocal
+        from app.infrastructure.database.models.models import AutomationRunModel
+
+        async def _persist_run_initial():
+            async with AsyncSessionLocal() as db_sess:
+                existing = await db_sess.get(AutomationRunModel, run_id)
+                if not existing:
+                    run_m = AutomationRunModel(
+                        id=run_id,
+                        user_id=user_id,
+                        status=session.status.value,
+                        source_type=source_type,
+                        target_count=max_applications,
+                        worker_id=worker_id or "worker-1",
+                        started_at=session.created_at,
+                        last_event_seq=0,
+                    )
+                    db_sess.add(run_m)
+                    await db_sess.commit()
+
         try:
-            from app.core.database import AsyncSessionLocal
-            from app.infrastructure.database.models.models import AutomationRunModel
-
-            async def _persist_run_initial():
-                try:
-                    async with AsyncSessionLocal() as db_sess:
-                        existing = await db_sess.get(AutomationRunModel, run_id)
-                        if not existing:
-                            run_m = AutomationRunModel(
-                                id=run_id,
-                                user_id=user_id,
-                                status=session.status.value,
-                                source_type=source_type,
-                                target_count=max_applications,
-                                worker_id=worker_id or "worker-1",
-                                started_at=session.created_at,
-                            )
-                            db_sess.add(run_m)
-                            await db_sess.commit()
-                except Exception as run_err:
-                    logger.warning(f"Could not persist initial AutomationRunModel [{run_id}]: {run_err}")
-
             await _persist_run_initial()
-        except Exception as err:
-            logger.warning(f"Failed to schedule AutomationRunModel persistence: {err}")
+        except Exception as run_err:
+            logger.error(f"Failed to persist initial AutomationRunModel [{run_id}]: {run_err}")
+            raise RuntimeError(f"Cannot start automation run without persistent database record: {run_err}") from run_err
 
         async with self.lock:
             self._sessions[run_id] = session
@@ -412,6 +484,7 @@ class AutomationOrchestrator:
             async with self.lock:
                 if session.user_id in self._user_active_runs:
                     del self._user_active_runs[session.user_id]
+                self.cleanup_run_lock(session.run_id)
 
     async def _run_heartbeat_loop(
         self,
@@ -442,6 +515,12 @@ class AutomationOrchestrator:
                                 lease_seconds=300,
                                 lease_version=getattr(session, "lease_version", None),
                             )
+                            # Also update AutomationRunModel.last_heartbeat_at
+                            from app.infrastructure.database.models.models import AutomationRunModel
+                            run_m = await db_session.get(AutomationRunModel, session.run_id)
+                            if run_m:
+                                run_m.last_heartbeat_at = datetime.now(timezone.utc)
+                                await db_session.commit()
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -783,62 +862,62 @@ class AutomationOrchestrator:
         payload: Optional[Dict[str, Any]] = None,
     ):
         logger.info(f"[{session.run_id}] [{event_name}] {message}")
-        session._event_seq = getattr(session, "_event_seq", 0) + 1
-        event_id = f"{session.run_id}_evt_{session._event_seq}"
-        event_dict = {
-            "type": "AUTOMATION_TIMELINE_EVENT",
-            "id": event_id,
-            "seq": session._event_seq,
-            "run_id": session.run_id,
-            "event_name": event_name,
-            "state": session.active_state,
-            "message": message,
-            "stats": {
-                "discovered": session.discovered_jobs_count,
-                "matched": session.matched_jobs_count,
-                "applied": session.applications_submitted_count,
-            },
-            "payload": payload or {},
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-
-        if hasattr(session, "events"):
-            session.events.append(event_dict)
-
-        await ws_manager.broadcast_to_user(
-            user_id=session.user_id,
-            message=event_dict,
-        )
-
-        # Persistent log to automation_events table and state synchronization to automation_runs
-        try:
-            from app.core.database import AsyncSessionLocal
-            from app.infrastructure.database.models.models import AutomationEventModel, AutomationRunModel
-
-            async def _persist_event():
+        event_dict = None
+        # Atomic Transaction: update run state, allocate durable monotonic sequence, and insert event
+        # SQLite concurrency safe: handles busy/locked retries and atomic sequence increments
+        async with self.run_lock(session.run_id):
+            for attempt in range(5):
                 try:
-                    async with AsyncSessionLocal() as db_sess:
-                        # 1. Ensure run exists or update stats
-                        run_m = await db_sess.get(AutomationRunModel, session.run_id)
-                        if run_m:
-                            run_m.status = session.status.value
-                            run_m.discovered_count = session.discovered_jobs_count
-                            run_m.matched_count = session.matched_jobs_count
-                            run_m.applied_count = session.applications_submitted_count
-                            run_m.failed_count = session.failed_applications_count
-                            run_m.current_job_title = session.current_job_title
-                            if session.error_message:
-                                run_m.error_message = session.error_message
-                            if session.status in (AutomationState.COMPLETED, AutomationState.ABORTED, AutomationState.FAILED):
-                                run_m.finished_at = session.completed_at or datetime.now(timezone.utc)
+                    from app.core.database import AsyncSessionLocal
+                    from app.infrastructure.database.models.models import AutomationEventModel, AutomationRunModel
+                    from sqlalchemy import select, func
 
-                        # 2. Persist timeline event
+                    async with AsyncSessionLocal() as db_sess:
+                        # 1. Fetch or create parent run
+                        run_m = await db_sess.get(AutomationRunModel, session.run_id)
+                        if not run_m:
+                            run_m = AutomationRunModel(
+                                id=session.run_id,
+                                user_id=session.user_id,
+                                status=session.status.value,
+                                worker_id=session.worker_id or "worker-1",
+                                started_at=session.created_at,
+                                last_event_seq=0,
+                            )
+                            db_sess.add(run_m)
+                            await db_sess.flush()
+
+                        # 2. Check maximum existing seq in database to guarantee strictly monotonic allocation
+                        max_seq_res = await db_sess.execute(
+                            select(func.max(AutomationEventModel.seq)).where(AutomationEventModel.run_id == session.run_id)
+                        )
+                        db_max_seq = max_seq_res.scalar() or 0
+                        current_seq = max(run_m.last_event_seq or 0, db_max_seq) + 1
+                        
+                        run_m.last_event_seq = current_seq
+                        event_id = f"{session.run_id}_evt_{current_seq}"
+
+                        # 3. Synchronize run counters and state atomically with the event
+                        run_m.status = session.status.value
+                        run_m.discovered_count = session.discovered_jobs_count
+                        run_m.matched_count = session.matched_jobs_count
+                        run_m.applied_count = session.applications_submitted_count
+                        run_m.failed_count = session.failed_applications_count
+                        run_m.current_job_title = session.current_job_title
+                        run_m.last_heartbeat_at = datetime.now(timezone.utc)
+                        if session.error_message:
+                            run_m.error_message = session.error_message
+                        if session.status in (AutomationState.COMPLETED, AutomationState.ABORTED, AutomationState.FAILED):
+                            run_m.finished_at = session.completed_at or datetime.now(timezone.utc)
+
+                        # 4. Insert timeline event
                         evt_model = AutomationEventModel(
                             id=event_id,
                             run_id=session.run_id,
+                            seq=current_seq,
                             event_name=event_name,
                             payload={
-                                "seq": session._event_seq,
+                                "seq": current_seq,
                                 "message": message,
                                 "state": session.active_state,
                                 "stats": {
@@ -851,12 +930,51 @@ class AutomationOrchestrator:
                         )
                         db_sess.add(evt_model)
                         await db_sess.commit()
-                except Exception as persist_err:
-                    logger.warning(f"Failed to persist automation event [{event_name}] for run [{session.run_id}]: {persist_err}")
 
-            asyncio.create_task(_persist_event())
-        except Exception:
-            pass
+                        # Update in-memory sequence ONLY after successful database commit
+                        session._event_seq = current_seq
+
+                        event_dict = {
+                            "type": "AUTOMATION_TIMELINE_EVENT",
+                            "id": event_id,
+                            "seq": current_seq,
+                            "run_id": session.run_id,
+                            "event_name": event_name,
+                            "state": session.active_state,
+                            "message": message,
+                            "stats": {
+                                "discovered": session.discovered_jobs_count,
+                                "matched": session.matched_jobs_count,
+                                "applied": session.applications_submitted_count,
+                            },
+                            "payload": payload or {},
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        break  # Success
+                except Exception as persist_err:
+                    err_str = str(persist_err).lower()
+                    is_retryable = any(kw in err_str for kw in ("locked", "busy", "unique constraint", "integrityerror"))
+                    if attempt < 4 and is_retryable:
+                        logger.warning(
+                            f"Transient SQLite error on attempt {attempt + 1}/5 for [{event_name}] on run [{session.run_id}]: {persist_err}. Retrying..."
+                        )
+                        await asyncio.sleep(0.02 * (attempt + 1))
+                        continue
+                    logger.error(
+                        f"Database event persistence failed for [{event_name}] on run [{session.run_id}] (attempt {attempt + 1}): {persist_err}",
+                        exc_info=True,
+                    )
+                    raise RuntimeError(f"Failed to persist event [{event_name}] for run [{session.run_id}]: {persist_err}") from persist_err
+
+        if event_dict:
+            if hasattr(session, "events"):
+                session.events.append(event_dict)
+
+            # Post-commit live broadcast
+            await ws_manager.broadcast_to_user(
+                user_id=session.user_id,
+                message=event_dict,
+            )
 
 
 orchestrator = AutomationOrchestrator()

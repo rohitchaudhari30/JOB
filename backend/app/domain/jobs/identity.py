@@ -76,8 +76,11 @@ class CanonicalJobIdentifier:
         return " ".join(sorted(set(normalized_tokens)))
 
     @classmethod
-    def generate_description_fingerprint(cls, description: str) -> str:
-        if not description:
+    def generate_description_fingerprint(cls, description: str, external_job_id: str = "") -> str:
+        if not description or not description.strip():
+            # If description is missing, fall back to external_job_id if available to avoid collapsing distinct vacancies
+            if external_job_id:
+                return f"ext_{hashlib.sha256(external_job_id.strip().encode('utf-8')).hexdigest()[:12]}"
             return "nodesc"
         cleaned = re.sub(r"\s+", " ", description.lower().strip())
         sample = cleaned[:600]
@@ -90,13 +93,20 @@ class CanonicalJobIdentifier:
         title: str,
         location: str,
         description: str = "",
+        external_job_id: str = "",
     ) -> Tuple[str, IdentityConfidenceEnum]:
         norm_comp = cls.normalize_company(company)
         norm_title = cls.normalize_title(title)
         norm_loc = cls.normalize_location(location)
-        desc_fp = cls.generate_description_fingerprint(description)
+        desc_fp = cls.generate_description_fingerprint(description, external_job_id=external_job_id)
 
         raw_payload = f"{norm_comp}|{norm_title}|{norm_loc}|{desc_fp}"
         canonical_key = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
 
-        return canonical_key, IdentityConfidenceEnum.CANONICAL_DERIVED
+        # If description is missing and no external_job_id provided, confidence is POSSIBLE_DUPLICATE
+        if not description or not description.strip():
+            confidence = IdentityConfidenceEnum.POSSIBLE_DUPLICATE
+        else:
+            confidence = IdentityConfidenceEnum.CANONICAL_DERIVED
+
+        return canonical_key, confidence

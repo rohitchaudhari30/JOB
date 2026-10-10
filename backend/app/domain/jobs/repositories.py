@@ -13,6 +13,10 @@ class JobRepository(ABC):
         pass
 
     @abstractmethod
+    async def get_by_canonical_key(self, canonical_job_key: str) -> Job | None:
+        pass
+
+    @abstractmethod
     async def save(self, job: Job) -> Job:
         pass
 

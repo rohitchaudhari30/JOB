@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from app.core.security import decode_access_token
 
@@ -57,11 +57,46 @@ class ConnectionManager:
 
 ws_manager = ConnectionManager()
 
+import time
+from app.api.deps import get_current_user
+from app.domain.auth.entities import User
+from fastapi import Depends
+
+# Ephemeral single-use tickets for secure WebSocket authentication (avoids leaking JWTs in query params)
+_ws_tickets: Dict[str, Dict[str, Any]] = {}
+
+
+@router.post("/ws/ticket")
+async def create_ws_ticket(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    import uuid
+    ticket = f"wst_{uuid.uuid4().hex}"
+    _ws_tickets[ticket] = {
+        "user_id": current_user.id,
+        "expires_at": time.time() + 60,  # 60 seconds validity
+    }
+    return {"ticket": ticket, "expires_in": 60}
+
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: Optional[str] = Query(None),
+    ticket: Optional[str] = Query(None),
+):
     user_id = "anonymous"
-    if token:
+
+    # 1. Ticket-based authentication (Recommended industry standard)
+    if ticket:
+        ticket_data = _ws_tickets.pop(ticket, None)
+        if ticket_data and ticket_data.get("expires_at", 0) >= time.time():
+            user_id = ticket_data["user_id"]
+        else:
+            await websocket.close(code=4003)
+            return
+    # 2. Backward-compatible JWT token in query param
+    elif token:
         try:
             payload = decode_access_token(token)
             user_id = payload.get("sub", "anonymous")
@@ -82,13 +117,21 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                 command = (command_payload.get("command") or "").upper()
                 run_id = command_payload.get("run_id")
                 user_input = command_payload.get("input") or command_payload.get("user_input")
+                last_seen_seq = command_payload.get("last_seen_seq")
 
                 logger.info(f"Received WebSocket command [{command}] for run [{run_id}] from user [{user_id}].")
 
                 session = orchestrator.get_session(run_id) if run_id else orchestrator.get_active_user_run(user_id)
 
                 status_msg = "processed"
-                if session and session.user_id == user_id:
+                if command == "SUBSCRIBE":
+                    # Replay missed events if client provides last_seen_seq
+                    if session and session.user_id == user_id and last_seen_seq is not None:
+                        missed_events = [e for e in getattr(session, "events", []) if (e.get("seq") or 0) > last_seen_seq]
+                        for m_evt in missed_events:
+                            await websocket.send_text(json.dumps(m_evt))
+                    status_msg = "subscribed"
+                elif session and session.user_id == user_id:
                     if command in ("PAUSE", "PAUSE_RUN"):
                         session.pause()
                     elif command in ("RESUME", "RESUME_RUN", "SUBMIT_INPUT"):

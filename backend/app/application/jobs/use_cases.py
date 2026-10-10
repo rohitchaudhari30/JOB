@@ -100,12 +100,17 @@ class DiscoverJobsUseCase:
                 raw_job.canonical_job_key = canonical_key
                 raw_job.canonical_confidence = confidence.value
 
-                # Deduplication Check (source_id + external_job_id)
+                # Deduplication Check:
+                # 1. Exact platform match (source_id + external_job_id)
                 existing = await self._job_repo.get_by_external_id(source.id, raw_job.external_job_id)
+                # 2. Cross-portal canonical match
+                if not existing and canonical_key:
+                    existing = await self._job_repo.get_by_canonical_key(canonical_key)
+
                 if existing:
                     duplicates += 1
                     await self._job_repo.touch_seen(existing.id)
-                    logger.debug(f"Updated last_seen_at on duplicate job: {raw_job.external_job_id} ({raw_job.title})")
+                    logger.debug(f"Updated last_seen_at on duplicate job: {raw_job.external_job_id} / key {canonical_key} ({raw_job.title})")
                     saved_jobs.append(existing)
                     if auto_evaluate and self._matching_task_repo:
                         task_idem_key = hashlib.sha256(f"{user_id}:{existing.id}".encode()).hexdigest()

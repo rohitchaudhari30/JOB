@@ -36,12 +36,40 @@ class WebSocketClient {
   private reconnectTimeout: any = null;
   private isExplicitClose = false;
 
-  connect() {
+  async connect() {
     this.isExplicitClose = false;
-    const token = localStorage.getItem('auth_token');
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws${token ? `?token=${token}` : ''}`;
+
+    let wsUrl = `${protocol}//${host}/ws`;
+    try {
+      // 1. Preferred: Ephemeral single-use ticket (prevents token leakage in query params)
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          const resp = await fetch('/api/v1/ws/ticket', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data?.ticket) {
+              wsUrl = `${protocol}//${host}/ws?ticket=${data.ticket}`;
+            }
+          } else {
+            // Fallback to query token if ticket generation fails
+            wsUrl = `${protocol}//${host}/ws?token=${token}`;
+          }
+        } catch {
+          wsUrl = `${protocol}//${host}/ws?token=${token}`;
+        }
+      }
+    } catch {
+      // If window fetch fails, proceed with default
+    }
 
     try {
       this.socket = new WebSocket(wsUrl);
@@ -117,13 +145,14 @@ class WebSocketClient {
     }
   }
 
-  sendCommand(command: string, runId?: string, input?: string) {
+  sendCommand(command: string, runId?: string, input?: string, lastSeenSeq?: number) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(
         JSON.stringify({
           command,
           run_id: runId,
           input,
+          last_seen_seq: lastSeenSeq,
         })
       );
     } else {

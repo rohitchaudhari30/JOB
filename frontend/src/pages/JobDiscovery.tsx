@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Search,
   RefreshCw,
@@ -26,6 +26,8 @@ import {
   FileText,
   ShieldCheck,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { wsClient } from '../services/ws';
@@ -206,24 +208,57 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     }).catch(() => {});
   }, []);
 
+  // Pagination & Debouncing
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 25;
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce search query by 300ms
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [postedWithin, sortBy]);
+
   useEffect(() => {
     loadJobs();
-  }, [searchQuery, postedWithin, sortBy]);
+  }, [debouncedSearch, postedWithin, sortBy, page]);
+
+  const latestRequestIdRef = useRef<number>(0);
 
   const loadJobs = async () => {
+    const requestId = ++latestRequestIdRef.current;
     try {
       setLoading(true);
       const res = await api.listJobs({
-        search: searchQuery || undefined,
+        search: debouncedSearch.trim() || undefined,
         posted_within: postedWithin === 'all' ? undefined : (postedWithin || undefined),
         sort_by: sortBy || 'newest',
-        limit: 50,
+        skip: (page - 1) * pageSize,
+        limit: pageSize,
       });
-      setJobs(res.items || []);
+      // Stale response guard: only update state if this is still the active request
+      if (requestId === latestRequestIdRef.current) {
+        setJobs(res.items || []);
+        setTotalCount(res.total ?? (res.items || []).length);
+      }
     } catch (e) {
-      console.error('Failed to load jobs:', e);
+      if (requestId === latestRequestIdRef.current) {
+        console.error('Failed to load jobs:', e);
+        showError('Unable to load job listings. Please check connection and try again.');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -723,7 +758,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Discovered Job Repository ({displayedJobs.length} {filterMinFit ? 'top fit' : 'loaded'})
+              Discovered Job Repository ({totalCount} total{totalCount > pageSize ? ` · page ${page}` : ''})
             </h2>
             {displayedJobs.length > 0 && (
               <div className="flex items-center space-x-2">
@@ -1077,6 +1112,66 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {totalCount > pageSize && (
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 pb-6 border-t border-slate-200/60 dark:border-slate-800">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Showing <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min((page - 1) * pageSize + 1, totalCount)}</span> to{' '}
+              <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(page * pageSize, totalCount)}</span> of{' '}
+              <span className="font-bold text-slate-800 dark:text-slate-200">{totalCount}</span> opportunities
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors flex items-center space-x-1 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Previous</span>
+              </button>
+
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: Math.min(5, Math.ceil(totalCount / pageSize)) }, (_, i) => {
+                  const totalPages = Math.ceil(totalCount / pageSize);
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (page <= 3) {
+                    pageNum = i + 1;
+                  } else if (page >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = page - 2 + i;
+                  }
+                  const isCurrent = page === pageNum;
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        isCurrent
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setPage((p) => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
+                disabled={page >= Math.ceil(totalCount / pageSize)}
+                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors flex items-center space-x-1 cursor-pointer"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>

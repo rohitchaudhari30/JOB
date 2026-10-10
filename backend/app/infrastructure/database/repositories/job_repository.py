@@ -46,6 +46,8 @@ class SqlAlchemyJobRepository(JobRepository):
             posted_at_source=model.posted_at_source,
             freshness_bucket=model.freshness_bucket or "UNKNOWN",
             freshness_score=model.freshness_score or 0.0,
+            canonical_job_key=model.canonical_job_key,
+            canonical_confidence=model.canonical_confidence or "PLATFORM_EXACT",
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -61,6 +63,17 @@ class SqlAlchemyJobRepository(JobRepository):
             JobModel.source_id == source_id,
             JobModel.external_job_id == external_job_id,
         )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
+    async def get_by_canonical_key(self, canonical_job_key: str) -> Job | None:
+        if not canonical_job_key:
+            return None
+        stmt = select(JobModel).options(selectinload(JobModel.source)).where(
+            JobModel.canonical_job_key == canonical_job_key,
+            JobModel.is_active == True,
+        ).order_by(JobModel.created_at.asc())
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
@@ -112,6 +125,8 @@ class SqlAlchemyJobRepository(JobRepository):
                 posted_at_source=job.posted_at_source,
                 freshness_bucket=f_bucket,
                 freshness_score=f_score,
+                canonical_job_key=job.canonical_job_key,
+                canonical_confidence=job.canonical_confidence or "PLATFORM_EXACT",
             )
             self._session.add(model)
         else:
@@ -131,13 +146,32 @@ class SqlAlchemyJobRepository(JobRepository):
                 model.posted_at = job.posted_at
             if job.raw_posted_text:
                 model.raw_posted_text = job.raw_posted_text
+            if job.canonical_job_key:
+                model.canonical_job_key = job.canonical_job_key
+            if job.canonical_confidence:
+                model.canonical_confidence = job.canonical_confidence
             model.last_seen_at = now
             model.freshness_bucket = f_bucket
             model.freshness_score = f_score
 
-        await self._session.flush()
-        await self._session.refresh(model)
-        return self._to_entity(model)
+        from sqlalchemy.exc import IntegrityError
+        try:
+            async with self._session.begin_nested():
+                await self._session.flush()
+            await self._session.refresh(model)
+            return self._to_entity(model)
+        except IntegrityError as e:
+            await self._session.rollback()
+            existing_ext = await self.get_by_external_id(job.source_id, job.external_job_id)
+            if existing_ext:
+                await self.touch_seen(existing_ext.id)
+                return existing_ext
+            if job.canonical_job_key:
+                existing_canon = await self.get_by_canonical_key(job.canonical_job_key)
+                if existing_canon:
+                    await self.touch_seen(existing_canon.id)
+                    return existing_canon
+            raise
 
     def _apply_filters(
         self,
@@ -215,15 +249,15 @@ class SqlAlchemyJobRepository(JobRepository):
 
         sb = (sort_by or "newest").lower()
         if sb in ("newest", "posted_at"):
-            stmt = stmt.order_by(JobModel.posted_at.desc().nullslast(), JobModel.created_at.desc())
+            stmt = stmt.order_by(JobModel.posted_at.desc().nullslast(), JobModel.created_at.desc(), JobModel.id.desc())
         elif sb in ("freshness", "freshness_score"):
-            stmt = stmt.order_by(JobModel.freshness_score.desc(), JobModel.posted_at.desc().nullslast())
+            stmt = stmt.order_by(JobModel.freshness_score.desc(), JobModel.posted_at.desc().nullslast(), JobModel.id.desc())
         elif sb in ("salary", "salary_high_to_low"):
-            stmt = stmt.order_by(JobModel.max_salary.desc().nullslast(), JobModel.posted_at.desc().nullslast())
+            stmt = stmt.order_by(JobModel.max_salary.desc().nullslast(), JobModel.posted_at.desc().nullslast(), JobModel.id.desc())
         elif sb == "salary_low_to_high":
-            stmt = stmt.order_by(JobModel.min_salary.asc().nullslast())
+            stmt = stmt.order_by(JobModel.min_salary.asc().nullslast(), JobModel.id.desc())
         else:
-            stmt = stmt.order_by(JobModel.created_at.desc())
+            stmt = stmt.order_by(JobModel.created_at.desc(), JobModel.id.desc())
 
         stmt = stmt.offset(skip).limit(limit)
         result = await self._session.execute(stmt)

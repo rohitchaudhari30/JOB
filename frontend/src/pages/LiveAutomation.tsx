@@ -194,6 +194,27 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
         if (prev.some((e) => getEventKey(e) === key)) {
           return prev;
         }
+
+        // Check for sequence gap if monotonic seq is present
+        const maxSeq = prev.reduce((max, e) => Math.max(max, e.seq || 0), 0);
+        if (event.seq && maxSeq > 0 && event.seq > maxSeq + 1 && event.run_id) {
+          // Detected sequence gap! Recover missing range asynchronously
+          api.getRunEvents(event.run_id, maxSeq)
+            .then((missedEvents) => {
+              if (Array.isArray(missedEvents) && missedEvents.length > 0) {
+                setTimelineEvents((curr) => {
+                  const currKeys = new Set(curr.map(getEventKey));
+                  const newEvents = missedEvents.filter((m) => !currKeys.has(getEventKey(m)));
+                  if (newEvents.length === 0) return curr;
+                  const combined = [...curr, ...newEvents];
+                  combined.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+                  return combined;
+                });
+              }
+            })
+            .catch((err) => console.warn('[LiveConsole] Failed to recover sequence gap:', err));
+        }
+
         return [...prev, event];
       });
       if (event.state) {
