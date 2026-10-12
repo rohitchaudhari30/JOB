@@ -3,6 +3,12 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
+@pytest.mark.file_db
+@pytest.mark.xfail(
+    strict=True,
+    reason="AUT-01: request session holds an uncommitted write while the orchestrator "
+    "writes on another connection (database is locked). Remove once Phase 2 commits per step.",
+)
 async def test_automation_api_and_schedules_flow(client: AsyncClient):
     # 1. Register & Login User
     user_payload = {

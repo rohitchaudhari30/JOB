@@ -241,6 +241,7 @@ async def test_pagination_and_sorting_flow(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+@pytest.mark.file_db
 async def test_concurrent_job_ingestion_race_recovery():
     """Verifies that concurrent insertions of identical/canonical jobs recover safely without unhandled integrity errors."""
     import asyncio

@@ -1,28 +1,38 @@
 import asyncio
-import os
+import tempfile
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
+import app.core.database as database
 from app.core.database import Base, get_db_session
-from app.core.security import create_access_token
 from main import app
 
-# In-memory SQLite async engine for fast isolated tests
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
-test_engine = create_async_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-)
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "file_db: run the test on a temporary file DB so every session gets its "
+        "own connection (needed for real concurrency tests).",
+    )
 
-TestAsyncSessionLocal = async_sessionmaker(
-    bind=test_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
-)
+
+def _make_engine(use_file: bool):
+    if use_file:
+        path = tempfile.mkdtemp(prefix="autoapply_tests_") + "/test.db"
+        return create_async_engine(
+            f"sqlite+aiosqlite:///{path}",
+            connect_args={"check_same_thread": False, "timeout": 30},
+            poolclass=NullPool,
+        )
+    # One shared in-memory connection: fast and isolated.
+    return create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+    )
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -33,17 +43,46 @@ def event_loop():
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def init_test_database():
-    async with test_engine.begin() as conn:
+async def test_database(request, monkeypatch):
+    """Create a fresh test DB and point ALL code at it.
+
+    Production code (orchestrator, workers, background tasks) opens
+    `AsyncSessionLocal()` directly, so we patch that factory as well as
+    `get_db_session`, otherwise those code paths would touch ./app.db.
+    """
+    engine = _make_engine(bool(request.node.get_closest_marker("file_db")))
+    factory = async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+    monkeypatch.setattr(database, "engine", engine)
+    monkeypatch.setattr(database, "AsyncSessionLocal", factory)
+    try:
+        import app.workers.matching_worker as matching_worker
+
+        monkeypatch.setattr(matching_worker, "AsyncSessionLocal", factory)
+    except ImportError:
+        pass
+
+    async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+
+    yield factory
+
+    # Stop pipelines a test started, then drop the DB. Disposing the engine
+    # closes its connections (a drop_all could wait behind a cancelled task).
+    from app.application.automation.orchestrator import orchestrator
+
+    await orchestrator.cancel_background_tasks()
+    await engine.dispose()
 
 
 @pytest_asyncio.fixture
-async def db_session() -> AsyncSession:
-    async with TestAsyncSessionLocal() as session:
+async def db_session(test_database) -> AsyncSession:
+    async with test_database() as session:
         yield session
 
 

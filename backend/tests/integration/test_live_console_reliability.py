@@ -9,7 +9,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from unittest.mock import patch
 
-from app.core.database import Base, AsyncSessionLocal
+import app.core.database as database
+from app.core.database import Base
+
+
+def AsyncSessionLocal():
+    # Look the factory up at call time so conftest's test-DB patch applies.
+    return database.AsyncSessionLocal()
 from app.core.security import decode_access_token
 from app.infrastructure.database.models.models import AutomationRunModel, AutomationEventModel, UserModel
 from app.application.automation.orchestrator import orchestrator, AutomationSession
@@ -449,6 +455,13 @@ async def test_sqlite_migration_repair_on_historical_and_duplicate_events():
 
         # Temporarily drop unique index to insert corrupted historical test data
         await session.execute(text("DROP INDEX IF EXISTS uq_run_event_seq"))
+        # Rebuild the table the way legacy databases had it: seq was nullable.
+        await session.execute(text("DROP TABLE automation_events"))
+        await session.execute(text(
+            "CREATE TABLE automation_events ("
+            "id VARCHAR PRIMARY KEY, run_id VARCHAR NOT NULL, seq INTEGER, "
+            "event_name VARCHAR, payload TEXT, created_at DATETIME)"
+        ))
         
         # Insert historical events: non-contiguous valid sequences (10, 50) alongside 0 and NULL
         cid1, cid2, cid3, cid4, cid5 = [f"evt_corrupt_{uuid.uuid4().hex[:6]}" for _ in range(5)]

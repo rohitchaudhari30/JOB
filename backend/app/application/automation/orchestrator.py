@@ -133,6 +133,9 @@ class AutomationOrchestrator:
         self._lock: Optional[asyncio.Lock] = None
         self._lock_loop = None
         self._run_locks: Dict[str, Any] = {}
+        # Keep references so background pipelines are not garbage-collected
+        # and can be cancelled on shutdown or in tests.
+        self._background_tasks: set = set()
 
     @property
     def lock(self) -> asyncio.Lock:
@@ -290,7 +293,7 @@ class AutomationOrchestrator:
             self._user_active_runs[user_id] = run_id
 
         # Launch non-blocking background orchestration task
-        asyncio.create_task(
+        pipeline_task = asyncio.create_task(
             self._execute_run_pipeline(
                 session=session,
                 source_type=source_type,
@@ -314,8 +317,18 @@ class AutomationOrchestrator:
                 quota_repo=quota_repo,
             )
         )
+        self._background_tasks.add(pipeline_task)
+        pipeline_task.add_done_callback(self._background_tasks.discard)
 
         return session
+
+    async def cancel_background_tasks(self) -> None:
+        """Cancel any running pipelines and wait for them to stop."""
+        tasks = list(self._background_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _execute_run_pipeline(
         self,
