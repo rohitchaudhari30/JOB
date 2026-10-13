@@ -117,6 +117,15 @@ class AutomationSession:
         logger.info(f"Automation run [{self.run_id}] aborted: {reason}")
 
 
+def should_auto_submit(auto_apply_matches: bool, decision: "DecisionEnum") -> bool:
+    """Only matches the rule marked AUTO_APPLY may be submitted without a human.
+
+    REQUIRE_APPROVAL matches are queued as APPROVAL_REQUIRED and wait for the user,
+    even when auto-apply is switched on and the score is high.
+    """
+    return bool(auto_apply_matches) and decision == DecisionEnum.AUTO_APPLY
+
+
 class AutomationOrchestrator:
     """
     Coordinates the entire end-to-end automation cycle:
@@ -475,7 +484,7 @@ class AutomationOrchestrator:
 
                             if session.status == AutomationState.COMPLETED:
                                 exec_model.status = "COMPLETED"
-                            elif session.status in (AutomationState.FAILED, AutomationState.ERROR):
+                            elif session.status == AutomationState.FAILED:
                                 exec_model.status = "FAILED"
                                 exec_model.error_message = session.error_message
                             elif session.status in (AutomationState.ABORTED, AutomationState.STOPPED):
@@ -492,8 +501,13 @@ class AutomationOrchestrator:
                     else:
                         async with AsyncSessionLocal() as db_session:
                             await _sync_final_state(SqlAlchemyCampaignExecutionRepository(db_session))
+                            # Repositories only flush, so commit or the final state is lost.
+                            await db_session.commit()
                 except Exception as sync_err:
-                    logger.warning(f"Failed to synchronize final execution state for [{session.execution_id}]: {sync_err}")
+                    logger.error(
+                        f"Failed to synchronize final execution state for [{session.execution_id}]: {sync_err}",
+                        exc_info=True,
+                    )
             async with self.lock:
                 if session.user_id in self._user_active_runs:
                     del self._user_active_runs[session.user_id]
@@ -727,10 +741,7 @@ class AutomationOrchestrator:
             await session.pause_event.wait()
 
             # Determine if we should auto apply
-            should_apply = auto_apply_matches and (
-                match_res.decision in (DecisionEnum.AUTO_APPLY, DecisionEnum.REQUIRE_APPROVAL)
-                or match_res.overall_score >= (match_rule.approval_threshold or 70.0)
-            )
+            should_apply = should_auto_submit(auto_apply_matches, match_res.decision)
             initial_state = WorkflowStateEnum.APPROVED if should_apply else WorkflowStateEnum.APPROVAL_REQUIRED
 
             # Canonical application creation & validation through ApplicationOrchestrator

@@ -7,6 +7,7 @@ from app.api.deps import (
     get_job_repository,
     get_job_source_repository,
     get_matching_task_repository,
+    require_admin,
 )
 from app.application.jobs.use_cases import (
     DiscoverJobsUseCase,
@@ -152,7 +153,7 @@ async def get_job_details(
 @router.delete("/{job_id}", status_code=status.HTTP_200_OK)
 async def delete_job(
     job_id: str,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_admin)],
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
 ):
     from app.application.jobs.use_cases import DeleteJobUseCase
@@ -163,7 +164,7 @@ async def delete_job(
 
 @router.delete("", status_code=status.HTTP_200_OK)
 async def clear_jobs(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_admin)],
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
     source_type: Optional[str] = Query(None, description="Optional platform filter to clear (e.g. 'naukri', 'linkedin')"),
 ):

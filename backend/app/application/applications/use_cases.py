@@ -593,7 +593,8 @@ class ExecuteApplicationUseCase:
                 if curr and curr.workflow_state in (
                     WorkflowStateEnum.APPLIED,
                     WorkflowStateEnum.RECONCILIATION_REQUIRED,
-                    WorkflowStateEnum.CANCELLED,
+                    WorkflowStateEnum.SUBMISSION_UNKNOWN,
+                    WorkflowStateEnum.SKIPPED,
                 ):
                     logger.warning(
                         f"Application [{app.id}] reached newer terminal/reconciliation state [{curr.workflow_state.value}]. Aborting exception save."

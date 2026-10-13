@@ -357,7 +357,9 @@ async def init_db():
     await _migrate_sqlite_columns()
     logger.info("Database schemas initialized.")
 
-    # Seed demo account if not exists
+    # Seed demo account only when explicitly enabled in a dev environment (SEC-02).
+    if not (settings.SEED_DEMO_USER and settings.is_dev_environment):
+        return
     try:
         from sqlalchemy import select
         from app.core.security import get_password_hash

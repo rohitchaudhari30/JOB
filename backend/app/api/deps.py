@@ -131,3 +131,18 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def require_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Allow only users listed in ADMIN_EMAILS (case-insensitive)."""
+    from app.core.config import settings
+
+    admins = {e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()}
+    if current_user.email.lower() not in admins:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This operation affects data shared by all users and needs an administrator.",
+        )
+    return current_user

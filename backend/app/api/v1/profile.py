@@ -61,6 +61,11 @@ class ProfileUpdateSchema(BaseModel):
     work_authorization: str | None = None
     relocation_preference: bool = True
     remote_preference: str = "any"
+    # Optional lists. When a list is sent it REPLACES what is stored;
+    # when it is left out, the stored list is untouched.
+    skills: List[SkillSchema] | None = None
+    experiences: List[ExperienceSchema] | None = None
+    educations: List[EducationSchema] | None = None
 
 
 class ProfileResponse(BaseModel):

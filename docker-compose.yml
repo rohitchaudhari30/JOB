@@ -9,8 +9,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - APP_ENV=development
-      - DEBUG=true
+      - APP_ENV=${APP_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      # Required: copy .env.example to .env at the repo root and fill these in (SEC-03).
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
       - DATABASE_URL=sqlite+aiosqlite:///./storage/app.db
       - REDIS_URL=redis://redis:6379/0
       - TASK_QUEUE_BACKEND=local
@@ -31,8 +34,11 @@ services:
     restart: unless-stopped
     command: ["python", "-m", "app.workers.automation_worker"]
     environment:
-      - APP_ENV=development
-      - DEBUG=true
+      - APP_ENV=${APP_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      # Required: copy .env.example to .env at the repo root and fill these in (SEC-03).
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
       - DATABASE_URL=sqlite+aiosqlite:///./storage/app.db
       - REDIS_URL=redis://redis:6379/0
       - STORAGE_DIR=/app/storage

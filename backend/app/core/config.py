@@ -1,7 +1,23 @@
+import base64
+import logging
 import os
+import secrets
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+
+
+logger = logging.getLogger(__name__)
+
+# Environments where it is acceptable to run with generated throw-away secrets.
+DEV_ENVIRONMENTS = {"development", "dev", "local", "test", "testing"}
+
+# Values that used to be hard-coded defaults. They are public, so never accept them.
+KNOWN_INSECURE_VALUES = {
+    "default_insecure_development_secret_key_change_in_production_123456",
+    "dGVzdF9rZXlfdGhhdF9pczMzX2J5dGVzX2xvbmdfMTIzNDU2Nzg=",
+    "your_secret_key_here",
+}
 
 
 class Settings(BaseSettings):
@@ -12,12 +28,16 @@ class Settings(BaseSettings):
     )
 
     # Application & Environment
-    APP_ENV: str = "development"
+    # Safe by default: anything that is not explicitly a dev/test environment
+    # must provide real secrets (see validate_production_secrets).
+    APP_ENV: str = "production"
     APP_NAME: str = "Job Automation Platform"
     APP_PORT: int = 8000
-    DEBUG: bool = True
-    SECRET_KEY: str = "default_insecure_development_secret_key_change_in_production_123456"
-    ENCRYPTION_KEY: str = "dGVzdF9rZXlfdGhhdF9pczMzX2J5dGVzX2xvbmdfMTIzNDU2Nzg="  # 32-byte base64 default for dev
+    DEBUG: bool = False
+    # Create demo.engineer@example.com on startup. Local development only.
+    SEED_DEMO_USER: bool = False
+    SECRET_KEY: str = ""
+    ENCRYPTION_KEY: str = ""
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./app.db"
@@ -48,6 +68,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # Active session access token (60 mins)
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7     # Revocable refresh token lifespan (7 days)
     SESSION_COOKIE_MAX_AGE_DAYS: int = 30
+    # Comma-separated emails allowed to run destructive, shared-data operations
+    # (e.g. deleting jobs, which are shared by every user). Empty = nobody.
+    ADMIN_EMAILS: str = ""
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     # Upload & Defense in Depth
@@ -69,21 +92,35 @@ class Settings(BaseSettings):
     def allowed_resume_extensions_list(self) -> List[str]:
         return [ext.strip().lower() for ext in self.ALLOWED_RESUME_EXTENSIONS.split(",") if ext.strip()]
 
-    def validate_production_secrets(self) -> None:
-        """Enforces fail-fast production security standards."""
-        is_prod = self.APP_ENV.lower() in ("production", "prod", "staging") or not self.DEBUG
-        if is_prod:
-            insecure_secret = "default_insecure_development_secret_key_change_in_production_123456"
-            if not self.SECRET_KEY or self.SECRET_KEY == insecure_secret or len(self.SECRET_KEY) < 32:
-                raise ValueError(
-                    "FATAL SECURITY MISCONFIGURATION: In production, SECRET_KEY must be a cryptographically secure random string (minimum 32 characters) provided via environment variables or secret manager."
-                )
+    @property
+    def is_dev_environment(self) -> bool:
+        return self.APP_ENV.lower() in DEV_ENVIRONMENTS
 
-            insecure_enc = "dGVzdF9rZXlfdGhhdF9pczMzX2J5dGVzX2xvbmdfMTIzNDU2Nzg="
-            if not self.ENCRYPTION_KEY or self.ENCRYPTION_KEY == insecure_enc:
-                raise ValueError(
-                    "FATAL SECURITY MISCONFIGURATION: In production, ENCRYPTION_KEY must be a 32-byte base64-encoded AES key provided via environment variables or secret manager."
-                )
+    def validate_production_secrets(self) -> None:
+        """Fail closed: real secrets are required unless APP_ENV is dev/test.
+
+        In dev/test, missing secrets are replaced by random per-process ones
+        (never a key that is public in the repository).
+        """
+        if self.is_dev_environment:
+            if not self.SECRET_KEY or self.SECRET_KEY in KNOWN_INSECURE_VALUES:
+                logger.warning("SECRET_KEY not set: using a random key for this process (dev only).")
+                self.SECRET_KEY = secrets.token_urlsafe(48)
+            if not self.ENCRYPTION_KEY or self.ENCRYPTION_KEY in KNOWN_INSECURE_VALUES:
+                logger.warning("ENCRYPTION_KEY not set: using a random key for this process (dev only).")
+                self.ENCRYPTION_KEY = base64.b64encode(secrets.token_bytes(32)).decode()
+            return
+
+        if not self.SECRET_KEY or self.SECRET_KEY in KNOWN_INSECURE_VALUES or len(self.SECRET_KEY) < 32:
+            raise ValueError(
+                "FATAL SECURITY MISCONFIGURATION: SECRET_KEY must be a random string of at least "
+                "32 characters, provided via environment variables or a secret manager."
+            )
+        if not self.ENCRYPTION_KEY or self.ENCRYPTION_KEY in KNOWN_INSECURE_VALUES:
+            raise ValueError(
+                "FATAL SECURITY MISCONFIGURATION: ENCRYPTION_KEY must be a 32-byte base64-encoded "
+                "AES key provided via environment variables or a secret manager."
+            )
 
 
 settings = Settings()

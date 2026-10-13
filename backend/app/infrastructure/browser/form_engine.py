@@ -240,12 +240,15 @@ class FieldValueResolver:
         elif intent == CanonicalIntent.EXPECTED_CTC:
             raw_val = str(profile.expected_ctc) if profile.expected_ctc else None
         elif intent == CanonicalIntent.NOTICE_PERIOD:
-            days = profile.notice_period_days or 30
-            raw_val = f"{days} Days" if days > 0 else "Immediate"
+            # 0 is a real answer ("Immediate"); only a missing value is unknown.
+            days = profile.notice_period_days
+            if days is not None:
+                raw_val = f"{days} Days" if days > 0 else "Immediate"
         elif intent == CanonicalIntent.WILLING_TO_RELOCATE:
             raw_val = "Yes" if profile.relocation_preference else "No"
         elif intent == CanonicalIntent.WORK_AUTHORIZATION:
-            raw_val = profile.work_authorization or "Yes"
+            # Never guess legal status: if the profile has no answer, leave it unresolved.
+            raw_val = profile.work_authorization
 
         if not raw_val:
             return None
@@ -278,12 +281,14 @@ class FieldValueResolver:
                 if opt_digits and int(opt_digits[0]) == target_num:
                     return opt.value or opt.text
 
-        # Fallback to first non-empty option if available
-        for opt in options:
-            if opt.value and opt.value != "0" and opt.value != "-1":
-                return opt.value
-
+        # No honest match: return None so the form is flagged for the user,
+        # instead of picking the first option.
         return None
+
+
+# The AI gives no real confidence value, so we do not invent one.
+# 0.0 means "not scored"; AI answers are always recorded as AI_GENERATED.
+AI_ANSWER_CONFIDENCE = 0.0
 
 
 @dataclass
@@ -380,7 +385,7 @@ class FormEngine:
                             intent=intent,
                             value=answer,
                             answered_by="AI_GENERATED",
-                            confidence=0.85,
+                            confidence=AI_ANSWER_CONFIDENCE,
                         )
                     )
                     result.screening_questions.append(
@@ -388,7 +393,7 @@ class FormEngine:
                             "question": question_text,
                             "answer": answer,
                             "answered_by": "AI_GENERATED",
-                            "confidence": 0.85,
+                            "confidence": AI_ANSWER_CONFIDENCE,
                         }
                     )
                 else:
@@ -471,9 +476,8 @@ class FormEngine:
             q_lower = question_text.lower()
             if "years of experience" in q_lower or "how many years" in q_lower:
                 return str(exp_years)
-            if "relocate" in q_lower or "authorized" in q_lower:
-                return "Yes"
-            return "Yes"
+            # Anything else needs a real answer from the user, not a guess.
+            return None
 
         prompt = (
             f"You are an AI assistant answering a job application screening question for the following candidate:\n"
@@ -493,4 +497,4 @@ class FormEngine:
             return response.strip()
         except Exception as e:
             logger.error(f"AI screening question answering failed: {e}")
-            return "Yes"
+            return None

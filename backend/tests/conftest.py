@@ -1,4 +1,5 @@
 import asyncio
+import os
 import tempfile
 
 import pytest
@@ -6,6 +7,9 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
+
+# Tests are a dev-like environment: settings generate throw-away secrets.
+os.environ.setdefault("APP_ENV", "test")
 
 import app.core.database as database
 from app.core.database import Base, get_db_session

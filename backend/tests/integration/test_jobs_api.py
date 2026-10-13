@@ -310,3 +310,29 @@ async def test_concurrent_job_ingestion_race_recovery():
 
 
 
+
+
+async def _login(client, email):
+    payload = {"email": email, "password": "Password123!", "full_name": "Job Tester"}
+    await client.post("/api/v1/auth/register", json=payload)
+    res = await client.post("/api/v1/auth/login", json={"email": email, "password": payload["password"]})
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+@pytest.mark.asyncio
+async def test_regular_user_cannot_delete_or_clear_shared_jobs(client):
+    """SEC-01: jobs are shared, so deleting them needs an administrator."""
+    headers = await _login(client, "regular.user@example.com")
+    assert (await client.delete("/api/v1/jobs/some-job", headers=headers)).status_code == 403
+    assert (await client.delete("/api/v1/jobs", headers=headers)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_can_clear_jobs(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ADMIN_EMAILS", "boss@example.com")
+    headers = await _login(client, "boss@example.com")
+    res = await client.delete("/api/v1/jobs", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["status"] == "cleared"

@@ -244,15 +244,18 @@ export const App: React.FC = () => {
               </span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleQuickDemoLogin}
-              disabled={authLoading}
-              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 flex items-center justify-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>⚡ 1-Click Instant Demo Access</span>
-            </button>
+            {/* Demo shortcut exists only in local dev builds (SEC-02). */}
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                onClick={handleQuickDemoLogin}
+                disabled={authLoading}
+                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 flex items-center justify-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>⚡ 1-Click Instant Demo Access</span>
+              </button>
+            )}
           </form>
 
           <div className="text-center pt-2 border-t border-slate-200 dark:border-slate-800">
