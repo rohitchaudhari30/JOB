@@ -28,6 +28,7 @@ class DiscoverJobsRequest(BaseModel):
     source_type: str = "naukri"
     roles: List[str] = Field(default_factory=lambda: ["Data Engineer"])
     locations: List[str] = Field(default_factory=lambda: ["Bangalore", "Pune"])
+    companies: List[str] = Field(default_factory=list)  # needed for Lever/Greenhouse/Ashby/Workday
     experience: Optional[float] = None
     min_experience: float = 0.0
     max_experience: float = 10.0
@@ -88,6 +89,7 @@ async def discover_jobs(
     exp_val = req.experience if req.experience is not None else req.min_experience
     filters = SearchQueryFilter(
         roles=req.roles,
+        companies=req.companies,
         locations=req.locations,
         experience=exp_val,
         min_experience=req.min_experience,

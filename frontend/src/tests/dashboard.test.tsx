@@ -9,6 +9,9 @@ vi.mock('../services/api', () => ({
   api: {
     getDashboardOverview: vi.fn(),
     listApplications: vi.fn(),
+    listConnections: vi.fn().mockResolvedValue([
+      { platform: "naukri", display_name: "Naukri.com", status: "not_connected", session_active: false },
+    ]),
     createApplication: vi.fn(),
     pauseRun: vi.fn(),
     resumeRun: vi.fn(),

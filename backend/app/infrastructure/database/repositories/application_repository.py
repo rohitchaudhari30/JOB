@@ -406,6 +406,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             + counts.get(WorkflowStateEnum.SUBMISSION_UNKNOWN.value, 0)
         )
         needs_attention = failed + paused + reconciliation_required
+        # "success_rate" here means: share of all applications that reached the applied state.
+        # It is not an interview or offer rate (ANA-05).
         success_rate = round((applied / total) * 100, 1) if total > 0 else 0.0
 
         return {

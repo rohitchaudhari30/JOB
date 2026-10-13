@@ -36,44 +36,8 @@ interface NotificationItem {
   tabLink?: string;
 }
 
-const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: '1',
-    title: 'AI Matching Completed',
-    description: '8 discovered jobs evaluated against your candidate profile.',
-    time: 'Just now',
-    type: 'match',
-    read: false,
-    tabLink: 'matches',
-  },
-  {
-    id: '2',
-    title: 'Naukri Discovery Synced',
-    description: 'Discovered high-priority Data Engineer roles.',
-    time: '15m ago',
-    type: 'discovery',
-    read: false,
-    tabLink: 'discovery',
-  },
-  {
-    id: '3',
-    title: 'Stealth Guard Active',
-    description: 'Browser fingerprint randomized and human delays enabled.',
-    time: '1h ago',
-    type: 'security',
-    read: true,
-    tabLink: 'connections',
-  },
-  {
-    id: '4',
-    title: 'Safe Automation Pipeline',
-    description: 'Zero unresolved CAPTCHA/OTP challenges. All systems nominal.',
-    time: '2h ago',
-    type: 'automation',
-    read: true,
-    tabLink: 'live_console',
-  },
-];
+// No made-up notifications: the list starts empty and only holds real events.
+const DEFAULT_NOTIFICATIONS: NotificationItem[] = [];
 
 export const Navbar: React.FC<NavbarProps> = ({
   user,

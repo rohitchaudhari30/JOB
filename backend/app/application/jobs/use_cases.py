@@ -96,6 +96,7 @@ class DiscoverJobsUseCase:
                     title=raw_job.title or "",
                     location=raw_job.location or "",
                     description=raw_job.raw_description or "",
+                    external_job_id=raw_job.external_job_id or "",
                 )
                 raw_job.canonical_job_key = canonical_key
                 raw_job.canonical_confidence = confidence.value

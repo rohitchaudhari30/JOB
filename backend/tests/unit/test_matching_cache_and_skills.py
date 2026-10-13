@@ -70,3 +70,18 @@ async def test_llm_is_skipped_for_clearly_poor_fit():
     assert result.ai_provider_used == "DETERMINISTIC_FALLBACK"
 
 
+
+
+from app.application.matching.cascade import HardFilterEvaluator
+
+
+def test_salary_filter_ignores_different_currencies():
+    profile = _profile()
+    profile.expected_ctc = 2_000_000
+    profile.currency = "INR"
+    job = _job()
+    job.max_salary = 90_000
+    job.salary_currency = "USD"
+    assert HardFilterEvaluator.evaluate(profile, job)[0] is True
+    job.salary_currency = "INR"
+    assert HardFilterEvaluator.evaluate(profile, job)[0] is False

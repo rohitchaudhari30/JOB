@@ -1,8 +1,10 @@
 from collections import Counter
+
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import func, select, or_, distinct, union
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.domain.matching.entities import MatchRule
 from app.domain.analytics.entities import (
     CampaignPerformanceMetric,
     FunnelOverview,
@@ -26,6 +28,10 @@ from app.infrastructure.database.models import (
     SavedAnswerModel,
 )
 
+
+
+# Outcomes that mean "the application really went out". Defined once so every query agrees (ANA-02).
+SENT_OUTCOMES = ["SUBMITTED", "RESPONDED", "INTERVIEWING", "OFFERED"]
 
 class AnalyticsService:
     def __init__(self, session: AsyncSession):
@@ -149,7 +155,7 @@ class AnalyticsService:
         for wf_state, outcome, count in app_results:
             total_applied += count
             # Successful application requires confirmed submission or positive outcome
-            if wf_state == "APPLIED" or outcome in ["SUBMITTED", "RESPONDED", "INTERVIEWING", "OFFERED"]:
+            if wf_state == "APPLIED" or outcome in SENT_OUTCOMES:
                 total_successful += count
             if wf_state == "REJECTED" or outcome == "REJECTED":
                 total_rejected += count
@@ -329,7 +335,7 @@ class AnalyticsService:
                 ApplicationModel.resume_id == r.id,
                 or_(
                     ApplicationModel.workflow_state == "APPLIED",
-                    ApplicationModel.outcome_status.in_(["SUBMITTED", "RESPONDED", "INTERVIEWING", "OFFERED"]),
+                    ApplicationModel.outcome_status.in_(SENT_OUTCOMES),
                 ),
             )
             response_query = (
@@ -496,7 +502,7 @@ class AnalyticsService:
                     JobModel.source_id == src.id,
                     or_(
                         ApplicationModel.workflow_state == "APPLIED",
-                        ApplicationModel.outcome_status.in_(["SUBMITTED", "RESPONDED", "INTERVIEWING", "OFFERED"]),
+                        ApplicationModel.outcome_status.in_(SENT_OUTCOMES),
                     ),
                 )
             )
@@ -585,7 +591,7 @@ class AnalyticsService:
                     interview_rate_pct=int_rate,
                     offer_rate_pct=off_rate,
                     applied_count=submitted_count,
-                    success_rate_pct=resp_rate,
+                    success_rate_pct=resp_rate,  # = response rate: responded / sent (ANA-05)
                 )
             )
 
@@ -725,7 +731,7 @@ class AnalyticsService:
                     interview_rate_pct=int_rate,
                     offer_rate_pct=off_rate,
                     applied_count=app_count,
-                    success_rate_pct=resp_rate,
+                    success_rate_pct=resp_rate,  # = response rate: responded / sent (ANA-05)
                 )
             )
 
@@ -743,7 +749,7 @@ class AnalyticsService:
         if end_date:
             matches_stmt = matches_stmt.where(MatchResultModel.created_at <= end_date)
 
-        matches_stmt = matches_stmt.limit(100)
+        matches_stmt = matches_stmt.limit(100)  # skill insights look at the 100 most recent matches (ANA-04)
         matches = (await self.session.scalars(matches_stmt)).all()
 
         matched_counter: Counter[str] = Counter()
@@ -777,30 +783,15 @@ class AnalyticsService:
         return insights[:15]
 
     async def get_weight_tuning_recommendations(self, user_id: str) -> WeightTuningRecommendation:
-        # Analyzes match scores vs applied outcomes to suggest optimal weights
-        avg_skill_score = await self.session.scalar(
-            select(func.avg(MatchResultModel.skill_match_score)).where(MatchResultModel.user_id == user_id)
-        ) or 75.0
-
-        avg_semantic_score = await self.session.scalar(
-            select(func.avg(MatchResultModel.semantic_score)).where(MatchResultModel.user_id == user_id)
-        ) or 70.0
-
-        if avg_skill_score > avg_semantic_score:
-            rec_skill = 0.45
-            rec_semantic = 0.35
-            rec_exp = 0.20
-            rationale = "Candidate possesses strong structured skill overlap. Increasing skill weight maximizes top-tier ATS screening passes."
-        else:
-            rec_skill = 0.35
-            rec_semantic = 0.45
-            rec_exp = 0.20
-            rationale = "Candidate profile shows high semantic contextual alignment. Increasing semantic weight surfaces high-relevance cross-functional roles."
-
-        # Check if candidate has explicitly calibrated custom weights
-        cur_skill = 0.40
-        cur_semantic = 0.40
-        cur_exp = 0.20
+        """
+        Shows the weights in use today. We do not yet have enough application outcomes to
+        learn better weights, so the recommendation equals the current weights and the
+        confidence is 0 (ANA-01). This replaces the old hard-coded "recommendations".
+        """
+        defaults = MatchRule()
+        cur_skill = defaults.skills_weight
+        cur_semantic = defaults.semantic_weight
+        cur_exp = defaults.experience_weight
 
         saved_weights_stmt = select(SavedAnswerModel).where(
             SavedAnswerModel.user_id == user_id,
@@ -814,16 +805,16 @@ class AnalyticsService:
                 cur_skill = float(sw_data.get("skills_weight", cur_skill))
                 cur_semantic = float(sw_data.get("semantic_weight", cur_semantic))
                 cur_exp = float(sw_data.get("experience_weight", cur_exp))
-            except Exception:
+            except (ValueError, TypeError):
                 pass
 
         return WeightTuningRecommendation(
             current_skill_weight=cur_skill,
             current_semantic_weight=cur_semantic,
             current_experience_weight=cur_exp,
-            recommended_skill_weight=rec_skill,
-            recommended_semantic_weight=rec_semantic,
-            recommended_experience_weight=rec_exp,
-            confidence_score=0.92,
-            rationale=rationale,
+            recommended_skill_weight=cur_skill,
+            recommended_semantic_weight=cur_semantic,
+            recommended_experience_weight=cur_exp,
+            confidence_score=0.0,
+            rationale="Not enough application outcome data to recommend different weights yet. Current weights are kept.",
         )

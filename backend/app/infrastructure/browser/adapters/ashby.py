@@ -24,7 +24,9 @@ class AshbyAdapter(BaseJobSourceAdapter):
         page: Optional[Page] = None
         try:
             page = await context.new_page()
-            company_slug = filters.roles[0].lower().replace(" ", "") if filters.roles else "linear"
+            if not filters.companies:
+                raise ValueError("Ashby discovery needs at least one company board name in 'companies'.")
+            company_slug = filters.companies[0].lower().replace(" ", "")
             target_url = f"https://jobs.ashbyhq.com/{company_slug}"
             logger.info(f"Navigating to Ashby board: {target_url}")
 
@@ -61,6 +63,7 @@ class AshbyAdapter(BaseJobSourceAdapter):
                 )
         except Exception as e:
             logger.error(f"Ashby job extraction failed: {e}")
+            raise
         finally:
             if page and not page.is_closed():
                 await page.close()

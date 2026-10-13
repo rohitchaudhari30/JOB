@@ -50,7 +50,9 @@ class HardFilterEvaluator:
                     return False, f"Candidate requires remote work, but job is onsite in {job.location}"
 
         # 3. Minimum Expected Salary filter (if disclosed on job)
-        if job.max_salary and profile.expected_ctc:
+        # Only compare when both amounts use the same currency (JOB-05); otherwise skip the filter.
+        same_currency = (job.salary_currency or "").upper() == (profile.currency or "").upper()
+        if job.max_salary and profile.expected_ctc and same_currency:
             if job.max_salary < (profile.expected_ctc * 0.75):  # 25% flexibility margin
                 return False, f"Job max salary ({job.max_salary}) is below candidate minimum expected ({profile.expected_ctc})"
 
@@ -371,7 +373,7 @@ class MatchingCascadeEngine:
         location_score = 100.0 if not profile.location or profile.location.lower() in job.location.lower() else 75.0
         exp_score = min(100.0, max(50.0, 100.0 - abs((profile.total_experience_months / 12.0) - job.min_experience_years) * 10))
         salary_score = 100.0
-        if job.max_salary and profile.expected_ctc:
+        if job.max_salary and profile.expected_ctc and (job.salary_currency or "").upper() == (profile.currency or "").upper():
             salary_score = min(100.0, (job.max_salary / max(1.0, profile.expected_ctc)) * 100.0)
 
         # Pure candidate-job fit score (NO freshness, NO campaign quota)

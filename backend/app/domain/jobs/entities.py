@@ -59,6 +59,8 @@ class JobSource:
 @dataclass
 class SearchQueryFilter:
     roles: List[str] = field(default_factory=list)
+    # Company board names for ATS sources (Lever, Greenhouse, Ashby, Workday). Roles are job titles, not companies.
+    companies: List[str] = field(default_factory=list)
     locations: List[str] = field(default_factory=list)
     min_experience: float = 0.0
     max_experience: float = 10.0
