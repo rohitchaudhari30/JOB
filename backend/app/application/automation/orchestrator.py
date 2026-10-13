@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -65,6 +66,8 @@ class AutomationSession:
         self.pause_event = asyncio.Event()
         self.pause_event.set()  # Not paused by default
         self.cancel_requested = False
+        self.qualified_jobs_count = 0  # jobs the rule shortlisted (not just evaluated)
+        self.terminal_event_sent = False  # set once RUN_COMPLETED / RUN_FAILED went out
         self.user_input_queue: asyncio.Queue = asyncio.Queue()
         self.events: List[Dict[str, Any]] = []
         self._event_seq: int = 0
@@ -115,6 +118,30 @@ class AutomationSession:
         self.pause_event.set()  # Unblock if paused
         logger.info("automation_cancelled", extra={"run_id": self.run_id, "user_id": self.user_id, "reason": reason})
         logger.info(f"Automation run [{self.run_id}] aborted: {reason}")
+
+
+def slot_should_be_kept(state: Any) -> bool:
+    """True when the application was, or may have been, submitted."""
+    return state in (
+        WorkflowStateEnum.APPLIED,
+        WorkflowStateEnum.SUBMITTING,
+        WorkflowStateEnum.SUBMISSION_UNKNOWN,
+        WorkflowStateEnum.RECONCILIATION_REQUIRED,
+    )
+
+
+def daily_cap_reached(
+    account_count: int, platform_count: int, account_ceiling: int, platform_cap: int
+) -> str | None:
+    """Return why a new submission must not start, or None if there is room.
+
+    Applies to every run, with or without a campaign. (AUT-06)
+    """
+    if account_count >= account_ceiling:
+        return f"account safety ceiling reached ({account_count}/{account_ceiling} in the last 24h)"
+    if platform_count >= platform_cap:
+        return f"platform daily cap reached ({platform_count}/{platform_cap} in the last 24h)"
+    return None
 
 
 def should_auto_submit(auto_apply_matches: bool, decision: "DecisionEnum") -> bool:
@@ -331,6 +358,57 @@ class AutomationOrchestrator:
 
         return session
 
+    async def _settle_quota_slot(self, quota_repo: Any, reservation: Any, state: Any) -> None:
+        """Consume the slot if the application was (or may have been) submitted, else free it.
+
+        Uncertain outcomes keep their slot: the submission may have reached the
+        platform, so it must keep counting until someone reconciles it. (AUT-08)
+        """
+        if not (quota_repo and reservation):
+            return
+        if slot_should_be_kept(state):
+            await quota_repo.consume_slot(reservation.id)
+        else:
+            await quota_repo.release_slot(reservation.id)
+        await self._commit_work(quota_repo)
+
+    @staticmethod
+    async def _daily_cap_reason(app_repo: Any, user_id: str, source_type: str) -> str | None:
+        """Check the account-wide and per-platform 24h safety caps (AUT-06)."""
+        from app.core.config import settings
+
+        counter = getattr(app_repo, "count_recent_submissions", None)
+        if counter is None:
+            return None
+        account_count = counter(user_id)
+        platform_count = counter(user_id, source_type=source_type)
+        if inspect.isawaitable(account_count):
+            account_count = await account_count
+        if inspect.isawaitable(platform_count):
+            platform_count = await platform_count
+        if not isinstance(account_count, int) or not isinstance(platform_count, int):
+            return None  # repository cannot tell us (e.g. a test double)
+        return daily_cap_reached(
+            account_count,
+            platform_count,
+            settings.GLOBAL_ACCOUNT_SAFE_CEILING,
+            settings.PLATFORM_DAILY_CAP_DEFAULT,
+        )
+
+    @staticmethod
+    async def _commit_work(repo: Any) -> None:
+        """Make pending writes durable now.
+
+        Repositories only flush. Without an explicit commit the data stays in an
+        open transaction, which is lost on a crash and (on SQLite) blocks every
+        other writer, including the event/telemetry writes. (AUT-01)
+        """
+        from sqlalchemy.ext.asyncio import AsyncSession
+
+        db = getattr(repo, "_session", None)
+        if isinstance(db, AsyncSession):
+            await db.commit()
+
     async def cancel_background_tasks(self) -> None:
         """Cancel any running pipelines and wait for them to stop."""
         tasks = list(self._background_tasks)
@@ -392,7 +470,7 @@ class AutomationOrchestrator:
                     p_repo = SqlAlchemyProfileRepository(db_session)
                     r_repo = SqlAlchemyResumeRepository(db_session)
                     m_repo = SqlAlchemyMatchResultRepository(db_session)
-                    a_repo = SqlAlchemyApplicationRepository(db_session)
+                    a_repo = SqlAlchemyApplicationRepository(db_session, commit_each_write=True)
                     u_repo = SqlAlchemyUserRepository(db_session)
                     sess_repo = SqlAlchemyBrowserSessionRepository(db_session)
                     ai_gw = MultiTierAIGateway(session=db_session)
@@ -441,6 +519,18 @@ class AutomationOrchestrator:
                     ai_gateway=ai_gateway,
                     headless=headless,
                     quota_repo=quota_repo,
+                )
+            # A cancelled run can leave the pipeline early; the console and the
+            # database still need a final event. (AUT-10)
+            if not session.terminal_event_sent:
+                if session._state_machine.can_transition_to(AutomationState.STOPPED):
+                    session.transition_to(AutomationState.STOPPED)
+                session.active_state = "FINISHED"
+                session.completed_at = datetime.now(timezone.utc)
+                await self._broadcast_event(
+                    session=session,
+                    event_name="RUN_COMPLETED",
+                    message=f"Run stopped before completion. Submitted {session.applications_submitted_count} applications.",
                 )
         except Exception as e:
             logger.error(f"Automation run pipeline error: {e}", exc_info=True)
@@ -491,7 +581,7 @@ class AutomationOrchestrator:
                                 exec_model.status = "ABORTED"
                             exec_model.completed_at = datetime.now(timezone.utc)
                             exec_model.discovered_count = session.discovered_jobs_count
-                            exec_model.qualified_count = session.matched_jobs_count
+                            exec_model.qualified_count = session.qualified_jobs_count
                             exec_model.submitted_count = session.applications_submitted_count
                             exec_model.failed_count = session.failed_applications_count
                             await repo.save(exec_model)
@@ -626,6 +716,7 @@ class AutomationOrchestrator:
         new_count = discovery_result.get("new_jobs_count", 0) if isinstance(discovery_result, dict) else getattr(discovery_result, "new_jobs_count", 0)
         dups_count = discovery_result.get("skipped_duplicates", 0) if isinstance(discovery_result, dict) else getattr(discovery_result, "skipped_duplicates", 0)
         session.discovered_jobs_count = disc_total
+        await self._commit_work(job_repo)
 
         await self._broadcast_event(
             session=session,
@@ -669,6 +760,7 @@ class AutomationOrchestrator:
                     resume_id=session.resume_id,
                     custom_rule=match_rule,
                 )
+                await self._commit_work(job_repo)
                 session.matched_jobs_count += 1
 
                 await self._broadcast_event(
@@ -693,6 +785,7 @@ class AutomationOrchestrator:
                     job_obj = await job_repo.get_by_id(job_id)
                     if job_obj:
                         shortlisted_jobs.append((job_obj, match_res))
+                        session.qualified_jobs_count += 1
             except Exception as eval_err:
                 logger.warning(f"Error evaluating job {job_id} ({job_title} at {job_company}): {eval_err}")
                 await self._broadcast_event(
@@ -742,6 +835,18 @@ class AutomationOrchestrator:
 
             # Determine if we should auto apply
             should_apply = should_auto_submit(auto_apply_matches, match_res.decision)
+
+            if should_apply:
+                cap_reason = await self._daily_cap_reason(app_repo, session.user_id, source_type)
+                if cap_reason:
+                    logger.warning(f"Stopping run [{session.run_id}]: {cap_reason}")
+                    await self._broadcast_event(
+                        session=session,
+                        event_name="DAILY_CAP_REACHED",
+                        message=f"Stopping safely: {cap_reason}.",
+                        payload={"reason": cap_reason},
+                    )
+                    break
             initial_state = WorkflowStateEnum.APPROVED if should_apply else WorkflowStateEnum.APPROVAL_REQUIRED
 
             # Canonical application creation & validation through ApplicationOrchestrator
@@ -777,6 +882,7 @@ class AutomationOrchestrator:
                         execution_id=session.execution_id or session.run_id,
                         ttl_seconds=300,
                     )
+                    await self._commit_work(quota_repo)
                     if not reservation:
                         logger.warning(
                             f"Atomic quota reservation limit reached for campaign [{session.campaign_id}] (limit={max_applications}). Stopping run safely."
@@ -802,35 +908,20 @@ class AutomationOrchestrator:
                         "score": round(match_res.overall_score, 1),
                     },
                 )
+                executed_app = None
                 try:
                     executed_app = await exec_app_uc.execute(
                         application_id=app_entity.id,
                         run_id=session.run_id,
                         headless=headless,
                     )
-                    if executed_app.workflow_state == WorkflowStateEnum.APPLIED:
-                        if reservation and quota_repo:
-                            await quota_repo.consume_slot(reservation.id)
-                        session.applications_submitted_count += 1
-                        await self._broadcast_event(
-                            session=session,
-                            event_name="APPLICATION_SUBMITTED",
-                            message=f"Application submitted successfully for [{job_obj.title} at {job_obj.company}].",
-                            payload={
-                                "job_id": job_obj.id,
-                                "application_id": executed_app.id,
-                                "job_title": job_obj.title,
-                                "company": job_obj.company,
-                                "platform": job_obj.source_type or source_type,
-                                "score": round(match_res.overall_score, 1),
-                            },
-                        )
-                    elif executed_app.workflow_state in (
+
+                    # AUT-07: after a CAPTCHA/OTP pause, wait for the user and then
+                    # try the SAME application again instead of skipping it.
+                    if executed_app.workflow_state in (
                         WorkflowStateEnum.PAUSED_OTP,
                         WorkflowStateEnum.PAUSED_CAPTCHA,
                     ):
-                        if reservation and quota_repo:
-                            await quota_repo.release_slot(reservation.id)
                         session.pause()
                         await self._broadcast_event(
                             session=session,
@@ -848,19 +939,48 @@ class AutomationOrchestrator:
                             await self._broadcast_event(
                                 session=session,
                                 event_name="CHALLENGE_TIMEOUT",
-                                message=f"Intervention timed out ({challenge_timeout_seconds}s) on {job_obj.company}. Resuming pipeline.",
+                                message=f"Intervention timed out ({challenge_timeout_seconds}s) on {job_obj.company}. Moving on.",
                             )
                             session.is_paused = False
                             session.pause_event.set()
-                    else:
-                        if reservation and quota_repo:
-                            await quota_repo.release_slot(reservation.id)
+                        else:
+                            if not session.cancel_requested:
+                                executed_app = await exec_app_uc.execute(
+                                    application_id=app_entity.id,
+                                    run_id=session.run_id,
+                                    headless=headless,
+                                )
+
+                    if executed_app.workflow_state == WorkflowStateEnum.APPLIED:
+                        session.applications_submitted_count += 1
+                        await self._broadcast_event(
+                            session=session,
+                            event_name="APPLICATION_SUBMITTED",
+                            message=f"Application submitted successfully for [{job_obj.title} at {job_obj.company}].",
+                            payload={
+                                "job_id": job_obj.id,
+                                "application_id": executed_app.id,
+                                "job_title": job_obj.title,
+                                "company": job_obj.company,
+                                "platform": job_obj.source_type or source_type,
+                                "score": round(match_res.overall_score, 1),
+                            },
+                        )
+                    await self._settle_quota_slot(quota_repo, reservation, executed_app.workflow_state)
                 except Exception as app_err:
-                    if reservation and quota_repo:
+                    # The outcome is unknown after an exception: ask the database what
+                    # state the application reached before deciding about the slot.
+                    state = executed_app.workflow_state if executed_app else None
+                    if state is None:
                         try:
-                            await quota_repo.release_slot(reservation.id)
+                            current = await app_repo.get_by_id(app_entity.id)
+                            state = current.workflow_state if current else None
                         except Exception:
-                            pass
+                            state = WorkflowStateEnum.SUBMISSION_UNKNOWN  # cannot tell: be safe
+                    try:
+                        await self._settle_quota_slot(quota_repo, reservation, state)
+                    except Exception:
+                        logger.warning("Could not settle quota slot after application error.", exc_info=True)
                     raise app_err
 
         if session.cancel_requested:
@@ -886,6 +1006,8 @@ class AutomationOrchestrator:
         payload: Optional[Dict[str, Any]] = None,
     ):
         logger.info(f"[{session.run_id}] [{event_name}] {message}")
+        if event_name in ("RUN_COMPLETED", "RUN_FAILED"):
+            session.terminal_event_sent = True
         event_dict = None
         # Atomic Transaction: update run state, allocate durable monotonic sequence, and insert event
         # SQLite concurrency safe: handles busy/locked retries and atomic sequence increments

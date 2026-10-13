@@ -93,7 +93,14 @@ async def db_session(test_database) -> AsyncSession:
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncClient:
     async def override_get_db():
-        yield db_session
+        # Mirror app.core.database.get_db_session: commit when the request ends,
+        # so one request's writes are visible to other connections.
+        try:
+            yield db_session
+            await db_session.commit()
+        except Exception:
+            await db_session.rollback()
+            raise
 
     app.dependency_overrides[get_db_session] = override_get_db
     transport = ASGITransport(app=app)

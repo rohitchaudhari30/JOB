@@ -97,6 +97,7 @@ class AutomationStateMachine:
     def is_terminal(self) -> bool:
         return self._current_state in (
             AutomationState.STOPPED,
+            AutomationState.ABORTED,
             AutomationState.FAILED,
             AutomationState.COMPLETED,
         )

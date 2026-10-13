@@ -4,12 +4,15 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 @pytest.mark.file_db
-@pytest.mark.xfail(
-    strict=True,
-    reason="AUT-01: request session holds an uncommitted write while the orchestrator "
-    "writes on another connection (database is locked). Remove once Phase 2 commits per step.",
-)
-async def test_automation_api_and_schedules_flow(client: AsyncClient):
+async def test_automation_api_and_schedules_flow(client: AsyncClient, monkeypatch):
+    # Never launch a real browser from a test: discovery returns nothing.
+    from app.application.jobs.use_cases import DiscoverJobsUseCase
+
+    async def no_discovery(self, *args, **kwargs):
+        return {"discovered_total": 0, "new_jobs_count": 0, "skipped_duplicates": 0, "jobs": []}
+
+    monkeypatch.setattr(DiscoverJobsUseCase, "execute", no_discovery)
+
     # 1. Register & Login User
     user_payload = {
         "email": "automation.operator@example.com",

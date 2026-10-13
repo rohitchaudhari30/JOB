@@ -467,7 +467,7 @@ class ExecuteApplicationUseCase:
                         },
                     )
                 elif state == WorkflowStateEnum.FAILED:
-                    app.last_error_message = detail
+                    app.failure_reason = detail
                     await _safe_save_app(
                         self._app_repo,
                         app,
@@ -494,7 +494,7 @@ class ExecuteApplicationUseCase:
                         },
                     )
                 else:  # RECONCILIATION_REQUIRED
-                    app.last_error_message = detail
+                    app.failure_reason = detail
                     await _safe_save_app(
                         self._app_repo,
                         app,

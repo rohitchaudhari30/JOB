@@ -34,3 +34,13 @@ def test_every_referenced_member_exists(enum_name):
                 if member not in enum_cls.__members__:
                     missing.append(f"{path.relative_to(APP_DIR)}:{lineno} {enum_name}.{member}")
     assert not missing, "Unknown enum members referenced:\n" + "\n".join(missing)
+
+
+def test_application_failure_text_uses_the_persisted_field():
+    """AUT-09: `last_error_message` is not a column, so anything stored there was lost."""
+    offenders = [
+        str(path.relative_to(APP_DIR))
+        for path in (APP_DIR / "application" / "applications").rglob("*.py")
+        if "app.last_error_message" in path.read_text()
+    ]
+    assert not offenders, f"Use app.failure_reason instead: {offenders}"
