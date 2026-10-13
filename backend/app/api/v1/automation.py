@@ -299,6 +299,7 @@ async def get_run_events(
     run_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     after_seq: Optional[int] = Query(None, description="Cursor: return only events with seq > after_seq"),
+    limit: int = Query(1000, ge=1, le=5000, description="Max events per page. Continue with after_seq = last seq."),
 ):
     session = orchestrator.get_session(run_id)
     if session:
@@ -306,8 +307,8 @@ async def get_run_events(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
         all_events = sorted(getattr(session, "events", []), key=lambda e: e.get("seq") or 0)
         if after_seq is not None:
-            return [e for e in all_events if (e.get("seq") or 0) > after_seq]
-        return all_events
+            all_events = [e for e in all_events if (e.get("seq") or 0) > after_seq]
+        return all_events[:limit]
 
     # Database fallback for finished/historical runs
     from app.core.database import AsyncSessionLocal
@@ -324,7 +325,7 @@ async def get_run_events(
         stmt = select(AutomationEventModel).where(AutomationEventModel.run_id == run_id)
         if after_seq is not None:
             stmt = stmt.where(AutomationEventModel.seq > after_seq)
-        stmt = stmt.order_by(AutomationEventModel.seq.asc())
+        stmt = stmt.order_by(AutomationEventModel.seq.asc()).limit(limit)
 
         res = await db_session.execute(stmt)
         events = res.scalars().all()

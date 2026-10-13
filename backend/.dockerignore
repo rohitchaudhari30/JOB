@@ -1,0 +1,14 @@
+# Keep secrets, local data and caches out of the image (SEC-09).
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+storage/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.git

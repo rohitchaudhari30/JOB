@@ -159,6 +159,7 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    void api.logout(); // revoke tokens on the server; runs before we clear them below
     setAuthToken(null);
     setUser(null);
     wsClient.disconnect();

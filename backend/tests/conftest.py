@@ -10,6 +10,10 @@ from sqlalchemy.pool import NullPool
 
 # Tests are a dev-like environment: settings generate throw-away secrets.
 os.environ.setdefault("APP_ENV", "test")
+# Rate limiting is tested explicitly; keep it off so other tests can log in freely.
+os.environ.setdefault("AUTH_RATE_LIMIT_ATTEMPTS", "0")
+# Controlled-browser tests open pages on localhost; the URL guard has its own tests.
+os.environ.setdefault("ALLOW_PRIVATE_APPLY_URLS", "true")
 
 import app.core.database as database
 from app.core.database import Base, get_db_session

@@ -301,7 +301,7 @@ class AIStatusResponse(BaseModel):
 
 
 @router.get("/ai-status", response_model=AIStatusResponse)
-async def get_ai_status():
+async def get_ai_status(current_user: User = Depends(get_current_user)):
     from app.infrastructure.ai.gateway import MultiTierAIGateway
     from app.core.config import settings
 

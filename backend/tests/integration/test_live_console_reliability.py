@@ -761,3 +761,29 @@ async def test_run_lock_waiter_cancellation_and_leak_prevention():
         orchestrator.cleanup_run_lock(run_id)
         assert run_id not in orchestrator._run_locks
 
+
+
+@pytest.mark.asyncio
+async def test_events_endpoint_pages_with_limit_and_cursor(client: AsyncClient):
+    """DB-06: the events endpoint never returns an unbounded list."""
+    email = f"pager_{uuid.uuid4().hex[:6]}@example.com"
+    reg = await client.post("/api/v1/auth/register", json={"email": email, "password": "Password123!"})
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    user_id = reg.json()["id"]
+    run_id = f"run_page_{uuid.uuid4().hex[:6]}"
+
+    async with AsyncSessionLocal() as session:
+        session.add(AutomationRunModel(id=run_id, user_id=user_id, status="COMPLETED", worker_id="w", last_event_seq=5))
+        for seq in range(1, 6):
+            session.add(AutomationEventModel(
+                id=f"{run_id}_evt_{seq}", run_id=run_id, seq=seq, event_name="E", payload={}
+            ))
+        await session.commit()
+
+    first = (await client.get(f"/api/v1/automation/runs/{run_id}/events?limit=2", headers=headers)).json()
+    assert [e["seq"] for e in first] == [1, 2]
+    second = (await client.get(f"/api/v1/automation/runs/{run_id}/events?limit=2&after_seq=2", headers=headers)).json()
+    assert [e["seq"] for e in second] == [3, 4]
+    rest = (await client.get(f"/api/v1/automation/runs/{run_id}/events?after_seq=4", headers=headers)).json()
+    assert [e["seq"] for e in rest] == [5]
+    assert (await client.get(f"/api/v1/automation/runs/{run_id}/events?limit=0", headers=headers)).status_code == 422

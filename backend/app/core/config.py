@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     SEED_DEMO_USER: bool = False
     SECRET_KEY: str = ""
     ENCRYPTION_KEY: str = ""
+    # Key rotation: put the old ENCRYPTION_KEY here (comma-separated if several) so data
+    # encrypted before the change can still be read. New data always uses ENCRYPTION_KEY.
+    ENCRYPTION_KEY_PREVIOUS: str = ""
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./app.db"
@@ -72,6 +75,14 @@ class Settings(BaseSettings):
     # (e.g. deleting jobs, which are shared by every user). Empty = nobody.
     ADMIN_EMAILS: str = ""
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+
+    # Auth abuse protection (SEC-06). Starting values; the product owner should tune them.
+    PASSWORD_MIN_LENGTH: int = 8
+    AUTH_RATE_LIMIT_ATTEMPTS: int = 10      # per client IP, per window. 0 turns the limit off.
+    AUTH_RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # Let the automation browser open localhost / private addresses (dev and tests only).
+    ALLOW_PRIVATE_APPLY_URLS: bool = False
 
     # Upload & Defense in Depth
     MAX_RESUME_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB maximum

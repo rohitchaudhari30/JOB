@@ -72,25 +72,37 @@ async def upload_resume(
             detail=f"File content does not match the '{file_ext}' extension signature (magic byte verification failed).",
         )
 
-    # Read remaining file and check total size
-    remaining_chunk = await file.read()
-    total_size = len(header_chunk) + len(remaining_chunk)
-    if total_size > settings.MAX_RESUME_SIZE_BYTES:
-        max_mb = settings.MAX_RESUME_SIZE_BYTES // (1024 * 1024)
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Resume file size exceeds maximum limit of {max_mb} MB.",
-        )
-
     upload_dir = os.path.join(settings.STORAGE_DIR, "resumes", current_user.id)
     os.makedirs(upload_dir, exist_ok=True)
 
     saved_filename = f"{uuid.uuid4()}{file_ext}"
     saved_path = os.path.join(upload_dir, saved_filename)
 
-    with open(saved_path, "wb") as buffer:
-        buffer.write(header_chunk)
-        buffer.write(remaining_chunk)
+    # Stream to disk in small chunks and stop as soon as the limit is passed, so a huge
+    # upload is never held in memory. (SEC-10)
+    max_bytes = settings.MAX_RESUME_SIZE_BYTES
+    total_size = len(header_chunk)
+    too_big = total_size > max_bytes
+    if not too_big:
+        with open(saved_path, "wb") as buffer:
+            buffer.write(header_chunk)
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > max_bytes:
+                    too_big = True
+                    break
+                buffer.write(chunk)
+    if too_big:
+        if os.path.exists(saved_path):
+            os.remove(saved_path)
+        max_mb = max_bytes // (1024 * 1024)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Resume file size exceeds maximum limit of {max_mb} MB.",
+        )
 
     # Basic raw text placeholder / extraction
     raw_text = f"Extracted resume content for {label} - {target_role}"

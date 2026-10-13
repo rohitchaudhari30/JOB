@@ -1,9 +1,11 @@
 import base64
 import os
 import json
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 import bcrypt
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from jose import jwt, JWTError
 from app.core.config import settings
@@ -33,7 +35,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: timedelta | None = 
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
     expire = now + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire, "iat": now, "type": "access"})
+    to_encode.update({"exp": expire, "iat": now, "type": "access", "jti": uuid.uuid4().hex})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -42,7 +44,7 @@ def create_refresh_token(data: Dict[str, Any], expires_delta: timedelta | None =
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
     expire = now + (expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
-    to_encode.update({"exp": expire, "iat": now, "type": "refresh"})
+    to_encode.update({"exp": expire, "iat": now, "type": "refresh", "jti": uuid.uuid4().hex})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -50,9 +52,12 @@ def decode_access_token(token: str) -> Dict[str, Any]:
     """Decodes and verifies a JWT access token."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        return payload
     except JWTError:
         raise AuthenticationException("Could not validate credentials.")
+    # A refresh token must never be accepted where an access token is expected. (SEC-04)
+    if payload.get("type") != "access":
+        raise AuthenticationException("Could not validate credentials.")
+    return payload
 
 
 def decode_refresh_token(token: str) -> Dict[str, Any]:
@@ -71,15 +76,24 @@ class SessionStorageEncryptor:
     Handles envelope encryption and decryption of Playwright storage_state
     using AES-256-GCM (12-byte IV, 16-byte authentication tag).
     """
-    def __init__(self, key_b64: str | None = None):
-        key_raw = key_b64 or settings.ENCRYPTION_KEY
-        try:
-            self._key = base64.b64decode(key_raw)
-            if len(self._key) != 32:
-                self._key = self._key.ljust(32, b"0")[:32]
-        except Exception:
-            self._key = os.urandom(32)
+    def __init__(self, key_b64: str | None = None, previous_keys: list[str] | None = None):
+        self._key = self._load_key(key_b64 or settings.ENCRYPTION_KEY)
         self._aesgcm = AESGCM(self._key)
+        if previous_keys is None:
+            previous_keys = [k.strip() for k in settings.ENCRYPTION_KEY_PREVIOUS.split(",") if k.strip()]
+        self._old_aesgcms = [AESGCM(self._load_key(k)) for k in previous_keys]
+
+    @staticmethod
+    def _load_key(key_b64: str) -> bytes:
+        """Strict: a bad key stops the app. Never pad it or invent a random one,
+        because that would make stored sessions unreadable after a restart. (SEC-12)"""
+        try:
+            key = base64.b64decode(key_b64, validate=True)
+        except Exception as exc:
+            raise ValueError("ENCRYPTION_KEY must be valid base64.") from exc
+        if len(key) != 32:
+            raise ValueError("ENCRYPTION_KEY must decode to exactly 32 bytes (AES-256).")
+        return key
 
     def encrypt(self, plain_data: str | dict) -> str:
         """Encrypts plain string or JSON object into a Base64 ciphertext envelope."""
@@ -100,8 +114,12 @@ class SessionStorageEncryptor:
             raise ValueError("Invalid encrypted payload length.")
         nonce = raw_payload[:12]
         ciphertext = raw_payload[12:]
-        decrypted_bytes = self._aesgcm.decrypt(nonce, ciphertext, None)
-        return decrypted_bytes.decode("utf-8")
+        for aesgcm in [self._aesgcm, *self._old_aesgcms]:
+            try:
+                return aesgcm.decrypt(nonce, ciphertext, None).decode("utf-8")
+            except InvalidTag:
+                continue  # wrong key: try the next (older) one
+        raise ValueError("Could not decrypt: the data was encrypted with an unknown key.")
 
     def encrypt_storage_state(self, plain_data: str | dict) -> str:
         return self.encrypt(plain_data)

@@ -62,3 +62,9 @@ async def test_analytics_api_endpoints_flow(client: AsyncClient):
     assert "recommended_skill_weight" in weights_data
     assert "recommended_semantic_weight" in weights_data
     assert "rationale" in weights_data
+
+
+@pytest.mark.asyncio
+async def test_ai_status_requires_login(client):
+    """SEC-11: provider/model/rate-limit details are not public."""
+    assert (await client.get("/api/v1/analytics/ai-status")).status_code == 401

@@ -1,4 +1,5 @@
 import asyncio
+from app.core.url_safety import unsafe_url_reason
 from datetime import datetime, timezone, timedelta
 import hashlib
 import inspect
@@ -219,6 +220,9 @@ class ExecuteApplicationUseCase:
 
             # 2. Navigate to Application URL
             target_url = job.apply_url
+            blocked = unsafe_url_reason(target_url)
+            if blocked:
+                raise ValidationException(f"Blocked unsafe apply URL for job [{job.id}]: {blocked}.")
             logger.info(f"Navigating to job application URL: {target_url}")
             try:
                 await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)

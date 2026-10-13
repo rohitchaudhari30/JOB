@@ -28,6 +28,14 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
         # leave it off and let the request commit.
         self._commit_each_write = commit_each_write
 
+    async def _resume_label(self, resume_id: str | None) -> str | None:
+        """Current label of a resume, saved on the application as a history record (DB-05)."""
+        if not resume_id:
+            return None
+        from app.infrastructure.database.models.models import ResumeModel
+
+        return await self._session.scalar(select(ResumeModel.label).where(ResumeModel.id == resume_id))
+
     async def _finish_write(self) -> None:
         await self._session.flush()
         if self._commit_each_write:
@@ -235,6 +243,7 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                 error_category=application.error_category,
                 next_retry_at=application.next_retry_at,
                 current_attempt_id=application.current_attempt_id,
+                resume_label_snapshot=await self._resume_label(application.resume_id),
             )
             self._session.add(model)
         else:
@@ -249,6 +258,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             model.next_retry_at = application.next_retry_at
             model.current_attempt_id = application.current_attempt_id
             if application.resume_id:
+                if application.resume_id != model.resume_id or not model.resume_label_snapshot:
+                    model.resume_label_snapshot = await self._resume_label(application.resume_id)
                 model.resume_id = application.resume_id
 
         await self._finish_write()

@@ -104,6 +104,7 @@ async def get_ai_gateway(session: Annotated[AsyncSession, Depends(get_db_session
 async def get_current_user(
     token: Annotated[str | None, Depends(oauth2_scheme)],
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> User:
     if not token:
         raise HTTPException(
@@ -116,6 +117,12 @@ async def get_current_user(
         user_id: str | None = payload.get("sub")
         if not user_id:
             raise AuthenticationException("Token missing user subject.")
+        from app.infrastructure.database.repositories.revoked_token_repository import (
+            SqlAlchemyRevokedTokenRepository,
+        )
+
+        if await SqlAlchemyRevokedTokenRepository(session).is_revoked(payload.get("jti")):
+            raise AuthenticationException("Token has been revoked.")
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

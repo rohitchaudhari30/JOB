@@ -19,6 +19,7 @@ services:
       - TASK_QUEUE_BACKEND=local
       - STORAGE_DIR=/app/storage
       - BROWSER_HEADLESS=true
+    # The image runs as uid 10001: `sudo chown -R 10001 ./storage` once if the host folder is root-owned.
     volumes:
       - ./storage:/app/storage
       - ./backend/app:/app/app

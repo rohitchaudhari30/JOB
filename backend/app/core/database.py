@@ -60,7 +60,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def _migrate_sqlite_columns():
-    """Ensures existing SQLite tables have newly added columns in development."""
+    """ONE-TIME upgrade for databases created before Alembic existed.
+
+    It runs only for such legacy databases (see run_migrations). New schema
+    changes belong in migrations/versions, never here.
+    """
     if "sqlite" not in settings.DATABASE_URL:
         return
     try:
@@ -74,17 +78,21 @@ async def _migrate_sqlite_columns():
                     ("first_seen_at", "DATETIME"),
                     ("last_seen_at", "DATETIME"),
                     ("raw_posted_text", "VARCHAR"),
-                    ("posted_at_precision", "VARCHAR DEFAULT 'unknown'"),
+                    ("posted_at_precision", "VARCHAR DEFAULT 'UNKNOWN'"),
                     ("posted_at_source", "VARCHAR DEFAULT 'scraped_text'"),
-                    ("freshness_bucket", "VARCHAR DEFAULT 'unknown'"),
-                    ("freshness_score", "FLOAT DEFAULT 50.0"),
+                    ("freshness_bucket", "VARCHAR DEFAULT 'UNKNOWN'"),
+                    ("freshness_score", "FLOAT DEFAULT 0.0"),
                     ("canonical_job_key", "VARCHAR(64)"),
-                    ("canonical_confidence", "FLOAT DEFAULT 1.0"),
+                    ("canonical_confidence", "VARCHAR(32) DEFAULT 'PLATFORM_EXACT'"),
                     ("updated_at", "DATETIME"),
                 ]
                 for col_name, col_type in new_job_cols:
                     if col_name not in jobs_cols:
                         await conn.execute(text(f"ALTER TABLE jobs ADD COLUMN {col_name} {col_type}"))
+                # Older upgrades wrote lowercase enums and a numeric confidence. (DB-02)
+                await conn.execute(text("UPDATE jobs SET posted_at_precision = UPPER(posted_at_precision) WHERE posted_at_precision != UPPER(posted_at_precision)"))
+                await conn.execute(text("UPDATE jobs SET freshness_bucket = UPPER(freshness_bucket) WHERE freshness_bucket != UPPER(freshness_bucket)"))
+                await conn.execute(text("UPDATE jobs SET canonical_confidence = 'PLATFORM_EXACT' WHERE canonical_confidence IS NULL OR canonical_confidence GLOB '[0-9]*'"))
                 await conn.execute(text("""
                     UPDATE jobs 
                     SET first_seen_at = COALESCE(created_at, datetime('now')),
@@ -237,25 +245,25 @@ async def _migrate_sqlite_columns():
                     run_ids = [r[0] for r in runs_res.fetchall()]
 
                     for rid in run_ids:
-                        rows_res = await conn.execute(text(f"""
+                        rows_res = await conn.execute(text("""
                             SELECT id, seq, created_at, rowid 
                             FROM automation_events 
-                            WHERE run_id = '{rid}'
+                            WHERE run_id = :rid
                             ORDER BY 
                                 created_at ASC,
                                 CASE WHEN seq IS NOT NULL AND seq > 0 THEN seq ELSE 999999999 END ASC,
                                 rowid ASC
-                        """))
+                        """), {"rid": rid})
                         event_rows = rows_res.fetchall()
                         current_seqs = [r[1] for r in event_rows]
                         expected_seqs = list(range(1, len(event_rows) + 1))
                         if current_seqs != expected_seqs:
                             for new_seq, (row_id, _, _, _) in enumerate(event_rows, start=1):
-                                await conn.execute(text(f"""
+                                await conn.execute(text("""
                                     UPDATE automation_events 
-                                    SET seq = {new_seq} 
-                                    WHERE id = '{row_id}'
-                                """))
+                                    SET seq = :new_seq 
+                                    WHERE id = :row_id
+                                """), {"new_seq": new_seq, "row_id": row_id})
 
                 # Create unique index if not already present
                 await conn.execute(text("""
@@ -287,11 +295,11 @@ async def _migrate_sqlite_columns():
                 if conflicts:
                     logger.warning(f"Found {len(conflicts)} canonical key duplicate groups in existing jobs; deactivating older duplicates to enforce uniqueness...")
                     for c_key, _ in conflicts:
-                        dup_ids_res = await conn.execute(text(f"""
+                        dup_ids_res = await conn.execute(text("""
                             SELECT id FROM jobs 
-                            WHERE canonical_job_key = '{c_key}' AND is_active = 1
+                            WHERE canonical_job_key = :c_key AND is_active = 1
                             ORDER BY created_at ASC
-                        """))
+                        """), {"c_key": c_key})
                         dup_ids = [r[0] for r in dup_ids_res.fetchall()]
                         if len(dup_ids) <= 1:
                             continue
@@ -300,46 +308,46 @@ async def _migrate_sqlite_columns():
                         for stale_id in dup_ids[1:]:
                             # 1. Update match_results: re-point to master_id if user doesn't already have one
                             if "match_results" in existing_tables:
-                                await conn.execute(text(f"""
+                                await conn.execute(text("""
                                     UPDATE match_results 
-                                    SET job_id = '{master_id}' 
-                                    WHERE job_id = '{stale_id}' 
-                                      AND user_id NOT IN (SELECT user_id FROM match_results WHERE job_id = '{master_id}')
-                                """))
+                                    SET job_id = :master_id 
+                                    WHERE job_id = :stale_id 
+                                      AND user_id NOT IN (SELECT user_id FROM match_results WHERE job_id = :master_id)
+                                """), {"master_id": master_id, "stale_id": stale_id})
                             # 2. Update applications: re-point to master_id if user hasn't applied to master_id
                             if "applications" in existing_tables:
-                                await conn.execute(text(f"""
+                                await conn.execute(text("""
                                     UPDATE applications 
-                                    SET job_id = '{master_id}' 
-                                    WHERE job_id = '{stale_id}' 
-                                      AND user_id NOT IN (SELECT user_id FROM applications WHERE job_id = '{master_id}')
-                                """))
+                                    SET job_id = :master_id 
+                                    WHERE job_id = :stale_id 
+                                      AND user_id NOT IN (SELECT user_id FROM applications WHERE job_id = :master_id)
+                                """), {"master_id": master_id, "stale_id": stale_id})
                             # 3. Update campaign_job_items: re-point to master_id if execution doesn't have it
                             if "campaign_job_items" in existing_tables:
-                                await conn.execute(text(f"""
+                                await conn.execute(text("""
                                     UPDATE campaign_job_items 
-                                    SET job_id = '{master_id}' 
-                                    WHERE job_id = '{stale_id}' 
-                                      AND execution_id NOT IN (SELECT execution_id FROM campaign_job_items WHERE job_id = '{master_id}')
-                                """))
+                                    SET job_id = :master_id 
+                                    WHERE job_id = :stale_id 
+                                      AND execution_id NOT IN (SELECT execution_id FROM campaign_job_items WHERE job_id = :master_id)
+                                """), {"master_id": master_id, "stale_id": stale_id})
                             # 4. Update campaign_quota_reservations: re-point to master_id
                             if "campaign_quota_reservations" in existing_tables:
-                                await conn.execute(text(f"""
+                                await conn.execute(text("""
                                     UPDATE campaign_quota_reservations 
-                                    SET job_id = '{master_id}' 
-                                    WHERE job_id = '{stale_id}' 
-                                      AND campaign_id NOT IN (SELECT campaign_id FROM campaign_quota_reservations WHERE job_id = '{master_id}')
-                                """))
+                                    SET job_id = :master_id 
+                                    WHERE job_id = :stale_id 
+                                      AND campaign_id NOT IN (SELECT campaign_id FROM campaign_quota_reservations WHERE job_id = :master_id)
+                                """), {"master_id": master_id, "stale_id": stale_id})
                             # 5. Update matching_tasks: re-point to master_id
                             if "matching_tasks" in existing_tables:
-                                await conn.execute(text(f"""
+                                await conn.execute(text("""
                                     UPDATE matching_tasks 
-                                    SET job_id = '{master_id}' 
-                                    WHERE job_id = '{stale_id}' 
-                                      AND user_id NOT IN (SELECT user_id FROM matching_tasks WHERE job_id = '{master_id}')
-                                """))
+                                    SET job_id = :master_id 
+                                    WHERE job_id = :stale_id 
+                                      AND user_id NOT IN (SELECT user_id FROM matching_tasks WHERE job_id = :master_id)
+                                """), {"master_id": master_id, "stale_id": stale_id})
                             # Soft-deactivate stale duplicate record after referencing tables are merged
-                            await conn.execute(text(f"UPDATE jobs SET is_active = 0 WHERE id = '{stale_id}'"))
+                            await conn.execute(text("UPDATE jobs SET is_active = 0 WHERE id = :stale_id"), {"stale_id": stale_id})
 
                 await conn.execute(text("""
                     CREATE UNIQUE INDEX IF NOT EXISTS uq_job_canonical_key
@@ -347,15 +355,66 @@ async def _migrate_sqlite_columns():
                     WHERE canonical_job_key IS NOT NULL AND is_active = 1
                 """))
     except Exception as e:
-        logger.warning(f"SQLite auto-migration notice: {e}")
+        # A half-applied legacy repair must stop startup, not be ignored. (DB-01)
+        logger.error(f"SQLite legacy schema upgrade failed: {e}", exc_info=True)
+        raise
+
+
+def _alembic_config():
+    from pathlib import Path
+
+    from alembic.config import Config
+
+    backend_dir = Path(__file__).resolve().parents[2]
+    cfg = Config(str(backend_dir / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend_dir / "migrations"))
+    return cfg
+
+
+def _alembic_run(connection, action: str) -> None:
+    from alembic import command
+
+    cfg = _alembic_config()
+    cfg.attributes["connection"] = connection
+    if action == "stamp":
+        command.stamp(cfg, "head")
+    else:
+        command.upgrade(cfg, "head")
+
+
+async def run_migrations() -> None:
+    """Bring the database to the latest schema with Alembic. (DB-01)
+
+    - empty database          -> run all migrations
+    - already under Alembic   -> run the pending ones
+    - legacy database (tables but no alembic_version, created by the old
+      create_all + ALTER routine) -> repair it once, add missing tables, then
+      mark it as being at the current version.
+    """
+    from sqlalchemy import inspect
+
+    import app.infrastructure.database.models.models  # noqa: F401  (registers tables)
+
+    async with engine.connect() as conn:
+        tables = await conn.run_sync(lambda c: set(inspect(c).get_table_names()))
+
+    if tables and "alembic_version" not in tables:
+        logger.info("Legacy database detected: running one-time upgrade, then adopting Alembic.")
+        await _migrate_sqlite_columns()
+        async with engine.connect() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(_alembic_run, "stamp")
+            await conn.commit()
+    else:
+        async with engine.connect() as conn:
+            await conn.run_sync(_alembic_run, "upgrade")
+            await conn.commit()
 
 
 async def init_db():
-    """Initializes database tables and seeds demo account for local development."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    await _migrate_sqlite_columns()
-    logger.info("Database schemas initialized.")
+    """Migrates the database and (optionally, dev only) seeds a demo account."""
+    await run_migrations()
+    logger.info("Database schema is up to date.")
 
     # Seed demo account only when explicitly enabled in a dev environment (SEC-02).
     if not (settings.SEED_DEMO_USER and settings.is_dev_environment):
