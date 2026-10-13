@@ -33,6 +33,7 @@ class CachedLocalEmbeddingService(EmbeddingService):
 
     DEFAULT_MODEL = "all-MiniLM-L6-v2"
     DEFAULT_VERSION = "2026.1"
+    FALLBACK_MODEL = "local-feature-hash"
     VECTOR_DIM = 64
 
     def __init__(
@@ -63,6 +64,10 @@ class CachedLocalEmbeddingService(EmbeddingService):
 
     @property
     def model_name(self) -> str:
+        # Be honest about what produced the vectors (AI-04): without the transformer
+        # weights these are hashed word features, not MiniLM embeddings.
+        if self._hf_model is None:
+            return self.FALLBACK_MODEL
         return self._model_name
 
     @property

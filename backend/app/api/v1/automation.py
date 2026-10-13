@@ -43,7 +43,6 @@ class StartRunRequest(BaseModel):
     experience_weight: float = 0.20
     role_title_weight: float = 0.15
     location_weight: float = 0.10
-    freshness_weight: float = 0.10
     max_job_age_hours: Optional[float] = None
     prefer_fresh_hours: Optional[float] = 6.0
     auto_apply_threshold: float = 85.0
@@ -158,7 +157,6 @@ async def start_automation_run(
         experience_weight=req.experience_weight,
         role_title_weight=req.role_title_weight,
         location_weight=req.location_weight,
-        freshness_weight=req.freshness_weight,
         max_job_age_hours=req.max_job_age_hours,
         prefer_fresh_hours=req.prefer_fresh_hours,
         auto_apply_threshold=req.auto_apply_threshold,

@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import hashlib
 import json
 import logging
@@ -65,6 +66,10 @@ class HardFilterEvaluator:
         return True, "Passed all hard filters."
 
 
+class SkipLLM(Exception):
+    """Raised internally when the LLM stage is intentionally skipped."""
+
+
 class SkillOverlapCalculator:
     """Stage 2: Computes structured Jaccard / Token overlap between candidate skills and JD."""
 
@@ -72,18 +77,28 @@ class SkillOverlapCalculator:
     def _normalize_skill(skill: str) -> str:
         return re.sub(r"[^a-z0-9#+.]", "", skill.lower().strip())
 
+    @staticmethod
+    def _appears_as_whole_word(skill: str, text: str) -> bool:
+        """True only when the skill stands alone, so 'java' does not match 'javascript' (AI-02)."""
+        phrase = skill.lower().strip()
+        if not phrase:
+            return False
+        pattern = r"(?<![a-z0-9#+])" + re.escape(phrase) + r"(?![a-z0-9#+])"
+        return re.search(pattern, text) is not None
+
     @classmethod
     def evaluate(cls, candidate_skills: List[str], job_description: str, job_title: str) -> Tuple[float, List[str], List[str]]:
         if not candidate_skills:
             return 0.0, [], []
 
-        jd_tokens = set(re.findall(r"\b[a-zA-Z0-9#+.]{2,}\b", (job_description + " " + job_title).lower()))
+        jd_text = (job_description + " " + job_title).lower()
+        jd_tokens = set(re.findall(r"[a-z0-9#+.]{2,}", jd_text))
         matched: List[str] = []
         missing: List[str] = []
 
         for skill in candidate_skills:
             norm = cls._normalize_skill(skill)
-            if norm in jd_tokens or skill.lower() in job_description.lower():
+            if norm in jd_tokens or cls._appears_as_whole_word(skill, jd_text):
                 matched.append(skill)
             else:
                 missing.append(skill)
@@ -126,6 +141,8 @@ class MatchingCascadeEngine:
     ENGINE_VERSION = "4.0.0"
     CONFIG_VERSION = "v1"
     PROMPT_VERSION = "match-v2"
+    LLM_MIN_SKILL_SCORE = 10.0
+    LLM_MIN_SEMANTIC_SCORE = 20.0
     EMBEDDING_MODEL = "all-MiniLM-L6-v2"
     EMBEDDING_VERSION = "2026.1"
 
@@ -188,6 +205,7 @@ class MatchingCascadeEngine:
         resume: Optional[Resume] = None,
         embedding_model: Optional[str] = None,
         embedding_version: Optional[str] = None,
+        rule: Optional[MatchRule] = None,
     ) -> Tuple[str, str, str, str]:
         profile_snapshot_hash = cls._compute_profile_canonical_hash(profile)
         resume_snapshot_hash = cls._compute_resume_canonical_hash(resume)
@@ -208,6 +226,8 @@ class MatchingCascadeEngine:
             "prompt_version": cls.PROMPT_VERSION,
             "embedding_model": emb_model,
             "embedding_version": emb_ver,
+            # The rule changes the score, so it must change the cache key (AI-01).
+            "rule": asdict(rule or MatchRule()),
         }
         canonical_eval_json = json.dumps(eval_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         evaluation_key = hashlib.sha256(canonical_eval_json.encode("utf-8")).hexdigest()
@@ -236,6 +256,7 @@ class MatchingCascadeEngine:
             resume=resume,
             embedding_model=emb_model,
             embedding_version=emb_ver,
+            rule=rule,
         )
         candidate_skills = [s.skill_name for s in profile.skills]
         candidate_summary = f"{profile.headline or ''} {profile.summary or ''} {' '.join(candidate_skills)}"
@@ -312,6 +333,9 @@ class MatchingCascadeEngine:
         # =========================================================================
         ai_provider_used = "groq"
         try:
+            # Don't spend an LLM call on a job that clearly doesn't fit (AI-08).
+            if skill_score < self.LLM_MIN_SKILL_SCORE and semantic_score < self.LLM_MIN_SEMANTIC_SCORE:
+                raise SkipLLM("skill and semantic scores too low")
             ai_raw = await self._ai_gateway.match_job(
                 candidate_summary=candidate_summary,
                 job_summary=f"Title: {job.title}\nCompany: {job.company}\nDescription: {job.raw_description[:1500]}",
@@ -323,13 +347,17 @@ class MatchingCascadeEngine:
                 matched_skills=list(getattr(ai_raw, "matched_skills", []) or []),
                 missing_skills=list(getattr(ai_raw, "missing_skills", []) or []),
             )
-            combined_matched = list(set(matched_skills + ai_eval.matched_skills))
+            # The LLM may only claim skills the candidate really has (AI-07).
+            own_skills = {sk.lower().strip(): sk for sk in candidate_skills}
+            ai_claimed = [own_skills[c.lower().strip()] for c in ai_eval.matched_skills if c.lower().strip() in own_skills]
+            combined_matched = list(dict.fromkeys(matched_skills + ai_claimed))
             combined_missing = [s for s in (missing_skills + ai_eval.missing_skills) if s not in combined_matched]
             ai_score = ai_eval.score
             ai_reasoning = ai_eval.reasoning
             ai_provider_used = getattr(ai_raw, "provider_used", "groq") or "groq"
         except Exception as e:
-            logger.warning(f"AI reasoning unavailable ({e}). Falling back to deterministic fallback.")
+            if not isinstance(e, SkipLLM):
+                logger.warning(f"AI reasoning unavailable ({e}). Falling back to deterministic fallback.")
             combined_matched = matched_skills
             combined_missing = missing_skills
             ai_score = (skill_score * 0.6) + (semantic_score * 0.4)
@@ -353,8 +381,8 @@ class MatchingCascadeEngine:
             + (role_score * rule.role_title_weight)
             + (location_score * rule.location_weight)
             + (salary_score * rule.salary_weight)
-            + (semantic_score * 0.10)
-            + (ai_score * 0.10)
+            + (semantic_score * rule.semantic_weight)
+            + (ai_score * rule.ai_weight)
         )
         match_score = round(min(100.0, max(0.0, match_score)), 1)
 

@@ -400,7 +400,7 @@ async def test_dense_vector_embedding_service_math_and_cache():
     from app.infrastructure.ai.embedding_service import CachedLocalEmbeddingService
 
     svc = CachedLocalEmbeddingService(dimension=64)
-    assert svc.model_name == "all-MiniLM-L6-v2"
+    assert svc.model_name == "local-feature-hash"
     assert svc.model_version == "2026.1"
 
     # Vectors for similar vs dissimilar text
@@ -446,7 +446,7 @@ async def test_cascade_records_embedding_version_and_model():
     )
 
     result = await engine.evaluate(profile=profile, job=job)
-    assert result.embedding_model == "all-MiniLM-L6-v2"
+    assert result.embedding_model == "local-feature-hash"
     assert result.embedding_version == "2026.1"
     assert result.semantic_score > 0.0
 

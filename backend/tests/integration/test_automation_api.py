@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from httpx import AsyncClient
 
@@ -9,6 +11,8 @@ async def test_automation_api_and_schedules_flow(client: AsyncClient, monkeypatc
     from app.application.jobs.use_cases import DiscoverJobsUseCase
 
     async def no_discovery(self, *args, **kwargs):
+        # Stay "busy" so the run is still active when the test pauses and stops it.
+        await asyncio.sleep(5)
         return {"discovered_total": 0, "new_jobs_count": 0, "skipped_duplicates": 0, "jobs": []}
 
     monkeypatch.setattr(DiscoverJobsUseCase, "execute", no_discovery)

@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime
 import json
 import logging
@@ -89,24 +88,6 @@ class EvaluateJobMatchUseCase:
             except Exception as e:
                 logger.warning(f"Could not load resumes for user {user_id}: {e}")
 
-        # Check existing evaluation cache by evaluation_key if not forcing re-evaluation
-        if not force_reevaluate:
-            eval_key, _, _, _ = self._cascade.compute_evaluation_key(
-                profile=profile,
-                job=job,
-                resume=resume,
-                embedding_model=self._cascade._embedding_service.model_name,
-                embedding_version=self._cascade._embedding_service.model_version,
-            )
-            cached_result = await self._match_repo.get_by_evaluation_key(
-                user_id=user_id, job_id=job_id, evaluation_key=eval_key
-            )
-            if cached_result:
-                logger.debug(
-                    f"Cache hit for Job [{job_id}] vs User [{user_id}] with eval_key [{eval_key[:12]}]"
-                )
-                return cached_result
-
         # User tuned matching weights fallback
         rule_to_use = custom_rule
         if rule_to_use is None and self._saved_answer_repo:
@@ -124,6 +105,25 @@ class EvaluateJobMatchUseCase:
                     )
             except Exception as e:
                 logger.warning(f"Could not load custom matching weights for user {user_id}: {e}")
+
+        # Check existing evaluation cache by evaluation_key if not forcing re-evaluation
+        if not force_reevaluate:
+            eval_key, _, _, _ = self._cascade.compute_evaluation_key(
+                profile=profile,
+                job=job,
+                resume=resume,
+                embedding_model=self._cascade._embedding_service.model_name,
+                embedding_version=self._cascade._embedding_service.model_version,
+                rule=rule_to_use or MatchRule(),
+            )
+            cached_result = await self._match_repo.get_by_evaluation_key(
+                user_id=user_id, job_id=job_id, evaluation_key=eval_key
+            )
+            if cached_result:
+                logger.debug(
+                    f"Cache hit for Job [{job_id}] vs User [{user_id}] with eval_key [{eval_key[:12]}]"
+                )
+                return cached_result
 
         # Authoritative 5-stage cascade evaluation
         match_result = await self._cascade.evaluate(
@@ -177,19 +177,24 @@ class BatchEvaluateJobsUseCase:
             logger.info(f"Enqueued {len(tasks)} matching tasks for user {user_id}")
             return tasks
 
-        sem = asyncio.Semaphore(5)
+        # One database session is shared by every repository here, and an AsyncSession
+        # must not be used by several tasks at once, so jobs are evaluated one by one (AI-06).
         results: List[MatchResult] = []
+        failed_job_ids: List[str] = []
+        for job in jobs:
+            try:
+                results.append(await self._eval_use_case.execute(user_id=user_id, job_id=job.id))
+            except Exception:
+                failed_job_ids.append(job.id)
+                logger.exception("Failed to evaluate job %s for user %s", job.id, user_id)
 
-        async def _eval_one(j):
-            async with sem:
-                try:
-                    return await self._eval_use_case.execute(user_id=user_id, job_id=j.id)
-                except Exception as e:
-                    logger.warning(f"Failed to evaluate job {j.id}: {e}")
-                    return None
-
-        evaluated = await asyncio.gather(*[_eval_one(j) for j in jobs])
-        return [r for r in evaluated if r is not None]
+        if failed_job_ids:
+            logger.warning(
+                "Batch evaluation finished with %d failure(s) out of %d jobs",
+                len(failed_job_ids),
+                len(jobs),
+            )
+        return results
 
 
 class ListMatchesUseCase:
