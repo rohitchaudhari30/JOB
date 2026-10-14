@@ -311,7 +311,7 @@ async def reclaim_abandoned_execution_leases(
     execution_repo=Depends(get_campaign_execution_repository),
 ):
     use_case = ReclaimAbandonedExecutionsUseCase(execution_repo)
-    reclaimed_count = await use_case.execute()
+    reclaimed_count = await use_case.execute(user_id=current_user.id)  # only the caller's own runs
     return {"reclaimed_executions": reclaimed_count}
 
 

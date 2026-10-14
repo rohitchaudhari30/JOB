@@ -46,8 +46,6 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./app.db"
 
     # Task Queue & Cache
-    TASK_QUEUE_BACKEND: str = "local"  # "local" | "redis"
-    REDIS_URL: str = "redis://localhost:6379/0"
 
     # AI Providers
     GROQ_API_KEY: str = ""

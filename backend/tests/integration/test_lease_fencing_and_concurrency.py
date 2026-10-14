@@ -456,3 +456,22 @@ async def test_database_level_unique_constraint_quota_reservation(db_session: As
     await db_session.rollback()
 
 
+
+
+@pytest.mark.asyncio
+async def test_reclaim_can_be_limited_to_one_user(db_session: AsyncSession):
+    repo = SqlAlchemyCampaignExecutionRepository(db_session)
+    mine, _ = await repo.acquire_or_get_active_execution("camp_mine", "user_mine", "w1", 300)
+    theirs, _ = await repo.acquire_or_get_active_execution("camp_theirs", "user_theirs", "w2", 300)
+
+    expired = datetime.now(timezone.utc) - timedelta(seconds=10)
+    for execution_id in (mine.id, theirs.id):
+        model = await db_session.scalar(select(CampaignExecutionModel).where(CampaignExecutionModel.id == execution_id))
+        model.lease_expires_at = expired
+    await db_session.commit()
+
+    assert await repo.reclaim_expired_leases(user_id="user_mine") == 1
+
+    db_session.expire_all()
+    assert (await repo.get_by_id(mine.id)).status == "RECOVERY_PENDING"
+    assert (await repo.get_by_id(theirs.id)).status == "RUNNING"

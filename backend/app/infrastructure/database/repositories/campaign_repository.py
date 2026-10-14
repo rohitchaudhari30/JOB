@@ -466,7 +466,8 @@ class SqlAlchemyCampaignExecutionRepository(CampaignExecutionRepository):
         await self._session.commit()
         return await self.get_by_id(execution_id)
 
-    async def reclaim_expired_leases(self) -> int:
+    async def reclaim_expired_leases(self, user_id: str | None = None) -> int:
+        """Moves expired leases to RECOVERY_PENDING. With user_id, only that user's runs (AUT-20)."""
         import uuid
         now = datetime.now(timezone.utc)
         stmt = (
@@ -476,6 +477,8 @@ class SqlAlchemyCampaignExecutionRepository(CampaignExecutionRepository):
                 CampaignExecutionModel.lease_expires_at <= now,
             )
         )
+        if user_id is not None:
+            stmt = stmt.where(CampaignExecutionModel.user_id == user_id)
         res = await self._session.execute(stmt)
         expired_models = res.scalars().all()
         reclaimed_count = 0

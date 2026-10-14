@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from collections.abc import AsyncGenerator
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -446,3 +447,30 @@ async def init_db():
                 logger.info("Base user account [demo.engineer@example.com] initialized.")
     except Exception as e:
         logger.warning(f"User account auto-init notice: {e}")
+
+
+async def reconcile_orphaned_runs() -> int:
+    """
+    Runs live inside the API process, so any run still marked active when the
+    server starts was cut off by a restart. Mark those as FAILED (AUT-19).
+    """
+    from sqlalchemy import update
+
+    from app.infrastructure.database.models.models import AutomationRunModel
+
+    active_states = ["CREATED", "STARTING", "RUNNING", "PAUSED", "STOPPING"]
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            update(AutomationRunModel)
+            .where(AutomationRunModel.status.in_(active_states))
+            .values(
+                status="FAILED",
+                error_message="Interrupted because the server restarted.",
+                finished_at=datetime.now(timezone.utc),
+            )
+        )
+        await session.commit()
+    count = result.rowcount or 0
+    if count:
+        logger.warning("Marked %d orphaned automation run(s) as FAILED after restart", count)
+    return count

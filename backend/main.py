@@ -23,7 +23,7 @@ from app.api.v1.profile import router as profile_router
 from app.api.v1.resumes import router as resumes_router
 from app.api.v1.ws import router as ws_router
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import init_db, reconcile_orphaned_runs
 from app.core.exceptions import PlatformException
 from app.core.logging import logger, setup_logging
 from app.infrastructure.browser.browser_manager import browser_manager
@@ -35,15 +35,13 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode...")
     await init_db()
+    await reconcile_orphaned_runs()
     scheduler_worker.initialize()
-    from app.workers.automation_worker import automation_worker
     from app.workers.matching_worker import matching_worker
-    automation_worker.start()
     matching_worker.start()
     yield
     logger.info(f"Shutting down {settings.APP_NAME}...")
     matching_worker.stop()
-    automation_worker.stop()
     scheduler_worker.shutdown()
     await browser_manager.shutdown()
 

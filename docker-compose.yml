@@ -15,53 +15,14 @@ services:
       - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
       - DATABASE_URL=sqlite+aiosqlite:///./storage/app.db
-      - REDIS_URL=redis://redis:6379/0
-      - TASK_QUEUE_BACKEND=local
       - STORAGE_DIR=/app/storage
       - BROWSER_HEADLESS=true
     # The image runs as uid 10001: `sudo chown -R 10001 ./storage` once if the host folder is root-owned.
     volumes:
       - ./storage:/app/storage
       - ./backend/app:/app/app
-    depends_on:
-      - redis
 
-  # 2. Dedicated Automation Worker Daemon
-  automation-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: autoapply-worker
-    restart: unless-stopped
-    command: ["python", "-m", "app.workers.automation_worker"]
-    environment:
-      - APP_ENV=${APP_ENV:-production}
-      - DEBUG=${DEBUG:-false}
-      # Required: copy .env.example to .env at the repo root and fill these in (SEC-03).
-      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
-      - DATABASE_URL=sqlite+aiosqlite:///./storage/app.db
-      - REDIS_URL=redis://redis:6379/0
-      - STORAGE_DIR=/app/storage
-      - BROWSER_HEADLESS=true
-    volumes:
-      - ./storage:/app/storage
-      - ./backend/app:/app/app
-    depends_on:
-      - redis
-      - backend
-
-  # 3. Redis Queue & Event Broker
-  redis:
-    image: redis:7-alpine
-    container_name: autoapply-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
-  # 4. React Vite Frontend
+  # 2. React Vite Frontend
   frontend:
     build:
       context: ./frontend
@@ -72,6 +33,3 @@ services:
       - "80:80"
     depends_on:
       - backend
-
-volumes:
-  redis_data:
