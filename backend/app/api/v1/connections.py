@@ -1,3 +1,4 @@
+from app.domain.connections.entities import ConnectionStatus
 from typing import Annotated, Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -61,11 +62,11 @@ async def verify_platform_connection(
     conn_manager: Annotated[ConnectionManager, Depends(get_connection_manager)],
 ):
     """Probes live session validity and returns updated health status."""
-    is_valid = await conn_manager.verify_connection(current_user.id, platform)
+    new_status = await conn_manager.verify_connection(current_user.id, platform)
     return {
         "platform": platform,
-        "is_valid": is_valid,
-        "status": "CONNECTED" if is_valid else "REAUTH_REQUIRED",
+        "is_valid": new_status == ConnectionStatus.CONNECTED,
+        "status": new_status.value,  # e.g. ERROR means the check failed, not that you must log in again
     }
 
 

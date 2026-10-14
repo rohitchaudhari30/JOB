@@ -181,7 +181,8 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
 
   const portalCount = connections.filter((c) => c.category === 'PORTAL_DISCOVERY').length;
   const atsCount = connections.filter((c) => c.category === 'ATS_APPLICATION').length;
-  const connectedCount = connections.filter((c) => c.status === 'CONNECTED').length;
+  // ATS boards need no login, so only count platforms that really have a saved login (CON-02).
+  const connectedCount = connections.filter((c) => c.is_auth_required && c.status === 'CONNECTED').length;
 
   return (
     <div className="space-y-6 w-full animate-fadeIn pb-12">

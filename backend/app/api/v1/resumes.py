@@ -13,6 +13,8 @@ from app.domain.ai.contracts import AIGateway
 from app.domain.auth.entities import User
 from app.infrastructure.database.repositories.profile_repository import SqlAlchemyResumeRepository
 
+from app.infrastructure.resume_text import extract_resume_text
+
 router = APIRouter(prefix="/resumes", tags=["Resumes"])
 
 
@@ -104,8 +106,8 @@ async def upload_resume(
             detail=f"Resume file size exceeds maximum limit of {max_mb} MB.",
         )
 
-    # Basic raw text placeholder / extraction
-    raw_text = f"Extracted resume content for {label} - {target_role}"
+    # Real text from the file, so matching and cache keys reflect what is actually in the resume.
+    raw_text = extract_resume_text(saved_path)
 
     use_case = UploadResumeUseCase(resume_repo)
     resume = await use_case.execute(

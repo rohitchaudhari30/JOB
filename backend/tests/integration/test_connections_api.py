@@ -29,12 +29,12 @@ async def test_connections_api_lifecycle(client: AsyncClient):
     assert greenhouse_item["category"] == "ATS_APPLICATION"
     assert greenhouse_item["status"] == "CONNECTED"  # Type B public access is auto-ready
 
-    # 2. Verify non-connected platform returns invalid/reauth
+    # 2. A platform that was never connected is NOT_CONNECTED (not "reauth required")
     verify_res = await client.post("/api/v1/connections/naukri/verify", headers=headers)
     assert verify_res.status_code == 200
     verify_data = verify_res.json()
     assert verify_data["is_valid"] is False
-    assert verify_data["status"] == "REAUTH_REQUIRED"
+    assert verify_data["status"] == "NOT_CONNECTED"
 
     # 3. Disconnect platform
     disc_res = await client.post("/api/v1/connections/naukri/disconnect", headers=headers)

@@ -319,7 +319,7 @@ class MatchingCascadeEngine:
         # Stage 3: Dense Vector Semantic Similarity (Cosine Similarity)
         # =========================================================================
         try:
-            profile_text = f"{candidate_summary} {getattr(resume, 'raw_text', '')[:500] if resume else ''}".strip()
+            profile_text = f"{candidate_summary} {(getattr(resume, 'raw_text', '') or '')[:500] if resume else ''}".strip()
             job_text = f"{job.title} at {job.company}. {job.raw_description[:1000]}".strip()
 
             profile_vector = await self._embedding_service.embed_text(profile_text)

@@ -58,5 +58,6 @@ class ConnectionHealthChecker:
 
         except Exception as e:
             logger.warning(f"Health check probe error for {platform_id}: {e}")
-            # If network error or timeout, treat as REAUTH_REQUIRED or ERROR
-            return ConnectionStatus.REAUTH_REQUIRED
+            # A network error or timeout says nothing about the login, so it is an ERROR,
+            # not a request to log in again (CON-03).
+            return ConnectionStatus.ERROR

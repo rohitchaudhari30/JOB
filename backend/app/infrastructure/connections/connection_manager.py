@@ -1,3 +1,5 @@
+import os
+import sys
 import asyncio
 import json
 import uuid
@@ -95,6 +97,19 @@ class ConnectionManager(ConnectionManagerInterface):
                 "platform": platform,
                 "status": ConnectionStatus.CONNECTED.value,
                 "message": f"{manifest.display_name} does not require an authenticated account.",
+            }
+
+        # A headed browser needs a screen on the machine running the API (CON-01).
+        # In Docker or on a server there is none, so say so instead of failing oddly.
+        if sys.platform.startswith("linux") and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+            return {
+                "platform": platform,
+                "status": ConnectionStatus.ERROR.value,
+                "message": (
+                    "This server has no display, so the login window cannot open here. "
+                    "Run the app on a desktop machine to connect this platform. "
+                    "A remote login flow is not built yet."
+                ),
             }
 
         logger.info(f"Initiating interactive login for user [{user_id}] on platform [{platform}]...")
@@ -204,7 +219,7 @@ class ConnectionManager(ConnectionManagerInterface):
         finally:
             await context.close()
 
-    async def verify_connection(self, user_id: str, platform: str) -> bool:
+    async def verify_connection(self, user_id: str, platform: str) -> ConnectionStatus:
         """Probes live session validity and updates connection status."""
         manifest = PlatformManifestRegistry.get(platform)
         if not manifest:
@@ -212,7 +227,7 @@ class ConnectionManager(ConnectionManagerInterface):
 
         conn = await self._connection_repo.get_by_user_and_platform(user_id, platform)
         if not conn:
-            return False
+            return ConnectionStatus.NOT_CONNECTED
 
         sess = await self._session_repo.get_by_connection_id(conn.id)
         encrypted_state = sess.encrypted_storage_state if sess else None
@@ -225,7 +240,7 @@ class ConnectionManager(ConnectionManagerInterface):
             conn.last_verified_at = now
         await self._connection_repo.save_connection(conn)
 
-        return new_status == ConnectionStatus.CONNECTED
+        return new_status
 
     async def disconnect(self, user_id: str, platform: str) -> bool:
         """Revokes session and removes platform connection tokens."""
