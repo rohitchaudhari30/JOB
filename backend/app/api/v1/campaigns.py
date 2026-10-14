@@ -11,7 +11,15 @@ from app.api.deps import (
     get_campaign_repository,
     get_connection_manager,
     get_connection_repository,
+    get_ai_gateway,
+    get_application_repository,
     get_current_user,
+    get_job_repository,
+    get_job_source_repository,
+    get_matching_repository,
+    get_profile_repository,
+    get_resume_repository,
+    get_user_repository,
 )
 from app.application.campaigns.safety_evaluator import SafetyPolicyEvaluator
 from app.application.campaigns.use_cases import (
@@ -29,6 +37,7 @@ from app.application.campaigns.use_cases import (
     UpdateCampaignUseCase,
 )
 from app.core.exceptions import EntityNotFoundException, ValidationException
+from app.domain.ai.contracts import AIGateway
 from app.domain.auth.entities import User
 from app.domain.campaigns.entities import Campaign, CampaignExecution
 from app.domain.campaigns.state_machine import InvalidStateTransitionException
@@ -316,6 +325,107 @@ async def start_campaign(
         return _to_execution_response(execution)
     except EntityNotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+class LaunchCampaignRequest(BaseModel):
+    """Optional overrides. Anything left out comes from the saved campaign."""
+
+    roles: Optional[List[str]] = None
+    locations: Optional[List[str]] = None
+    resume_id: Optional[str] = None
+    auto_apply_matches: bool = True
+    max_job_age_hours: Optional[float] = None
+    headless: bool = True
+
+
+@router.post("/{campaign_id}/launch", status_code=status.HTTP_202_ACCEPTED)
+async def launch_campaign(
+    campaign_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    req: Optional[LaunchCampaignRequest] = None,
+    campaign_repo=Depends(get_campaign_repository),
+    execution_repo=Depends(get_campaign_execution_repository),
+    log_repo=Depends(get_campaign_activity_log_repository),
+    conn_mgr=Depends(get_connection_manager),
+    conn_repo=Depends(get_connection_repository),
+    job_repo=Depends(get_job_repository),
+    source_repo=Depends(get_job_source_repository),
+    profile_repo=Depends(get_profile_repository),
+    resume_repo=Depends(get_resume_repository),
+    match_repo=Depends(get_matching_repository),
+    app_repo=Depends(get_application_repository),
+    user_repo=Depends(get_user_repository),
+    ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)] = None,
+    worker_id: str = Query("worker-1"),
+):
+    """Starts a campaign AND its automation run in one server-side step (AUT-15).
+
+    Closing the browser tab after this call cannot leave a started campaign with no run.
+    """
+    from app.application.automation.orchestrator import orchestrator
+    from app.domain.matching.entities import MatchRule
+
+    req = req or LaunchCampaignRequest()
+
+    existing = orchestrator.get_active_user_run(current_user.id)
+    if existing and existing.status.value == "RUNNING":
+        raise HTTPException(status_code=409, detail=f"An active automation run [{existing.run_id}] is already in progress.")
+
+    campaign = await campaign_repo.get_by_id(campaign_id)
+    if not campaign or campaign.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+
+    resume_id = req.resume_id or campaign.target_resume_id
+    if resume_id:
+        resume = await resume_repo.get_by_id(resume_id)
+        if not resume or resume.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail=f"Resume [{resume_id}] not found.")
+
+    roles = req.roles or campaign.rule.target_roles or ["Software Engineer"]
+    locations = req.locations or campaign.rule.target_locations or None
+    source_type = (campaign.rule.target_platforms or ["naukri"])[0].lower()
+
+    start_use_case = StartCampaignExecutionUseCase(
+        campaign_repo=campaign_repo,
+        execution_repo=execution_repo,
+        log_repo=log_repo,
+        connection_manager=conn_mgr,
+        connection_repo=conn_repo,
+    )
+    try:
+        execution = await start_use_case.execute(campaign_id=campaign_id, user_id=current_user.id, worker_id=worker_id)
+    except EntityNotFoundException as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    rule = MatchRule(
+        auto_apply_threshold=campaign.rule.auto_apply_threshold,
+        approval_threshold=campaign.rule.review_threshold,
+        max_job_age_hours=req.max_job_age_hours,
+    )
+    session = await orchestrator.start_run(
+        user_id=current_user.id,
+        source_type=source_type,
+        roles=roles,
+        locations=locations,
+        min_salary=None,
+        match_rule=rule,
+        auto_apply_matches=req.auto_apply_matches,
+        max_applications=campaign.safety_policy.daily_application_limit,
+        job_repo=job_repo,
+        source_repo=source_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        match_repo=match_repo,
+        app_repo=app_repo,
+        user_repo=user_repo,
+        ai_gateway=ai_gateway,
+        headless=req.headless,
+        execution_id=execution.id,
+        campaign_id=campaign_id,
+        worker_id=execution.worker_id or worker_id,
+        resume_id=resume_id,
+    )
+    return {"execution": _to_execution_response(execution), "run_id": session.run_id, "status": session.status.value}
 
 
 @router.post("/leases/reclaim", response_model=Dict[str, Any])

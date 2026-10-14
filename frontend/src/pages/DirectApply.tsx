@@ -342,11 +342,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
     try {
       setCampaignActionLoading(true);
 
-      // 1. Acquire campaign execution lease & pre-flight verification
-      const execution = await api.startCampaign(selectedCampaign.id);
-
       // 2. Prepare declarative campaign parameters for the Playwright runner
-      const primarySource = (selectedCampaign.rule?.target_platforms?.[0] || selectedSources[0] || 'naukri').toLowerCase();
       const campaignRoles = selectedCampaign.rule?.target_roles && selectedCampaign.rule.target_roles.length > 0
         ? selectedCampaign.rule.target_roles
         : targetRoles.length > 0
@@ -364,24 +360,15 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
         return;
       }
 
-      const runReq = {
-        source_type: primarySource,
+      // 3. One server call starts the campaign and its browser run, so closing the tab cannot split them
+      await api.launchCampaign(selectedCampaign.id, {
         roles: campaignRoles,
         locations: campaignLocations,
+        resume_id: targetResumeId,
         auto_apply_matches: applicationMode === 'AUTO',
-        max_applications: selectedCampaign.safety_policy?.daily_application_limit || dailyLimit || 10,
-        auto_apply_threshold: selectedCampaign.rule?.auto_apply_threshold || autoApplyThreshold || 80.0,
-        approval_threshold: selectedCampaign.rule?.review_threshold || reviewThreshold || 65.0,
         max_job_age_hours: freshnessHours > 0 ? freshnessHours : null,
         headless: true,
-        execution_id: execution.id,
-        campaign_id: selectedCampaign.id,
-        worker_id: execution.worker_id || 'worker-1',
-        resume_id: targetResumeId,
-      };
-
-      // 3. Launch the active browser runner
-      await api.startAutomation(runReq);
+      });
 
       const updated = { ...selectedCampaign, state: 'RUNNING' as const };
       setSelectedCampaign(updated);

@@ -83,6 +83,8 @@ class Settings(BaseSettings):
     ALLOW_PRIVATE_APPLY_URLS: bool = False
 
     # Upload & Defense in Depth
+    # Hiding automation from websites may break their terms of use (COMP-01), so it is opt-in.
+    BROWSER_STEALTH_ENABLED: bool = False
     MAX_RESUME_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB maximum
     ALLOWED_RESUME_EXTENSIONS: str = ".pdf,.docx"
 

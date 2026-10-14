@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
 from typing import Annotated, Any, List, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.api.deps import (
@@ -54,6 +56,9 @@ from app.infrastructure.database.repositories.profile_repository import (
     SqlAlchemyResumeRepository,
 )
 
+from app.application.background import spawn
+
+logger = logging.getLogger("app.api.applications")
 router = APIRouter(prefix="/applications", tags=["Job Applications & Automation"])
 
 
@@ -516,18 +521,38 @@ async def reconcile_application(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
+async def _execute_in_background(application_id: str) -> None:
+    """Runs the browser flow on its own database session, after the request has returned."""
+    from app.application.applications.factory import build_execute_application_use_case
+    from app.core import database
+
+    async with database.AsyncSessionLocal() as session:
+        try:
+            use_case = build_execute_application_use_case(session, commit_each_write=True)
+            await use_case.execute(application_id=application_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logger.exception("Background execution failed for application %s", application_id)
+
+
 @router.post("/{application_id}/execute", response_model=ApplicationResponseDTO)
 async def execute_application(
     application_id: str,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
     app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
-    job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
-    profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
-    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
-    ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
     execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
+    wait: bool = Query(False, description="true = run inside this request and return the final state"),
 ):
-    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    use_case = execute_application_uc
-    app = await use_case.execute(application_id=application_id)
-    return _to_response_dto(app)
+    """By default the browser flow starts in the background (202). Poll the application for its state."""
+    application = await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
+    if wait:
+        app = await execute_application_uc.execute(application_id=application_id)
+        return _to_response_dto(app)
+
+    # Commit first so the background session sees the application, then let the run start.
+    await app_repo._session.commit()
+    spawn(_execute_in_background(application_id), name=f"execute-{application_id}")
+    response.status_code = status.HTTP_202_ACCEPTED
+    return _to_response_dto(application)

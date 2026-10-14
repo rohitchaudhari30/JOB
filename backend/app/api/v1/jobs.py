@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Annotated, Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from app.api.deps import (
     get_current_user,
@@ -9,6 +11,7 @@ from app.api.deps import (
     get_matching_task_repository,
     require_admin,
 )
+from app.application.background import spawn
 from app.application.jobs.use_cases import (
     DiscoverJobsUseCase,
     GetJobDetailsUseCase,
@@ -21,7 +24,34 @@ from app.infrastructure.database.repositories.job_repository import (
     SqlAlchemyJobSourceRepository,
 )
 
+logger = logging.getLogger("app.api.jobs")
 router = APIRouter(prefix="/jobs", tags=["Job Catalog & Discovery"])
+
+
+async def _discover_in_background(user_id: str, source_type: str, filters: SearchQueryFilter, auto_evaluate: bool) -> None:
+    """Runs discovery on its own database session so the request does not have to wait for the browser."""
+    from app.core import database
+    from app.infrastructure.database.repositories.matching_repository import SqlAlchemyMatchingTaskRepository
+
+    async with database.AsyncSessionLocal() as session:
+        try:
+            use_case = DiscoverJobsUseCase(
+                job_repo=SqlAlchemyJobRepository(session),
+                job_source_repo=SqlAlchemyJobSourceRepository(session),
+                matching_task_repo=SqlAlchemyMatchingTaskRepository(session),
+            )
+            await use_case.execute(
+                user_id=user_id,
+                source_type=source_type,
+                filters=filters,
+                headless=True,
+                auto_evaluate=auto_evaluate,
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logger.exception("Background discovery failed for source %s", source_type)
+
 
 
 class DiscoverJobsRequest(BaseModel):
@@ -35,6 +65,8 @@ class DiscoverJobsRequest(BaseModel):
     min_salary: Optional[float] = None
     max_days_posted: int = 7
     auto_evaluate: bool = False
+    # true = start in the background and return 202 right away (JOB-02). Look at GET /jobs for the results.
+    background: bool = False
 
 
 class JobSummaryResponse(BaseModel):
@@ -81,6 +113,7 @@ class PaginatedJobsResponse(BaseModel):
 @router.post("/discover", status_code=status.HTTP_200_OK)
 async def discover_jobs(
     req: DiscoverJobsRequest,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
     source_repo: Annotated[SqlAlchemyJobSourceRepository, Depends(get_job_source_repository)],
@@ -98,6 +131,15 @@ async def discover_jobs(
         max_days_posted=req.max_days_posted,
         sort_by_date=True,
     )
+
+    if req.background:
+        await job_repo._session.commit()
+        spawn(
+            _discover_in_background(current_user.id, req.source_type, filters, req.auto_evaluate),
+            name=f"discover-{req.source_type}",
+        )
+        response.status_code = status.HTTP_202_ACCEPTED
+        return {"status": "started", "source": req.source_type}
 
     use_case = DiscoverJobsUseCase(
         job_repo=job_repo,

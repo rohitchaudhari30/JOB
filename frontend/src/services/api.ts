@@ -516,6 +516,11 @@ export const api = {
   deleteCampaign: async (id: string): Promise<void> => {
     await apiClient.delete(`/campaigns/${id}`);
   },
+  // Starts the campaign and its automation run together on the server (AUT-15).
+  launchCampaign: async (id: string, overrides: Record<string, any> = {}): Promise<{ run_id: string; execution: CampaignExecution; status: string }> => {
+    const res = await apiClient.post(`/campaigns/${id}/launch`, overrides);
+    return res.data;
+  },
   startCampaign: async (id: string): Promise<CampaignExecution> => {
     const res = await apiClient.post(`/campaigns/${id}/start`);
     return res.data;

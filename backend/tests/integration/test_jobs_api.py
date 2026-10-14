@@ -336,3 +336,31 @@ async def test_admin_can_clear_jobs(client, monkeypatch):
     res = await client.delete("/api/v1/jobs", headers=headers)
     assert res.status_code == 200
     assert res.json()["status"] == "cleared"
+
+
+@pytest.mark.asyncio
+async def test_discovery_can_start_in_the_background(client: AsyncClient, monkeypatch):
+    import asyncio
+
+    from app.api.v1 import jobs as jobs_api
+
+    reg = {"email": "bg.discover@example.com", "password": "Password123!", "full_name": "Bg"}
+    await client.post("/api/v1/auth/register", json=reg)
+    login = await client.post("/api/v1/auth/login", json={"email": reg["email"], "password": reg["password"]})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    started = []
+
+    async def fake_discovery(user_id, source_type, filters, auto_evaluate):
+        started.append((user_id, source_type))
+
+    monkeypatch.setattr(jobs_api, "_discover_in_background", fake_discovery)
+    res = await client.post(
+        "/api/v1/jobs/discover",
+        json={"source_type": "naukri", "roles": ["Python Developer"], "background": True},
+        headers=headers,
+    )
+    assert res.status_code == 202
+    assert res.json()["status"] == "started"
+    await asyncio.sleep(0.05)
+    assert len(started) == 1 and started[0][1] == "naukri"

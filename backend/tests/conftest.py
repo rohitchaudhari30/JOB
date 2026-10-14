@@ -85,6 +85,9 @@ async def test_database(request, monkeypatch):
     from app.application.automation.orchestrator import orchestrator
 
     await orchestrator.cancel_background_tasks()
+    from app.application import background
+
+    await background.cancel_all()
     await engine.dispose()
 
 
