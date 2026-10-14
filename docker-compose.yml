@@ -20,7 +20,6 @@ services:
     # The image runs as uid 10001: `sudo chown -R 10001 ./storage` once if the host folder is root-owned.
     volumes:
       - ./storage:/app/storage
-      - ./backend/app:/app/app
 
   # 2. React Vite Frontend
   frontend:

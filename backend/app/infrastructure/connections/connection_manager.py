@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from app.core.exceptions import EntityNotFoundException, PlatformException
 from app.core.logging import logger
-from app.core.security import session_crypto
+from app.core.security import session_encryptor
 from app.domain.connections.contracts import ConnectionManagerInterface
 from app.domain.connections.entities import (
     BrowserSession,
@@ -147,7 +147,7 @@ class ConnectionManager(ConnectionManagerInterface):
             # Capture storage state (cookies, local storage, tokens)
             storage_state = await context.storage_state()
             storage_json = json.dumps(storage_state)
-            encrypted_state = session_crypto.encrypt_storage_state(storage_json)
+            encrypted_state = session_encryptor.encrypt_storage_state(storage_json)
 
             # Extract user account identifier if visible
             account_ref = "Connected Account"

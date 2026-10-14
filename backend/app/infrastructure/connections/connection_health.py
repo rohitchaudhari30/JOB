@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 from app.core.logging import logger
-from app.core.security import session_crypto
+from app.core.security import session_encryptor
 from app.domain.connections.entities import ConnectionStatus, PlatformCategory, PlatformManifest
 from app.infrastructure.browser.browser_manager import browser_manager
 from app.infrastructure.connections.manifests import PlatformManifestRegistry
@@ -24,7 +24,7 @@ class ConnectionHealthChecker:
 
         try:
             # Decrypt storage state
-            state_json = session_crypto.decrypt_storage_state(encrypted_storage_state)
+            state_json = session_encryptor.decrypt_storage_state(encrypted_storage_state)
             if not state_json or len(state_json) < 10:
                 return ConnectionStatus.SESSION_EXPIRED
 

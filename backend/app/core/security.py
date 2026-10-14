@@ -133,5 +133,4 @@ class SessionStorageEncryptor:
 
 
 session_encryptor = SessionStorageEncryptor()
-session_crypto = session_encryptor
 
