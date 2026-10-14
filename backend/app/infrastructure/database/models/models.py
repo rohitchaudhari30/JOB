@@ -455,6 +455,17 @@ class AutomationRunModel(Base):
     events = relationship("AutomationEventModel", back_populates="run", cascade="all, delete-orphan")
 
 
+class AutomationScheduleModel(Base):
+    """A saved schedule, so it survives a restart (AUT-17). The settings are stored as JSON."""
+
+    __tablename__ = "automation_schedules"
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    config_json = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
 class AutomationEventModel(Base):
     __tablename__ = "automation_events"
 

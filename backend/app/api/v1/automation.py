@@ -27,7 +27,13 @@ from app.application.automation.orchestrator import (
 from app.domain.ai.contracts import AIGateway
 from app.domain.auth.entities import User
 from app.domain.matching.entities import MatchRule
-from app.workers.scheduler_worker import ScheduleJobConfig, scheduler_worker
+from app.workers.scheduler_worker import (
+    ScheduleJobConfig,
+    delete_saved_schedule,
+    save_schedule,
+    scheduled_run_callback,
+    scheduler_worker,
+)
 
 router = APIRouter(prefix="/automation", tags=["Automation Runs & Scheduling"])
 
@@ -453,12 +459,15 @@ async def create_schedule(
         created_at=datetime.now(timezone.utc),
     )
 
-    async def scheduled_task(**kwargs):
-        logger.info(f"Triggering scheduled automation run [{config.schedule_id}] for user [{config.user_id}]...")
-
-    success = scheduler_worker.add_schedule(config=config, task_callable=scheduled_task)
+    success = scheduler_worker.add_schedule(
+        config=config,
+        task_callable=scheduled_run_callback,
+        schedule_id=config.schedule_id,
+        user_id=config.user_id,
+    )
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to register schedule.")
+    await save_schedule(config)
 
     return config
 
@@ -473,4 +482,5 @@ async def delete_schedule(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Schedule [{schedule_id}] not found.")
 
     scheduler_worker.remove_schedule(schedule_id)
+    await delete_saved_schedule(schedule_id)
     return None

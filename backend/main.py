@@ -27,7 +27,7 @@ from app.core.database import init_db, reconcile_orphaned_runs
 from app.core.exceptions import PlatformException
 from app.core.logging import logger, setup_logging
 from app.infrastructure.browser.browser_manager import browser_manager
-from app.workers.scheduler_worker import scheduler_worker
+from app.workers.scheduler_worker import restore_saved_schedules, scheduler_worker
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI):
     await init_db()
     await reconcile_orphaned_runs()
     scheduler_worker.initialize()
+    await restore_saved_schedules()
     from app.workers.matching_worker import matching_worker
     matching_worker.start()
     yield
