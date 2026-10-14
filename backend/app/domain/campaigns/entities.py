@@ -175,6 +175,7 @@ class CampaignSafetyPolicy:
     operating_start_time: str = "09:00"  # Format HH:MM
     operating_end_time: str = "18:00"    # Format HH:MM
     max_concurrent_applications: int = 1
+    timezone: str = "UTC"  # IANA name, e.g. "Asia/Kolkata"; the operating window uses this clock
 
 
 @dataclass

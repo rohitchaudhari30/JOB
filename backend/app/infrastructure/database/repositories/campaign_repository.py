@@ -60,6 +60,7 @@ class SqlAlchemyCampaignRepository(CampaignRepository):
             operating_start_time=model.safety_policy.operating_start_time if model.safety_policy else "09:00",
             operating_end_time=model.safety_policy.operating_end_time if model.safety_policy else "18:00",
             max_concurrent_applications=model.safety_policy.max_concurrent_applications if model.safety_policy else 1,
+            timezone=(model.safety_policy.timezone if model.safety_policy else None) or "UTC",
         ) if model.safety_policy else CampaignSafetyPolicy()
 
         schedule = CampaignSchedule(
@@ -164,6 +165,7 @@ class SqlAlchemyCampaignRepository(CampaignRepository):
                 operating_start_time=campaign.safety_policy.operating_start_time,
                 operating_end_time=campaign.safety_policy.operating_end_time,
                 max_concurrent_applications=campaign.safety_policy.max_concurrent_applications,
+                timezone=campaign.safety_policy.timezone,
             )
             self._session.add(safety_model)
 
@@ -201,6 +203,7 @@ class SqlAlchemyCampaignRepository(CampaignRepository):
                 model.safety_policy.operating_start_time = campaign.safety_policy.operating_start_time
                 model.safety_policy.operating_end_time = campaign.safety_policy.operating_end_time
                 model.safety_policy.max_concurrent_applications = campaign.safety_policy.max_concurrent_applications
+                model.safety_policy.timezone = campaign.safety_policy.timezone
 
             if model.schedule:
                 model.schedule.is_active = campaign.schedule.is_active

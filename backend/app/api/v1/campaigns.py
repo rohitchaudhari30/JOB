@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Annotated, Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import BaseModel, Field, field_validator
 
 from app.api.deps import (
     get_campaign_activity_log_repository,
@@ -53,6 +55,16 @@ class CampaignSafetyPolicySchema(BaseModel):
     operating_start_time: str = "09:00"
     operating_end_time: str = "18:00"
     max_concurrent_applications: int = Field(1, ge=1, le=5)
+    timezone: str = "UTC"
+
+    @field_validator("timezone")
+    @classmethod
+    def _must_be_real_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("timezone must be a valid IANA name such as Asia/Kolkata")
+        return value
 
 
 class CampaignScheduleSchema(BaseModel):
@@ -164,6 +176,7 @@ def _to_campaign_response(c: Campaign) -> CampaignResponse:
             operating_start_time=c.safety_policy.operating_start_time,
             operating_end_time=c.safety_policy.operating_end_time,
             max_concurrent_applications=c.safety_policy.max_concurrent_applications,
+            timezone=c.safety_policy.timezone,
         ),
         schedule=CampaignScheduleSchema(
             is_active=c.schedule.is_active,

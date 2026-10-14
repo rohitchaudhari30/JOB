@@ -361,6 +361,35 @@ async def _migrate_sqlite_columns():
         raise
 
 
+def _add_missing_columns(connection) -> None:
+    """Legacy databases: add model columns that the old routine never knew about.
+
+    Only simple columns are handled (nullable, or with a plain default). Anything
+    else needs a proper migration, so it raises instead of guessing.
+    """
+    from sqlalchemy import inspect
+
+    inspector = inspect(connection)
+    for table in Base.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        existing = {c["name"] for c in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            sql_type = column.type.compile(connection.dialect)
+            default = getattr(getattr(column, "default", None), "arg", None)
+            if column.nullable:
+                clause = ""
+            elif isinstance(default, (str, int, float)) and not callable(default):
+                literal = f"'{default}'" if isinstance(default, str) else str(default)
+                clause = f" NOT NULL DEFAULT {literal}"
+            else:
+                raise RuntimeError(f"Cannot auto-add NOT NULL column {table.name}.{column.name}; write a migration.")
+            connection.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {sql_type}{clause}'))
+            logger.info("Added missing column %s.%s", table.name, column.name)
+
+
 def _alembic_config():
     from pathlib import Path
 
@@ -404,6 +433,7 @@ async def run_migrations() -> None:
         await _migrate_sqlite_columns()
         async with engine.connect() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(_add_missing_columns)
             await conn.run_sync(_alembic_run, "stamp")
             await conn.commit()
     else:

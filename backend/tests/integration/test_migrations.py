@@ -40,7 +40,7 @@ async def test_fresh_database_gets_the_full_schema_from_migrations(empty_engine)
     await run_migrations()
     tables = await _tables(empty_engine)
     assert {"users", "applications", "jobs", "revoked_tokens", "alembic_version"} <= tables
-    assert await _version(empty_engine) == "0002"
+    assert await _version(empty_engine) == "0003"
     # The migrations and the SQLAlchemy models describe the same schema.
     assert await _schema_differences(empty_engine) == []
     await empty_engine.dispose()
@@ -50,7 +50,7 @@ async def test_fresh_database_gets_the_full_schema_from_migrations(empty_engine)
 async def test_running_migrations_twice_is_safe(empty_engine):
     await run_migrations()
     await run_migrations()
-    assert await _version(empty_engine) == "0002"
+    assert await _version(empty_engine) == "0003"
     await empty_engine.dispose()
 
 
@@ -67,7 +67,7 @@ async def test_legacy_database_is_adopted_without_losing_data(empty_engine):
 
     await run_migrations()
 
-    assert await _version(empty_engine) == "0002"
+    assert await _version(empty_engine) == "0003"
     async with empty_engine.connect() as conn:
         emails = (await conn.execute(text("SELECT email FROM users"))).scalars().all()
     assert emails == ["old@example.com"]
@@ -160,3 +160,21 @@ async def test_resume_label_is_kept_after_the_resume_is_deleted(db_session):
     model.resume_id = None
     await db_session.commit()
     assert (await db_session.get(ApplicationModel, "a9")).resume_label_snapshot == "Backend CV 2026"
+
+
+@pytest.mark.asyncio
+async def test_legacy_database_missing_new_columns_gets_them(empty_engine):
+    # An old database made before the timezone and resume snapshot columns existed.
+    async with empty_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("ALTER TABLE campaign_safety_policies DROP COLUMN timezone"))
+        await conn.execute(text("ALTER TABLE applications DROP COLUMN resume_label_snapshot"))
+
+    await run_migrations()
+
+    async with empty_engine.connect() as conn:
+        policy_cols = {r[1] for r in (await conn.execute(text("PRAGMA table_info(campaign_safety_policies)"))).all()}
+        app_cols = {r[1] for r in (await conn.execute(text("PRAGMA table_info(applications)"))).all()}
+    assert "timezone" in policy_cols and "resume_label_snapshot" in app_cols
+    assert await _version(empty_engine) == "0003"
+    await empty_engine.dispose()

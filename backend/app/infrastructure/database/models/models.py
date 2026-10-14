@@ -520,6 +520,7 @@ class CampaignSafetyPolicyModel(Base):
     operating_start_time = Column(String(8), default="09:00", nullable=False)
     operating_end_time = Column(String(8), default="18:00", nullable=False)
     max_concurrent_applications = Column(Integer, default=1, nullable=False)
+    timezone = Column(String(64), default="UTC", nullable=False)
 
     campaign = relationship("CampaignModel", back_populates="safety_policy")
 
