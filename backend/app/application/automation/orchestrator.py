@@ -7,7 +7,7 @@ from enum import Enum
 import logging
 from typing import Any, Dict, List, Optional
 import uuid
-from app.api.v1.ws import ws_manager
+from app.application.notifier import ws_manager
 from app.application.applications.application_orchestrator import ApplicationOrchestrator
 from app.application.applications.commands import ApplicationSource, QueueApplicationCommand
 from app.application.applications.use_cases import CreateApplicationUseCase, ExecuteApplicationUseCase

@@ -7,7 +7,7 @@ import logging
 import os
 from typing import Any, List, Optional
 import uuid
-from app.api.v1.ws import ws_manager
+from app.application.notifier import ws_manager
 from app.core.exceptions import (
     AuthorizationException,
     DuplicateEntityException,

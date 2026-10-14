@@ -162,3 +162,9 @@ async def get_execute_application_use_case(
     from app.application.applications.factory import build_execute_application_use_case
 
     return build_execute_application_use_case(session)
+
+
+async def get_automation_run_repository(session: Annotated[AsyncSession, Depends(get_db_session)]):
+    from app.infrastructure.database.repositories.automation_repository import SqlAlchemyAutomationRunRepository
+
+    return SqlAlchemyAutomationRunRepository(session)

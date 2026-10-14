@@ -57,6 +57,11 @@ class ConnectionManager:
 
 ws_manager = ConnectionManager()
 
+# Let the application layer reach this manager without importing the API layer (ARC-01).
+from app.application.notifier import ws_manager as _notifier  # noqa: E402
+
+_notifier.register(ws_manager)
+
 import time
 from app.api.deps import get_current_user
 from app.domain.auth.entities import User

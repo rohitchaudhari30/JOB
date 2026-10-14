@@ -18,6 +18,7 @@ from app.api.deps import (
     get_user_repository,
     get_campaign_execution_repository,
     get_campaign_repository,
+    get_automation_run_repository,
 )
 from app.application.automation.orchestrator import (
     AutomationRunStatus,
@@ -116,6 +117,35 @@ def _to_run_response(session: AutomationSession, worker_health: str = "HEALTHY")
     )
 
 
+def _row_to_run_response(model, default_status: AutomationRunStatus) -> RunStatusResponse:
+    """Builds the API response from a stored run row (used when the run is no longer in memory)."""
+    status_enum = AutomationRunStatus(model.status) if model.status in AutomationRunStatus._value2member_map_ else default_status
+    seconds_since_heartbeat = 0.0
+    if model.last_heartbeat_at:
+        beat = model.last_heartbeat_at
+        if beat.tzinfo is None:
+            beat = beat.replace(tzinfo=timezone.utc)
+        seconds_since_heartbeat = (datetime.now(timezone.utc) - beat).total_seconds()
+    is_stale = model.status in ("RUNNING", "STARTING") and seconds_since_heartbeat > 300
+    return RunStatusResponse(
+        run_id=model.id,
+        user_id=model.user_id,
+        status=status_enum,
+        active_state=model.status,
+        is_paused=(model.status == "PAUSED"),
+        discovered_jobs_count=model.discovered_count,
+        matched_jobs_count=model.matched_count,
+        applications_submitted_count=model.applied_count,
+        current_job_title=model.current_job_title,
+        current_application_id=model.current_job_id,
+        error_message=model.error_message,
+        last_event_seq=getattr(model, "last_event_seq", 0),
+        worker_health="STALE" if is_stale else "HEALTHY",
+        created_at=model.created_at,
+        completed_at=model.finished_at,
+    )
+
+
 @router.post("/start", response_model=RunStatusResponse, status_code=status.HTTP_202_ACCEPTED)
 async def start_automation_run(
     req: StartRunRequest,
@@ -198,6 +228,7 @@ async def start_automation_run(
 @router.get("/active", response_model=Optional[RunStatusResponse])
 async def get_active_user_run(
     current_user: Annotated[User, Depends(get_current_user)],
+    run_repo=Depends(get_automation_run_repository),
 ):
     session = orchestrator.get_active_user_run(current_user.id)
     if session and session.status not in (
@@ -208,42 +239,9 @@ async def get_active_user_run(
         return _to_run_response(session)
 
     # Database fallback for active runs across worker restarts
-    from app.core.database import AsyncSessionLocal
-    from app.infrastructure.database.models.models import AutomationRunModel
-    from sqlalchemy import select, desc
-
-    async with AsyncSessionLocal() as db_session:
-        active_statuses = ["RUNNING", "STARTING", "PAUSED"]
-        stmt = (
-            select(AutomationRunModel)
-            .where(
-                AutomationRunModel.user_id == current_user.id,
-                AutomationRunModel.status.in_(active_statuses),
-            )
-            .order_by(desc(AutomationRunModel.created_at))
-            .limit(1)
-        )
-        res = await db_session.execute(stmt)
-        model = res.scalar_one_or_none()
-        if model:
-            status_enum = AutomationRunStatus(model.status) if model.status in AutomationRunStatus._value2member_map_ else AutomationRunStatus.RUNNING
-            return RunStatusResponse(
-                run_id=model.id,
-                user_id=model.user_id,
-                status=status_enum,
-                active_state=model.status,
-                is_paused=(model.status == "PAUSED"),
-                discovered_jobs_count=model.discovered_count,
-                matched_jobs_count=model.matched_count,
-                applications_submitted_count=model.applied_count,
-                current_job_title=model.current_job_title,
-                current_application_id=model.current_job_id,
-                error_message=model.error_message,
-                last_event_seq=getattr(model, "last_event_seq", 0),
-                worker_health="STALE" if (datetime.now(timezone.utc) - (model.last_heartbeat_at.replace(tzinfo=timezone.utc) if model.last_heartbeat_at and model.last_heartbeat_at.tzinfo is None else (model.last_heartbeat_at or datetime.now(timezone.utc)))).total_seconds() > 300 else "HEALTHY",
-                created_at=model.created_at,
-                completed_at=model.finished_at,
-            )
+    model = await run_repo.get_latest_active_row(current_user.id)
+    if model:
+        return _row_to_run_response(model, default_status=AutomationRunStatus.RUNNING)
     return None
 
 
@@ -251,6 +249,7 @@ async def get_active_user_run(
 async def get_run_status(
     run_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
+    run_repo=Depends(get_automation_run_repository),
 ):
     session = orchestrator.get_session(run_id)
     if session:
@@ -259,43 +258,10 @@ async def get_run_status(
         return _to_run_response(session)
 
     # Database fallback for completed or persisted runs
-    from app.core.database import AsyncSessionLocal
-    from app.infrastructure.database.models.models import AutomationRunModel
-    from sqlalchemy import select
-
-    async with AsyncSessionLocal() as db_session:
-        stmt = select(AutomationRunModel).where(AutomationRunModel.id == run_id)
-        res = await db_session.execute(stmt)
-        model = res.scalar_one_or_none()
-        if not model or model.user_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
-
-        status_enum = AutomationRunStatus(model.status) if model.status in AutomationRunStatus._value2member_map_ else AutomationRunStatus.COMPLETED
-        # Lease expiry detection
-        time_diff = 0
-        if model.last_heartbeat_at:
-            hb = model.last_heartbeat_at.replace(tzinfo=timezone.utc) if model.last_heartbeat_at.tzinfo is None else model.last_heartbeat_at
-            time_diff = (datetime.now(timezone.utc) - hb).total_seconds()
-        is_stale = model.status in ("RUNNING", "STARTING") and time_diff > 300
-        health = "STALE" if is_stale else "HEALTHY"
-
-        return RunStatusResponse(
-            run_id=model.id,
-            user_id=model.user_id,
-            status=status_enum,
-            active_state=model.status,
-            is_paused=(model.status == "PAUSED"),
-            discovered_jobs_count=model.discovered_count,
-            matched_jobs_count=model.matched_count,
-            applications_submitted_count=model.applied_count,
-            current_job_title=model.current_job_title,
-            current_application_id=model.current_job_id,
-            error_message=model.error_message,
-            last_event_seq=getattr(model, "last_event_seq", 0),
-            worker_health=health,
-            created_at=model.created_at,
-            completed_at=model.finished_at,
-        )
+    model = await run_repo.get_row(run_id)
+    if not model or model.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
+    return _row_to_run_response(model, default_status=AutomationRunStatus.COMPLETED)
 
 
 @router.get("/runs/{run_id}/events", response_model=List[Dict[str, Any]])
@@ -304,6 +270,7 @@ async def get_run_events(
     current_user: Annotated[User, Depends(get_current_user)],
     after_seq: Optional[int] = Query(None, description="Cursor: return only events with seq > after_seq"),
     limit: int = Query(1000, ge=1, le=5000, description="Max events per page. Continue with after_seq = last seq."),
+    run_repo=Depends(get_automation_run_repository),
 ):
     session = orchestrator.get_session(run_id)
     if session:
@@ -315,39 +282,26 @@ async def get_run_events(
         return all_events[:limit]
 
     # Database fallback for finished/historical runs
-    from app.core.database import AsyncSessionLocal
-    from app.infrastructure.database.models.models import AutomationEventModel, AutomationRunModel
-    from sqlalchemy import select
+    run_model = await run_repo.get_row(run_id)
+    if not run_model or run_model.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
 
-    async with AsyncSessionLocal() as db_session:
-        run_stmt = select(AutomationRunModel).where(AutomationRunModel.id == run_id)
-        run_res = await db_session.execute(run_stmt)
-        run_model = run_res.scalar_one_or_none()
-        if not run_model or run_model.user_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
-
-        stmt = select(AutomationEventModel).where(AutomationEventModel.run_id == run_id)
-        if after_seq is not None:
-            stmt = stmt.where(AutomationEventModel.seq > after_seq)
-        stmt = stmt.order_by(AutomationEventModel.seq.asc()).limit(limit)
-
-        res = await db_session.execute(stmt)
-        events = res.scalars().all()
-        return [
-            {
-                "type": "AUTOMATION_TIMELINE_EVENT",
-                "id": e.id,
-                "seq": e.seq,
-                "run_id": e.run_id,
-                "event_name": e.event_name,
-                "state": (e.payload or {}).get("state", "RUNNING"),
-                "message": (e.payload or {}).get("message", e.event_name),
-                "stats": (e.payload or {}).get("stats", {}),
-                "payload": e.payload or {},
-                "timestamp": e.created_at.isoformat() if e.created_at else "",
-            }
-            for e in events
-        ]
+    events = await run_repo.list_event_rows(run_id, after_seq, limit)
+    return [
+        {
+            "type": "AUTOMATION_TIMELINE_EVENT",
+            "id": e.id,
+            "seq": e.seq,
+            "run_id": e.run_id,
+            "event_name": e.event_name,
+            "state": (e.payload or {}).get("state", "RUNNING"),
+            "message": (e.payload or {}).get("message", e.event_name),
+            "stats": (e.payload or {}).get("stats", {}),
+            "payload": e.payload or {},
+            "timestamp": e.created_at.isoformat() if e.created_at else "",
+        }
+        for e in events
+    ]
 
 
 @router.post("/runs/{run_id}/pause", response_model=RunStatusResponse)

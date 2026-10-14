@@ -23,8 +23,18 @@ from app.api.v1.ws import _ws_tickets
 
 
 @pytest.fixture
-async def authenticated_client(client: AsyncClient):
+async def authenticated_client(client: AsyncClient, monkeypatch):
     """Creates a distinct user and returns authenticated headers & client."""
+    # Never launch a real browser from these tests. A cancellable wait stands in for discovery,
+    # so a started run can always be stopped cleanly at teardown.
+    from app.application.jobs.use_cases import DiscoverJobsUseCase
+
+    async def waiting_discovery(self, *args, **kwargs):
+        await asyncio.sleep(30)
+        return {"discovered_total": 0, "new_jobs_count": 0, "skipped_duplicates": 0, "jobs": []}
+
+    monkeypatch.setattr(DiscoverJobsUseCase, "execute", waiting_discovery)
+
     user_payload = {
         "email": f"tester_{uuid.uuid4().hex[:6]}@example.com",
         "password": "Password123!",
