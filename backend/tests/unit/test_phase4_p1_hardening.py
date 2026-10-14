@@ -1,4 +1,5 @@
 import pytest
+from tests.fakes import fake_repo
 from unittest.mock import AsyncMock, MagicMock
 from fastapi import HTTPException
 from app.application.automation.orchestrator import (
@@ -58,7 +59,7 @@ async def test_automation_pipeline_routes_through_application_orchestrator(monke
         resume_id="resume_unify_1",
     )
 
-    mock_job_repo = MagicMock()
+    mock_job_repo = fake_repo()
     mock_job_repo.get_by_id = AsyncMock(return_value=job_1)
 
     # Track calls to ApplicationOrchestrator.queue_application
@@ -114,12 +115,12 @@ async def test_automation_pipeline_routes_through_application_orchestrator(monke
         auto_apply_matches=True,
         max_applications=5,
         job_repo=mock_job_repo,
-        source_repo=MagicMock(),
-        profile_repo=MagicMock(),
-        resume_repo=MagicMock(),
-        match_repo=MagicMock(),
-        app_repo=MagicMock(),
-        user_repo=MagicMock(),
+        source_repo=fake_repo(),
+        profile_repo=fake_repo(),
+        resume_repo=fake_repo(),
+        match_repo=fake_repo(),
+        app_repo=fake_repo(),
+        user_repo=fake_repo(),
         session_repo=None,
         ai_gateway=MagicMock(),
     )

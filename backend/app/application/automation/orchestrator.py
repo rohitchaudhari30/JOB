@@ -377,17 +377,8 @@ class AutomationOrchestrator:
         """Check the account-wide and per-platform 24h safety caps (AUT-06)."""
         from app.core.config import settings
 
-        counter = getattr(app_repo, "count_recent_submissions", None)
-        if counter is None:
-            return None
-        account_count = counter(user_id)
-        platform_count = counter(user_id, source_type=source_type)
-        if inspect.isawaitable(account_count):
-            account_count = await account_count
-        if inspect.isawaitable(platform_count):
-            platform_count = await platform_count
-        if not isinstance(account_count, int) or not isinstance(platform_count, int):
-            return None  # repository cannot tell us (e.g. a test double)
+        account_count = await app_repo.count_recent_submissions(user_id)
+        platform_count = await app_repo.count_recent_submissions(user_id, source_type=source_type)
         return daily_cap_reached(
             account_count,
             platform_count,
@@ -403,11 +394,7 @@ class AutomationOrchestrator:
         open transaction, which is lost on a crash and (on SQLite) blocks every
         other writer, including the event/telemetry writes. (AUT-01)
         """
-        from sqlalchemy.ext.asyncio import AsyncSession
-
-        db = getattr(repo, "_session", None)
-        if isinstance(db, AsyncSession):
-            await db.commit()
+        await repo._session.commit()
 
     async def cancel_background_tasks(self) -> None:
         """Cancel any running pipelines and wait for them to stop."""

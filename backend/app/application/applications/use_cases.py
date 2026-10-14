@@ -346,17 +346,9 @@ class ExecuteApplicationUseCase:
                     return fresh_app or app
 
                 # Context-aware Playwright click with fallback to text locator if CSS fails
-                import inspect
-
-                async def _safe_locator_call(func, *args, **kwargs):
-                    if callable(func):
-                        res = func(*args, **kwargs)
-                        if inspect.isawaitable(res):
-                            await res
-
                 btn_locator = page.locator(submit_btn.selector).first
                 try:
-                    await _safe_locator_call(getattr(btn_locator, "wait_for", None), state="visible", timeout=7000)
+                    await btn_locator.wait_for(state="visible", timeout=7000)
 
                     # Last-millisecond pre-click verification: ensure recovery hasn't reclaimed ownership while waiting
                     pre_click_check = await self._app_repo.get_by_id(app.id)
@@ -370,7 +362,7 @@ class ExecuteApplicationUseCase:
                         )
                         return pre_click_check or app
 
-                    await _safe_locator_call(getattr(btn_locator, "click", None), timeout=8000)
+                    await btn_locator.click(timeout=8000)
                 except Exception as click_err:
                     # Check ownership before falling back to text locator
                     pre_click_check = await self._app_repo.get_by_id(app.id)
@@ -387,7 +379,7 @@ class ExecuteApplicationUseCase:
                     logger.warning(f"Primary selector click failed ({click_err}). Trying semantic button text fallback...")
                     fallback_text = (submit_btn.label_text or "Submit").strip()
                     fallback_locator = page.locator(f"button:has-text('{fallback_text}'), input[type='submit']").first
-                    await _safe_locator_call(getattr(fallback_locator, "wait_for", None), state="visible", timeout=5000)
+                    await fallback_locator.wait_for(state="visible", timeout=5000)
 
                     pre_click_check = await self._app_repo.get_by_id(app.id)
                     if (
@@ -400,7 +392,7 @@ class ExecuteApplicationUseCase:
                         )
                         return pre_click_check or app
 
-                    await _safe_locator_call(getattr(fallback_locator, "click", None), timeout=5000)
+                    await fallback_locator.click(timeout=5000)
 
                 # Evidence-based post-click submission outcome verification
                 target_platform = (job.source_type or job.source_id or "").lower() if job else None
@@ -703,9 +695,7 @@ class ExecuteApplicationUseCase:
                     return foundErrors;
                 }
                 """
-                res = page.evaluate(error_check_script)
-                if inspect.isawaitable(res):
-                    res = await res
+                res = await page.evaluate(error_check_script)
                 if res and isinstance(res, list) and len(res) > 0:
                     first_err = res[0]
                     return (
@@ -745,9 +735,7 @@ class ExecuteApplicationUseCase:
                     return patterns.some(p => p.test(text));
                 }
                 """
-                res = page.evaluate(confirmation_script)
-                if inspect.isawaitable(res):
-                    res = await res
+                res = await page.evaluate(confirmation_script)
                 is_text_confirmed = bool(res)
         except Exception as txt_err:
             logger.warning(f"Confirmation text evaluation error: {txt_err}")
@@ -765,9 +753,7 @@ class ExecuteApplicationUseCase:
                     });
                 }
                 """
-                res = page.evaluate(btn_state_script)
-                if inspect.isawaitable(res):
-                    res = await res
+                res = await page.evaluate(btn_state_script)
                 is_btn_confirmed = bool(res)
         except Exception as btn_err:
             logger.warning(f"Button state confirmation check error: {btn_err}")

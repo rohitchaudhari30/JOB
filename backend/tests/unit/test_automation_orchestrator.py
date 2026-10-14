@@ -1,4 +1,5 @@
 import pytest
+from tests.fakes import fake_repo
 from app.application.automation.orchestrator import (
     AutomationOrchestrator,
     AutomationRunStatus,
@@ -86,13 +87,13 @@ async def test_orchestrator_pipeline_injects_authenticated_session(monkeypatch):
         match_rule=MatchRule(),
         auto_apply_matches=False,
         max_applications=5,
-        job_repo=MagicMock(),
-        source_repo=MagicMock(),
-        profile_repo=MagicMock(),
-        resume_repo=MagicMock(),
-        match_repo=MagicMock(),
-        app_repo=MagicMock(),
-        user_repo=MagicMock(),
+        job_repo=fake_repo(),
+        source_repo=fake_repo(),
+        profile_repo=fake_repo(),
+        resume_repo=fake_repo(),
+        match_repo=fake_repo(),
+        app_repo=fake_repo(),
+        user_repo=fake_repo(),
         session_repo=mock_session_repo,
         ai_gateway=MagicMock(),
     )

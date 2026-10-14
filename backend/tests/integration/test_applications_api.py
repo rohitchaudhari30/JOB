@@ -118,6 +118,8 @@ async def test_application_lifecycle_and_api_flow(client: AsyncClient, monkeypat
         mock_page.wait_for_timeout = AsyncMock()
         mock_page.is_closed = MagicMock(return_value=False)
         mock_page.screenshot = AsyncMock(return_value=b"fake_jpeg")
+        # The page shows a success message, so the confirmation check finds it.
+        mock_page.evaluate = AsyncMock(return_value=True)
         mock_locator = MagicMock()
         mock_locator.first = mock_locator
         mock_locator.wait_for = AsyncMock()

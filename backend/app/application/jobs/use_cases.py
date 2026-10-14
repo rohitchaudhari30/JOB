@@ -53,15 +53,10 @@ class DiscoverJobsUseCase:
         adapter = adapter_registry.get_source_adapter(source_type)
 
         # 3. Create isolated browser context
-        try:
-            context = await self._browser_mgr.create_isolated_context(
-                encrypted_storage_state=encrypted_storage_state,
-                headless=headless,
-            )
-        except TypeError:
-            context = await self._browser_mgr.create_isolated_context(
-                encrypted_storage_state=encrypted_storage_state,
-            )
+        context = await self._browser_mgr.create_isolated_context(
+            encrypted_storage_state=encrypted_storage_state,
+            headless=headless,
+        )
 
         discovered_total = 0
         new_saved = 0
