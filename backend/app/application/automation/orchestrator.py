@@ -1110,7 +1110,8 @@ class AutomationOrchestrator:
                         f"Database event persistence failed for [{event_name}] on run [{session.run_id}] (attempt {attempt + 1}): {persist_err}",
                         exc_info=True,
                     )
-                    raise RuntimeError(f"Failed to persist event [{event_name}] for run [{session.run_id}]: {persist_err}") from persist_err
+                    # A lost log line must not stop real work, so give up on this event and carry on (ARC-06).
+                    break
 
         if event_dict:
             if hasattr(session, "events"):

@@ -97,7 +97,11 @@ class AutomationSchedulerWorker:
 
     def shutdown(self):
         if self._scheduler and self._scheduler.running:
-            self._scheduler.shutdown(wait=False)
+            try:
+                self._scheduler.shutdown(wait=False)
+            except RuntimeError:
+                # The event loop it was started on is already closed, so there is nothing left to stop.
+                pass
             self._scheduler = None
             logger.info("APScheduler worker shut down.")
 
