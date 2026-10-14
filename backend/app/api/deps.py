@@ -153,3 +153,26 @@ async def require_admin(
             detail="This operation affects data shared by all users and needs an administrator.",
         )
     return current_user
+
+
+async def get_execute_application_use_case(
+    app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
+    job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
+    profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
+    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+    session_repo: Annotated["SqlAlchemyBrowserSessionRepository", Depends(get_browser_session_repository)],
+    ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+):
+    """One place that builds the apply use case, so manual and automatic runs behave the same (AUT-13)."""
+    from app.application.applications.use_cases import ExecuteApplicationUseCase
+
+    return ExecuteApplicationUseCase(
+        app_repo=app_repo,
+        job_repo=job_repo,
+        profile_repo=profile_repo,
+        resume_repo=resume_repo,
+        user_repo=user_repo,
+        session_repo=session_repo,
+        ai_provider=ai_gateway,
+    )

@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.api.deps import (
+    get_execute_application_use_case,
     get_ai_gateway,
     get_application_repository,
     get_campaign_repository,
@@ -276,17 +277,12 @@ async def create_application(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     from app.application.applications.application_orchestrator import ApplicationOrchestrator
     from app.application.applications.commands import ApplicationSource, QueueApplicationCommand
 
-    exec_uc = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    exec_uc = execute_application_uc
     orchestrator = ApplicationOrchestrator(
         app_repo=app_repo,
         job_repo=job_repo,
@@ -330,17 +326,12 @@ async def batch_queue_applications(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     from app.application.applications.application_orchestrator import ApplicationOrchestrator
     from app.application.applications.commands import ApplicationSource, BatchQueueApplicationCommand
 
-    exec_uc = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    exec_uc = execute_application_uc
     orchestrator = ApplicationOrchestrator(
         app_repo=app_repo,
         job_repo=job_repo,
@@ -395,15 +386,10 @@ async def approve_application(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    execute_use_case = execute_application_uc
     use_case = ApproveApplicationUseCase(
         app_repo=app_repo,
         execute_use_case=execute_use_case,
@@ -431,15 +417,10 @@ async def retry_application(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    execute_use_case = execute_application_uc
     use_case = RetryApplicationUseCase(
         app_repo=app_repo,
         execute_use_case=execute_use_case,
@@ -468,15 +449,10 @@ async def resume_application(
     profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    execute_use_case = execute_application_uc
     use_case = ResumeApplicationUseCase(app_repo=app_repo, execute_use_case=execute_use_case)
     app = await use_case.execute(
         application_id=application_id,
@@ -510,15 +486,10 @@ async def reconcile_application(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    execute_use_case = execute_application_uc
     use_case = ReconcileApplicationUseCase(
         app_repo=app_repo,
         execute_use_case=execute_use_case,
@@ -554,14 +525,9 @@ async def execute_application(
     profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    use_case = execute_application_uc
     app = await use_case.execute(application_id=application_id)
     return _to_response_dto(app)
