@@ -1,7 +1,7 @@
 from collections import Counter
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 from sqlalchemy import func, select, or_, distinct, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.matching.entities import MatchRule
@@ -32,6 +32,19 @@ from app.infrastructure.database.models import (
 
 # Outcomes that mean "the application really went out". Defined once so every query agrees (ANA-02).
 SENT_OUTCOMES = ["SUBMITTED", "RESPONDED", "INTERVIEWING", "OFFERED"]
+
+# What counts as a response, an interview or an offer: the stored outcome or a matching event (DUP-04).
+OUTCOME_RULES = {
+    "response": (
+        ["RESPONDED", "INTERVIEWING", "OFFERED"],
+        ["OUTCOME_RESPONDED", "EMPLOYER_RESPONSE", "OUTCOME_INTERVIEWING", "INTERVIEW_SCHEDULED", "OUTCOME_OFFERED", "OFFER_RECEIVED"],
+    ),
+    "interview": (
+        ["INTERVIEWING", "OFFERED"],
+        ["OUTCOME_INTERVIEWING", "INTERVIEW_SCHEDULED", "OUTCOME_OFFERED", "OFFER_RECEIVED"],
+    ),
+    "offer": (["OFFERED"], ["OUTCOME_OFFERED", "OFFER_RECEIVED"]),
+}
 
 class AnalyticsService:
     def __init__(self, session: AsyncSession):
@@ -315,6 +328,27 @@ class AnalyticsService:
             stages=stages,
         )
 
+    async def _outcome_counts(self, conditions, start_date, end_date, join_job: bool = False) -> Dict[str, int]:
+        """Counts responses, interviews and offers with the same rules for every breakdown (DUP-04)."""
+        counts: Dict[str, int] = {}
+        for name, (statuses, events) in OUTCOME_RULES.items():
+            stmt = select(func.count(distinct(ApplicationModel.id)))
+            if join_job:
+                stmt = stmt.join(JobModel, ApplicationModel.job_id == JobModel.id)
+            stmt = stmt.outerjoin(ApplicationEventModel, ApplicationModel.id == ApplicationEventModel.application_id).where(
+                *conditions,
+                or_(
+                    ApplicationModel.outcome_status.in_(statuses),
+                    ApplicationEventModel.event_name.in_(events),
+                ),
+            )
+            if start_date:
+                stmt = stmt.where(or_(ApplicationEventModel.created_at >= start_date, ApplicationModel.updated_at >= start_date))
+            if end_date:
+                stmt = stmt.where(or_(ApplicationEventModel.created_at <= end_date, ApplicationModel.updated_at <= end_date))
+            counts[name] = (await self.session.scalar(stmt)) or 0
+        return counts
+
     async def get_resume_performance(
         self,
         user_id: str,
@@ -338,73 +372,19 @@ class AnalyticsService:
                     ApplicationModel.outcome_status.in_(SENT_OUTCOMES),
                 ),
             )
-            response_query = (
-                select(func.count(distinct(ApplicationModel.id)))
-                .outerjoin(ApplicationEventModel, ApplicationModel.id == ApplicationEventModel.application_id)
-                .where(
-                    ApplicationModel.user_id == user_id,
-                    ApplicationModel.resume_id == r.id,
-                    or_(
-                        ApplicationModel.outcome_status.in_(["RESPONDED", "INTERVIEWING", "OFFERED"]),
-                        ApplicationEventModel.event_name.in_(["OUTCOME_RESPONDED", "EMPLOYER_RESPONSE", "OUTCOME_INTERVIEWING", "INTERVIEW_SCHEDULED", "OUTCOME_OFFERED", "OFFER_RECEIVED"]),
-                    ),
-                )
-            )
-            interview_query = (
-                select(func.count(distinct(ApplicationModel.id)))
-                .outerjoin(ApplicationEventModel, ApplicationModel.id == ApplicationEventModel.application_id)
-                .where(
-                    ApplicationModel.user_id == user_id,
-                    ApplicationModel.resume_id == r.id,
-                    or_(
-                        ApplicationModel.outcome_status.in_(["INTERVIEWING", "OFFERED"]),
-                        ApplicationEventModel.event_name.in_(["OUTCOME_INTERVIEWING", "INTERVIEW_SCHEDULED", "OUTCOME_OFFERED", "OFFER_RECEIVED"]),
-                    ),
-                )
-            )
-            offer_query = (
-                select(func.count(distinct(ApplicationModel.id)))
-                .outerjoin(ApplicationEventModel, ApplicationModel.id == ApplicationEventModel.application_id)
-                .where(
-                    ApplicationModel.user_id == user_id,
-                    ApplicationModel.resume_id == r.id,
-                    or_(
-                        ApplicationModel.outcome_status == "OFFERED",
-                        ApplicationEventModel.event_name.in_(["OUTCOME_OFFERED", "OFFER_RECEIVED"]),
-                    ),
-                )
-            )
-
             if start_date:
                 apps_query = apps_query.where(ApplicationModel.created_at >= start_date)
                 success_query = success_query.where(ApplicationModel.created_at >= start_date)
-                response_query = response_query.where(
-                    or_(ApplicationEventModel.created_at >= start_date, ApplicationModel.updated_at >= start_date)
-                )
-                interview_query = interview_query.where(
-                    or_(ApplicationEventModel.created_at >= start_date, ApplicationModel.updated_at >= start_date)
-                )
-                offer_query = offer_query.where(
-                    or_(ApplicationEventModel.created_at >= start_date, ApplicationModel.updated_at >= start_date)
-                )
             if end_date:
                 apps_query = apps_query.where(ApplicationModel.created_at <= end_date)
                 success_query = success_query.where(ApplicationModel.created_at <= end_date)
-                response_query = response_query.where(
-                    or_(ApplicationEventModel.created_at <= end_date, ApplicationModel.updated_at <= end_date)
-                )
-                interview_query = interview_query.where(
-                    or_(ApplicationEventModel.created_at <= end_date, ApplicationModel.updated_at <= end_date)
-                )
-                offer_query = offer_query.where(
-                    or_(ApplicationEventModel.created_at <= end_date, ApplicationModel.updated_at <= end_date)
-                )
 
             apps_count = (await self.session.scalar(apps_query)) or 0
             submitted_count = (await self.session.scalar(success_query)) or 0
-            response_count = (await self.session.scalar(response_query)) or 0
-            interview_count = (await self.session.scalar(interview_query)) or 0
-            offer_count = (await self.session.scalar(offer_query)) or 0
+            outcome = await self._outcome_counts(
+                [ApplicationModel.user_id == user_id, ApplicationModel.resume_id == r.id], start_date, end_date
+            )
+            response_count, interview_count, offer_count = outcome["response"], outcome["interview"], outcome["offer"]
 
             response_rate = round((response_count / submitted_count) * 100, 1) if submitted_count > 0 else 0.0
             interview_rate = round((interview_count / submitted_count) * 100, 1) if submitted_count > 0 else 0.0
@@ -512,65 +492,13 @@ class AnalyticsService:
                 submitted_stmt = submitted_stmt.where(ApplicationModel.created_at <= end_date)
             submitted_count = (await self.session.scalar(submitted_stmt)) or 0
 
-            # Responses count
-            resp_stmt = (
-                select(func.count(distinct(ApplicationModel.id)))
-                .join(JobModel, ApplicationModel.job_id == JobModel.id)
-                .outerjoin(ApplicationEventModel, ApplicationModel.id == ApplicationEventModel.application_id)
-                .where(
-                    ApplicationModel.user_id == user_id,
-                    JobModel.source_id == src.id,
-                    or_(
-                        ApplicationModel.outcome_status.in_(["RESPONDED", "INTERVIEWING", "OFFERED"]),
-                        ApplicationEventModel.event_name.in_(["OUTCOME_RESPONDED", "EMPLOYER_RESPONSE", "OUTCOME_INTERVIEWING", "INTERVIEW_SCHEDULED", "OUTCOME_OFFERED", "OFFER_RECEIVED"]),
-                    ),
-                )
+            outcome = await self._outcome_counts(
+                [ApplicationModel.user_id == user_id, JobModel.source_id == src.id],
+                start_date,
+                end_date,
+                join_job=True,
             )
-            if start_date:
-                resp_stmt = resp_stmt.where(or_(ApplicationEventModel.created_at >= start_date, ApplicationModel.updated_at >= start_date))
-            if end_date:
-                resp_stmt = resp_stmt.where(or_(ApplicationEventModel.created_at <= end_date, ApplicationModel.updated_at <= end_date))
-            resp_count = (await self.session.scalar(resp_stmt)) or 0
-
-            # Interview count
-            int_stmt = (
-                select(func.count(distinct(ApplicationModel.id)))
-                .join(JobModel, ApplicationModel.job_id == JobModel.id)
-                .outerjoin(ApplicationEventModel, ApplicationModel.id == ApplicationEventModel.application_id)
-                .where(
-                    ApplicationModel.user_id == user_id,
-                    JobModel.source_id == src.id,
-                    or_(
-                        ApplicationModel.outcome_status.in_(["INTERVIEWING", "OFFERED"]),
-                        ApplicationEventModel.event_name.in_(["OUTCOME_INTERVIEWING", "INTERVIEW_SCHEDULED", "OUTCOME_OFFERED", "OFFER_RECEIVED"]),
-                    ),
-                )
-            )
-            if start_date:
-                int_stmt = int_stmt.where(or_(ApplicationEventModel.created_at >= start_date, ApplicationModel.updated_at >= start_date))
-            if end_date:
-                int_stmt = int_stmt.where(or_(ApplicationEventModel.created_at <= end_date, ApplicationModel.updated_at <= end_date))
-            int_count = (await self.session.scalar(int_stmt)) or 0
-
-            # Offer count
-            off_stmt = (
-                select(func.count(distinct(ApplicationModel.id)))
-                .join(JobModel, ApplicationModel.job_id == JobModel.id)
-                .outerjoin(ApplicationEventModel, ApplicationModel.id == ApplicationEventModel.application_id)
-                .where(
-                    ApplicationModel.user_id == user_id,
-                    JobModel.source_id == src.id,
-                    or_(
-                        ApplicationModel.outcome_status == "OFFERED",
-                        ApplicationEventModel.event_name.in_(["OUTCOME_OFFERED", "OFFER_RECEIVED"]),
-                    ),
-                )
-            )
-            if start_date:
-                off_stmt = off_stmt.where(or_(ApplicationEventModel.created_at >= start_date, ApplicationModel.updated_at >= start_date))
-            if end_date:
-                off_stmt = off_stmt.where(or_(ApplicationEventModel.created_at <= end_date, ApplicationModel.updated_at <= end_date))
-            off_count = (await self.session.scalar(off_stmt)) or 0
+            resp_count, int_count, off_count = outcome["response"], outcome["interview"], outcome["offer"]
 
             resp_rate = round((resp_count / submitted_count) * 100, 1) if submitted_count > 0 else 0.0
             int_rate = round((int_count / submitted_count) * 100, 1) if submitted_count > 0 else 0.0

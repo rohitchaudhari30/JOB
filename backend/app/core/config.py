@@ -91,7 +91,6 @@ class Settings(BaseSettings):
     # Rate Limiting & Safety
     DEFAULT_MAX_CONCURRENT_SESSIONS: int = 2
     DEFAULT_COOLDOWN_SECONDS: int = 5
-    MAX_DAILY_APPLICATIONS_DEFAULT: int = 25
     GLOBAL_ACCOUNT_SAFE_CEILING: int = 50
     PLATFORM_DAILY_CAP_DEFAULT: int = 30
 

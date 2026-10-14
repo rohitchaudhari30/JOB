@@ -26,3 +26,21 @@ To scale to several processes later, in this order:
 - **Matching weights (DB-07):** stay in `saved_answers` under the intent `matching_weights`. A dedicated table is worth it only when weights get versioned.
 - **Browser stealth (COMP-01):** see `BROWSER_STEALTH_ENABLED` in `app/core/config.py`.
 - **Schedules:** saved and restored, but firing only logs. Starting unattended auto-apply runs is a product decision.
+
+## Duplicates: what each one is and who owns it
+| Item | Decision |
+|---|---|
+| DUP-01 control plane (run, campaign, application and WebSocket stop/pause) | Different scopes on purpose. A *run* is one live pipeline, a *campaign execution* is its stored record, an *application* is one job. Pausing a run also updates its execution (done in `automation.py`). Do not add a fourth entry point. |
+| DUP-02 status vocabularies | Each enum has one meaning: `AutomationState` (live run), `ExecutionStateEnum` (stored execution), `CampaignStateEnum` (campaign), `WorkflowStateEnum` (system progress of an application), `ApplicationOutcomeStatus` (what happened at the employer). Database CHECK constraints guard the two application columns. |
+| DUP-03 outcome literals in analytics | One shared list and one rules table (`SENT_OUTCOMES`, `OUTCOME_RULES`). |
+| DUP-04 repeated analytics queries | Resume and source breakdowns share `_outcome_counts`. Campaign breakdown counts stored outcomes only (no events) and is left as is on purpose. |
+| DUP-05 daily limits | The unused global default was removed. Limits come from the campaign safety policy and the platform caps in settings. |
+| DUP-06 API aliases | The old `/matching/weights` URLs are marked deprecated and kept for existing clients. |
+| DUP-07 profile write paths | `PUT /profile` now saves lists too; the granular endpoints remain for small edits. |
+| DUP-08 experience months | `total_experience_months` is entered by the user; it is not derived from the experience list. |
+| DUP-09 workflow vs outcome | `workflow_state` is set by the system; `outcome_status` by the user or platform events; `application_events` is the history of both. |
+| DUP-10 run vs execution | The run is the live view, the campaign execution is the stored owner of counters; they are synchronised when a run is paused, resumed or stopped. |
+| DUP-11 apply use case | One factory (`app/application/applications/factory.py`). |
+| DUP-12 repeated UI pieces | Helpers moved out of the applications page; further shared components are future work. |
+| DUP-13 encryptor alias | One name: `session_encryptor`. |
+| DUP-14 start/stop buttons | Not duplicates. Kept. |
