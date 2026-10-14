@@ -778,7 +778,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
                 >
                   <span className="font-bold text-indigo-600 dark:text-indigo-400">{skill.skill_name}</span>
                   <span className="text-[10px] text-slate-400 font-normal">({skill.years_experience}y)</span>
-                  <button
+                  <button aria-label="Delete"
                     type="button"
                     onClick={() => handleRemoveSkill(skill.skill_name)}
                     className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer ml-1"
@@ -903,7 +903,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">{exp.description}</p>
                       )}
                     </div>
-                    <button
+                    <button aria-label="Delete"
                       type="button"
                       onClick={() => handleRemoveExperience(idx)}
                       className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer p-1"
@@ -1221,7 +1221,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
 
                       {/* Action buttons */}
                       <div className="flex items-center space-x-1 shrink-0">
-                        <button
+                        <button aria-label="Download"
                           type="button"
                           onClick={() => handleDownloadResume(r.id, r.file_name)}
                           className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-colors cursor-pointer border border-transparent hover:border-slate-200 dark:hover:border-slate-600"
@@ -1242,7 +1242,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
                           </button>
                         ) : null}
 
-                        <button
+                        <button aria-label="Delete"
                           type="button"
                           onClick={() => handleDeleteResume(r.id, r.label)}
                           disabled={actionLoadingId === r.id}

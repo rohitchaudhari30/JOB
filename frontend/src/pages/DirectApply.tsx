@@ -971,7 +971,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                   className="inline-flex items-center px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-100 dark:border-indigo-500/20"
                 >
                   {role}
-                  <button
+                  <button aria-label="Close"
                     onClick={() => handleRemoveRole(role)}
                     className="ml-1.5 hover:text-indigo-900 dark:hover:text-white cursor-pointer"
                   >
@@ -1005,7 +1005,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                   className="inline-flex items-center px-2.5 py-1 rounded-xl bg-slate-200/80 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold"
                 >
                   {loc}
-                  <button
+                  <button aria-label="Close"
                     onClick={() => handleRemoveLocation(loc)}
                     className="ml-1.5 hover:text-slate-900 dark:hover:text-white cursor-pointer"
                   >
@@ -1555,7 +1555,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                   </p>
                 </div>
               </div>
-              <button
+              <button aria-label="Close"
                 type="button"
                 onClick={() => setShowNewCampaignModal(false)}
                 className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"

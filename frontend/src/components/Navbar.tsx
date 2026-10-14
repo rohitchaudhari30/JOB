@@ -292,7 +292,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         {!n.read && (
                           <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400 ring-2 ring-white dark:ring-slate-900"></span>
                         )}
-                        <button
+                        <button aria-label="Close"
                           onClick={(e) => removeNotification(e, n.id)}
                           className="text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
                           title="Dismiss notification"

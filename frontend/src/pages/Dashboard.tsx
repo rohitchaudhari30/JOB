@@ -182,7 +182,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
             <span>Quota Zone: <strong className="font-semibold">{clientTz}</strong></span>
           </div>
 
-          <button
+          <button aria-label="Refresh"
             onClick={() => loadData(true)}
             disabled={refreshing || loading}
             title="Refresh Operational State"
@@ -586,7 +586,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                       <Send className="w-3 h-3" />
                       <span>{applyingJobId === match.job_id ? 'Queuing...' : '1-Click Apply'}</span>
                     </button>
-                    <button
+                    <button aria-label="Open"
                       onClick={() => onNavigate('matches')}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
                       title="Inspect Match"
@@ -671,7 +671,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                     {app.outcome_status || 'NOT_SUBMITTED'}
                   </span>
 
-                  <button
+                  <button aria-label="Open"
                     onClick={() => onNavigate('crm')}
                     className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                   >

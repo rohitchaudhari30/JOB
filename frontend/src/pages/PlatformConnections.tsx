@@ -201,7 +201,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
           {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
           {toast.type === 'info' && <Info className="w-4 h-4 text-sky-400 shrink-0" />}
           <span>{toast.message}</span>
-          <button onClick={() => setToast(null)} className="ml-2 hover:opacity-75 cursor-pointer">
+          <button aria-label="Close" onClick={() => setToast(null)} className="ml-2 hover:opacity-75 cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

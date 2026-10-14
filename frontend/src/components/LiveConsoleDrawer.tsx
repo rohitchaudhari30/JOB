@@ -216,7 +216,7 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
                 : 'Session Ready'}
             </div>
           </div>
-          <button
+          <button aria-label="Expand panel"
             onClick={() => setIsMinimized(false)}
             className="p-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-xs cursor-pointer ml-1"
             title="Expand Live Console"
@@ -324,7 +324,7 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
             <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-0.5"></div>
 
             {/* Toggle Wide view */}
-            <button
+            <button aria-label="Expand panel"
               onClick={() => setIsWideView(!isWideView)}
               className="p-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer hidden sm:block shadow-2xs"
               title={isWideView ? 'Standard Width' : 'Wide Width'}
@@ -334,7 +334,7 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
 
             {/* Open full page if onNavigate available */}
             {onNavigate && (
-              <button
+              <button aria-label="Open link"
                 onClick={() => {
                   onClose();
                   onNavigate('live_console');
@@ -347,7 +347,7 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
             )}
 
             {/* Minimize */}
-            <button
+            <button aria-label="Shrink panel"
               onClick={() => setIsMinimized(true)}
               className="p-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs"
               title="Minimize to Floating Pill"

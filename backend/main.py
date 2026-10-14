@@ -30,9 +30,27 @@ from app.infrastructure.browser.browser_manager import browser_manager
 from app.workers.scheduler_worker import restore_saved_schedules, scheduler_worker
 
 
+
+def ensure_single_worker_process() -> None:
+    """Live runs, WebSocket clients and locks are kept in this process's memory (ARC-05).
+
+    A second worker process would not see them, so refuse to start with more than one.
+    See docs/ARCHITECTURE.md for how to scale later.
+    """
+    import os
+
+    workers = int(os.environ.get("WEB_CONCURRENCY", "1") or "1")
+    if workers > 1:
+        raise RuntimeError(
+            f"WEB_CONCURRENCY={workers}: this app keeps live run state in memory and must run as a single "
+            "process. Set WEB_CONCURRENCY=1 (see docs/ARCHITECTURE.md)."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    ensure_single_worker_process()
     logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode...")
     await init_db()
     await reconcile_orphaned_runs()

@@ -1007,7 +1007,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                         )}
 
                         {/* Dismiss / Delete Button */}
-                        <button
+                        <button aria-label="Delete"
                           onClick={() => handleDeleteJob(job.id, job.title)}
                           disabled={deletingId === job.id}
                           title="Remove job from repository"

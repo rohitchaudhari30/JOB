@@ -225,7 +225,7 @@ export const LiveTelemetryPanel: React.FC<LiveTelemetryPanelProps> = ({
 
         <div className="flex items-center space-x-1.5 shrink-0">
           {/* Search Toggle Icon */}
-          <button
+          <button aria-label="Search"
             type="button"
             onClick={() => setIsSearchOpen(!isSearchOpen)}
             title="Search events"
@@ -428,7 +428,7 @@ export const LiveTelemetryPanel: React.FC<LiveTelemetryPanelProps> = ({
               autoFocus
             />
             {searchQuery && (
-              <button
+              <button aria-label="Close"
                 type="button"
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600 cursor-pointer"

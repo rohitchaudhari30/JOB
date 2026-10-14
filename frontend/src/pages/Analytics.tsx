@@ -209,7 +209,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           </div>
 
           {/* Refresh Button */}
-          <button
+          <button aria-label="Refresh"
             onClick={() => fetchAnalyticsData(true)}
             disabled={refreshing || loading}
             title="Refresh Analytics Telemetry"

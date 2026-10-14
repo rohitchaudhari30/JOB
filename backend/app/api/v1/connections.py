@@ -3,6 +3,7 @@ from typing import Annotated, Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from app.api.deps import get_connection_manager, get_current_user
+from app.core.exceptions import EntityNotFoundException, ValidationException
 from app.domain.auth.entities import User
 from app.infrastructure.connections.connection_manager import ConnectionManager
 
@@ -83,3 +84,23 @@ async def disconnect_platform(
         "status": "NOT_CONNECTED",
         "message": f"Successfully disconnected from {platform}.",
     }
+
+
+class ImportSessionRequest(BaseModel):
+    storage_state: Dict[str, Any]
+
+
+@router.post("/{platform}/import-session")
+async def import_platform_session(
+    platform: str,
+    req: ImportSessionRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    conn_manager: Annotated[ConnectionManager, Depends(get_connection_manager)],
+):
+    """Connect with a login saved on your own computer (see scripts/export_login_session.py)."""
+    try:
+        return await conn_manager.import_session(current_user.id, platform, req.storage_state)
+    except ValidationException as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except EntityNotFoundException as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

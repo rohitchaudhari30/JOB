@@ -41,3 +41,28 @@ async def test_connections_api_lifecycle(client: AsyncClient):
     assert disc_res.status_code == 200
     assert disc_res.json()["status"] == "NOT_CONNECTED"
 
+
+
+@pytest.mark.asyncio
+async def test_import_session_connects_without_a_login_window(client: AsyncClient):
+    user = {"email": "import.session@example.com", "password": "Password123!", "full_name": "Import"}
+    await client.post("/api/v1/auth/register", json=user)
+    login = await client.post("/api/v1/auth/login", json={"email": user["email"], "password": user["password"]})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    bad = await client.post("/api/v1/connections/naukri/import-session", json={"storage_state": {"cookies": []}}, headers=headers)
+    assert bad.status_code == 400
+
+    state = {"cookies": [{"name": "sid", "value": "abc", "domain": ".naukri.com", "path": "/"}], "origins": []}
+    ok = await client.post("/api/v1/connections/naukri/import-session", json={"storage_state": state}, headers=headers)
+    assert ok.status_code == 200 and ok.json()["status"] == "CONNECTED"
+
+    listing = await client.get("/api/v1/connections", headers=headers)
+    naukri = next(c for c in listing.json() if c["platform"] == "naukri")
+    assert naukri["status"] == "CONNECTED" and naukri["session_active"] is True
+
+    # The stored session is encrypted, never returned in plain text.
+    assert "abc" not in ok.text
+
+    ats = await client.post("/api/v1/connections/greenhouse/import-session", json={"storage_state": state}, headers=headers)
+    assert ats.status_code == 400

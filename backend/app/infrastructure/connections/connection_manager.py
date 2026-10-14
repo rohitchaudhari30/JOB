@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
-from app.core.exceptions import EntityNotFoundException, PlatformException
+from app.core.exceptions import EntityNotFoundException, ValidationException, PlatformException
 from app.core.logging import logger
 from app.core.security import session_encryptor
 from app.domain.connections.contracts import ConnectionManagerInterface
@@ -107,8 +107,8 @@ class ConnectionManager(ConnectionManagerInterface):
                 "status": ConnectionStatus.ERROR.value,
                 "message": (
                     "This server has no display, so the login window cannot open here. "
-                    "Run the app on a desktop machine to connect this platform. "
-                    "A remote login flow is not built yet."
+                    "Log in on your own computer with scripts/export_login_session.py, then upload the "
+                    "saved file to POST /api/v1/connections/{platform}/import-session."
                 ),
             }
 
@@ -167,45 +167,7 @@ class ConnectionManager(ConnectionManagerInterface):
             except Exception:
                 pass
 
-            # Upsert PlatformConnection in DB
-            conn = await self._connection_repo.get_by_user_and_platform(user_id, platform)
-            now = datetime.now(timezone.utc)
-            if not conn:
-                conn = PlatformConnection(
-                    id=str(uuid.uuid4()),
-                    user_id=user_id,
-                    platform=platform,
-                    connection_type=ConnectionType.BROWSER_SESSION,
-                    status=ConnectionStatus.CONNECTED,
-                    external_account_reference=account_ref,
-                    last_verified_at=now,
-                )
-            else:
-                conn.status = ConnectionStatus.CONNECTED
-                conn.external_account_reference = account_ref
-                conn.last_verified_at = now
-
-            saved_conn = await self._connection_repo.save_connection(conn)
-
-            # Upsert BrowserSession in DB
-            sess = await self._session_repo.get_by_connection_id(saved_conn.id)
-            if not sess:
-                sess = BrowserSession(
-                    id=str(uuid.uuid4()),
-                    connection_id=saved_conn.id,
-                    user_id=user_id,
-                    source_id=platform,
-                    encrypted_storage_state=encrypted_state,
-                    status="ACTIVE",
-                    last_used_at=now,
-                )
-            else:
-                sess.source_id = platform
-                sess.encrypted_storage_state = encrypted_state
-                sess.status = "ACTIVE"
-                sess.last_used_at = now
-
-            await self._session_repo.save_session(sess)
+            now, saved_conn = await self._save_connected_session(user_id, platform, encrypted_state, account_ref)
             logger.info(f"Successfully connected [{platform}] for user [{user_id}] with encrypted session.")
 
             return {
@@ -218,6 +180,70 @@ class ConnectionManager(ConnectionManagerInterface):
 
         finally:
             await context.close()
+
+    async def _save_connected_session(self, user_id: str, platform: str, encrypted_state: str, account_ref: str):
+        """Stores the connection and its encrypted session. Shared by the login window and session import."""
+        # Upsert PlatformConnection in DB
+        conn = await self._connection_repo.get_by_user_and_platform(user_id, platform)
+        now = datetime.now(timezone.utc)
+        if not conn:
+            conn = PlatformConnection(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                platform=platform,
+                connection_type=ConnectionType.BROWSER_SESSION,
+                status=ConnectionStatus.CONNECTED,
+                external_account_reference=account_ref,
+                last_verified_at=now,
+            )
+        else:
+            conn.status = ConnectionStatus.CONNECTED
+            conn.external_account_reference = account_ref
+            conn.last_verified_at = now
+
+        saved_conn = await self._connection_repo.save_connection(conn)
+
+        # Upsert BrowserSession in DB
+        sess = await self._session_repo.get_by_connection_id(saved_conn.id)
+        if not sess:
+            sess = BrowserSession(
+                id=str(uuid.uuid4()),
+                connection_id=saved_conn.id,
+                user_id=user_id,
+                source_id=platform,
+                encrypted_storage_state=encrypted_state,
+                status="ACTIVE",
+                last_used_at=now,
+            )
+        else:
+            sess.source_id = platform
+            sess.encrypted_storage_state = encrypted_state
+            sess.status = "ACTIVE"
+            sess.last_used_at = now
+
+        await self._session_repo.save_session(sess)
+        return now, saved_conn
+
+    async def import_session(self, user_id: str, platform: str, storage_state: dict) -> dict:
+        """Connect using a login saved on the user's own machine (CON-01), so the server needs no screen."""
+        manifest = PlatformManifestRegistry.get(platform)
+        if not manifest:
+            raise EntityNotFoundException(f"Unsupported platform: {platform}")
+        if not manifest.is_auth_required:
+            raise ValidationException(f"{manifest.display_name} does not need a login.")
+        cookies = storage_state.get("cookies") if isinstance(storage_state, dict) else None
+        if not isinstance(cookies, list) or not cookies:
+            raise ValidationException("The file must be a Playwright storage state with a non-empty 'cookies' list.")
+
+        encrypted_state = session_encryptor.encrypt_storage_state(json.dumps(storage_state))
+        now, _ = await self._save_connected_session(user_id, platform, encrypted_state, "Imported session")
+        return {
+            "platform": platform,
+            "status": ConnectionStatus.CONNECTED.value,
+            "external_account_reference": "Imported session",
+            "last_verified_at": now.isoformat(),
+            "message": "Session imported. Use Verify to check that it still works.",
+        }
 
     async def verify_connection(self, user_id: str, platform: str) -> ConnectionStatus:
         """Probes live session validity and updates connection status."""
