@@ -197,7 +197,9 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
             disabled={loading}
             className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all cursor-pointer shadow-xs"
             title="Refresh AI Matches"
-          >
+          
+ aria-label="Refresh AI Matches"
+>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
 

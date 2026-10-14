@@ -35,6 +35,7 @@ class WebSocketClient {
   private messageListeners: Set<MessageListener> = new Set();
   private reconnectTimeout: any = null;
   private isExplicitClose = false;
+  private reconnectAttempts = 0;
 
   async connect() {
     this.isExplicitClose = false;
@@ -75,6 +76,7 @@ class WebSocketClient {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
+        this.reconnectAttempts = 0;
         console.log('[WebSocket] Connected to ApplyFlow Live Stream.');
         if (this.reconnectTimeout) {
           clearTimeout(this.reconnectTimeout);
@@ -125,7 +127,10 @@ class WebSocketClient {
 
       this.socket.onclose = () => {
         if (!this.isExplicitClose) {
-          this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
+          // Wait longer after each failed try (3s, 6s, 12s ... up to 30s) instead of hammering the server (FE-05).
+          const delay = Math.min(30000, 3000 * 2 ** this.reconnectAttempts);
+          this.reconnectAttempts += 1;
+          this.reconnectTimeout = setTimeout(() => this.connect(), delay);
         }
       };
 

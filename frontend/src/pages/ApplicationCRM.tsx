@@ -648,7 +648,9 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
             disabled={loading}
             className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer"
             title="Refresh pipeline"
-          >
+          
+ aria-label="Refresh pipeline"
+>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>

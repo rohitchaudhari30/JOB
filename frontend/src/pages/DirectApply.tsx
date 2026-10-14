@@ -614,7 +614,9 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                     disabled={campaignActionLoading}
                     className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
                     title="Stop Execution"
-                  >
+                  
+ aria-label="Stop Execution"
+>
                     <Square className="w-3.5 h-3.5" />
                     <span>Stop</span>
                   </button>
@@ -637,7 +639,9 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                     disabled={campaignActionLoading}
                     className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
                     title="Stop Execution"
-                  >
+                  
+ aria-label="Stop Execution"
+>
                     <Square className="w-3.5 h-3.5" />
                     <span>Stop</span>
                   </button>
