@@ -5,16 +5,11 @@ import {
   AlertTriangle,
   RefreshCw,
   Lock,
-  Radio,
-  Layers,
   Power,
   KeyRound,
   CheckCircle2,
   Search,
-  ExternalLink,
   Info,
-  Clock,
-  User,
   Zap,
   Check,
   X,
@@ -181,7 +176,8 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
 
   const portalCount = connections.filter((c) => c.category === 'PORTAL_DISCOVERY').length;
   const atsCount = connections.filter((c) => c.category === 'ATS_APPLICATION').length;
-  const connectedCount = connections.filter((c) => c.status === 'CONNECTED').length;
+  // ATS boards need no login, so only count platforms that really have a saved login (CON-02).
+  const connectedCount = connections.filter((c) => c.is_auth_required && c.status === 'CONNECTED').length;
 
   return (
     <div className="space-y-6 w-full animate-fadeIn pb-12">
@@ -200,7 +196,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
           {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
           {toast.type === 'info' && <Info className="w-4 h-4 text-sky-400 shrink-0" />}
           <span>{toast.message}</span>
-          <button onClick={() => setToast(null)} className="ml-2 hover:opacity-75 cursor-pointer">
+          <button aria-label="Close" onClick={() => setToast(null)} className="ml-2 hover:opacity-75 cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

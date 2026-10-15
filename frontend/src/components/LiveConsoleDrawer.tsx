@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Play,
   Pause,
   RotateCcw,
   Square,
@@ -15,10 +14,7 @@ import {
   CheckCircle2,
   Loader2,
   Clock,
-  Sparkles,
-  FileText,
   ExternalLink,
-  Globe,
   Lock,
 } from 'lucide-react';
 import { api } from '../services/api';
@@ -216,7 +212,7 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
                 : 'Session Ready'}
             </div>
           </div>
-          <button
+          <button aria-label="Expand panel"
             onClick={() => setIsMinimized(false)}
             className="p-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-xs cursor-pointer ml-1"
             title="Expand Live Console"
@@ -290,7 +286,9 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
                     onClick={handleResume}
                     className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all shadow-xs cursor-pointer active:scale-95"
                     title="Resume Automation"
-                  >
+                  
+ aria-label="Resume Automation"
+>
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Resume</span>
                   </button>
@@ -299,7 +297,9 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
                     onClick={handlePause}
                     className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs transition-all shadow-xs cursor-pointer active:scale-95"
                     title="Pause Automation"
-                  >
+                  
+ aria-label="Pause Automation"
+>
                     <Pause className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Pause</span>
                   </button>
@@ -308,7 +308,9 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
                   onClick={handleStop}
                   className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-all shadow-xs cursor-pointer active:scale-95"
                   title="Stop Automation"
-                >
+                
+ aria-label="Stop Automation"
+>
                   <Square className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Stop</span>
                 </button>
@@ -318,7 +320,7 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
             <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-0.5"></div>
 
             {/* Toggle Wide view */}
-            <button
+            <button aria-label="Expand panel"
               onClick={() => setIsWideView(!isWideView)}
               className="p-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer hidden sm:block shadow-2xs"
               title={isWideView ? 'Standard Width' : 'Wide Width'}
@@ -328,7 +330,7 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
 
             {/* Open full page if onNavigate available */}
             {onNavigate && (
-              <button
+              <button aria-label="Open link"
                 onClick={() => {
                   onClose();
                   onNavigate('live_console');
@@ -341,7 +343,7 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
             )}
 
             {/* Minimize */}
-            <button
+            <button aria-label="Shrink panel"
               onClick={() => setIsMinimized(true)}
               className="p-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs"
               title="Minimize to Floating Pill"
@@ -354,7 +356,9 @@ export const LiveConsoleDrawer: React.FC<LiveConsoleDrawerProps> = ({
               onClick={onClose}
               className="p-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shadow-2xs"
               title="Close Drawer"
-            >
+            
+ aria-label="Close Drawer"
+>
               <X className="w-3.5 h-3.5" />
             </button>
           </div>

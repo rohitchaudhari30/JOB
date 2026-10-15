@@ -20,11 +20,13 @@ class WorkdayAdapter(BaseJobSourceAdapter):
     async def health_check(self, context: BrowserContext) -> bool:
         return True
 
-    async def search_jobs(self, context: BrowserContext, filters: SearchQueryFilter) -> AsyncGenerator[Job, None]:
+    async def search_jobs(self, context: BrowserContext, filters: SearchQueryFilter, **kwargs) -> AsyncGenerator[Job, None]:
         page: Optional[Page] = None
         try:
             page = await context.new_page()
-            company_slug = filters.roles[0].lower().replace(" ", "") if filters.roles else "adobe"
+            if not filters.companies:
+                raise ValueError("Workday discovery needs at least one company board name in 'companies'.")
+            company_slug = filters.companies[0].lower().replace(" ", "")
             target_url = f"https://{company_slug}.wd5.myworkdayjobs.com/en-US/external"
             logger.info(f"Navigating to Workday portal: {target_url}")
 
@@ -61,6 +63,7 @@ class WorkdayAdapter(BaseJobSourceAdapter):
                 )
         except Exception as e:
             logger.error(f"Workday extraction failed: {e}")
+            raise
         finally:
             if page and not page.is_closed():
                 await page.close()

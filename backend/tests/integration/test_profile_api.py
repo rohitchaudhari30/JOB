@@ -80,3 +80,59 @@ async def test_profile_crud_flow(client: AsyncClient):
     assert len(final_data["experiences"]) == 1
     assert len(final_data["educations"]) == 1
     assert len(final_data["skills"]) == 3
+
+
+async def _auth_headers(client, email="lists.user@example.com"):
+    payload = {"email": email, "password": "Password123!", "full_name": "Lists User"}
+    assert (await client.post("/api/v1/auth/register", json=payload)).status_code == 201
+    login = await client.post(
+        "/api/v1/auth/login", json={"email": email, "password": payload["password"]}
+    )
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+@pytest.mark.asyncio
+async def test_put_profile_saves_skills_experiences_and_educations(client):
+    """PRF-01: lists sent to PUT /profile must survive a reload."""
+    headers = await _auth_headers(client)
+    body = {
+        "headline": "Backend Engineer",
+        "skills": [
+            {"skill_name": "Python", "years_experience": 5, "is_primary": True},
+            {"skill_name": "FastAPI", "years_experience": 3},
+        ],
+        "experiences": [
+            {"company_name": "Acme", "title": "Engineer", "is_current": True},
+        ],
+        "educations": [
+            {"institution": "IIT", "degree": "B.Tech"},
+        ],
+    }
+    put = await client.put("/api/v1/profile", json=body, headers=headers)
+    assert put.status_code == 200
+
+    got = (await client.get("/api/v1/profile", headers=headers)).json()
+    assert sorted(s["skill_name"] for s in got["skills"]) == ["FastAPI", "Python"]
+    assert [e["company_name"] for e in got["experiences"]] == ["Acme"]
+    assert [e["institution"] for e in got["educations"]] == ["IIT"]
+
+    # Sending a shorter list replaces, it does not append.
+    body["skills"] = [{"skill_name": "Go", "years_experience": 1}]
+    await client.put("/api/v1/profile", json=body, headers=headers)
+    got = (await client.get("/api/v1/profile", headers=headers)).json()
+    assert [s["skill_name"] for s in got["skills"]] == ["Go"]
+    assert len(got["experiences"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_put_profile_without_lists_keeps_existing_lists(client):
+    headers = await _auth_headers(client, "keep.lists@example.com")
+    await client.put(
+        "/api/v1/profile",
+        json={"skills": [{"skill_name": "Python", "years_experience": 2}]},
+        headers=headers,
+    )
+    await client.put("/api/v1/profile", json={"headline": "New headline"}, headers=headers)
+    got = (await client.get("/api/v1/profile", headers=headers)).json()
+    assert got["headline"] == "New headline"
+    assert [s["skill_name"] for s in got["skills"]] == ["Python"]

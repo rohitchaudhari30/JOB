@@ -258,8 +258,10 @@ class ReclaimAbandonedExecutionsUseCase:
     def __init__(self, execution_repo: CampaignExecutionRepository):
         self._execution_repo = execution_repo
 
-    async def execute(self) -> int:
-        return await self._execution_repo.reclaim_expired_leases()
+    async def execute(self, user_id: str | None = None) -> int:
+        if user_id is None:
+            return await self._execution_repo.reclaim_expired_leases()
+        return await self._execution_repo.reclaim_expired_leases(user_id=user_id)
 
 
 class PauseCampaignExecutionUseCase:

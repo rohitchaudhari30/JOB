@@ -21,8 +21,25 @@ from app.infrastructure.database.models.models import (
 
 
 class SqlAlchemyApplicationRepository(ApplicationRepository):
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, commit_each_write: bool = False):
         self._session = session
+        # Long-running workers set this so every state change is durable at once
+        # (e.g. SUBMITTING is saved before the submit click). Request handlers
+        # leave it off and let the request commit.
+        self._commit_each_write = commit_each_write
+
+    async def _resume_label(self, resume_id: str | None) -> str | None:
+        """Current label of a resume, saved on the application as a history record (DB-05)."""
+        if not resume_id:
+            return None
+        from app.infrastructure.database.models.models import ResumeModel
+
+        return await self._session.scalar(select(ResumeModel.label).where(ResumeModel.id == resume_id))
+
+    async def _finish_write(self) -> None:
+        await self._session.flush()
+        if self._commit_each_write:
+            await self._session.commit()
 
     def _to_entity(self, model: ApplicationModel, match_score: float | None = None) -> Application:
         questions = [
@@ -201,7 +218,7 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                 )
 
             self._session.expire_all()
-            await self._session.flush()
+            await self._finish_write()
             return await self.get_by_id(application.id)  # type: ignore
 
         # Standard non-conditional save (insert or update)
@@ -226,6 +243,7 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                 error_category=application.error_category,
                 next_retry_at=application.next_retry_at,
                 current_attempt_id=application.current_attempt_id,
+                resume_label_snapshot=await self._resume_label(application.resume_id),
             )
             self._session.add(model)
         else:
@@ -240,9 +258,11 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             model.next_retry_at = application.next_retry_at
             model.current_attempt_id = application.current_attempt_id
             if application.resume_id:
+                if application.resume_id != model.resume_id or not model.resume_label_snapshot:
+                    model.resume_label_snapshot = await self._resume_label(application.resume_id)
                 model.resume_id = application.resume_id
 
-        await self._session.flush()
+        await self._finish_write()
         return await self.get_by_id(application.id)  # type: ignore
 
     async def add_event(self, event: ApplicationEvent) -> ApplicationEvent:
@@ -253,7 +273,7 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             payload=event.payload,
         )
         self._session.add(model)
-        await self._session.flush()
+        await self._finish_write()
         return event
 
     async def add_question(self, question: ApplicationQuestion) -> ApplicationQuestion:
@@ -267,7 +287,7 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             confidence_score=question.confidence_score,
         )
         self._session.add(model)
-        await self._session.flush()
+        await self._finish_write()
         return question
 
     async def list_by_user(
@@ -299,6 +319,37 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
         result = await self._session.execute(stmt)
         rows = result.all()
         return [self._to_entity(m, match_score=score) for m, score in rows]
+
+    async def count_recent_submissions(
+        self, user_id: str, hours: int = 24, source_type: str | None = None
+    ) -> int:
+        """Applications that were, or may have been, sent in the last `hours`.
+
+        Uncertain outcomes count too: they might have reached the platform, so
+        they must use up the safety budget until someone reconciles them.
+        """
+        from datetime import datetime, timedelta, timezone
+        from app.infrastructure.database.models.models import JobModel, JobSourceModel
+
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        counted_states = [
+            WorkflowStateEnum.APPLIED.value,
+            WorkflowStateEnum.SUBMITTING.value,
+            WorkflowStateEnum.SUBMISSION_UNKNOWN.value,
+            WorkflowStateEnum.RECONCILIATION_REQUIRED.value,
+        ]
+        stmt = select(func.count(ApplicationModel.id)).where(
+            ApplicationModel.user_id == user_id,
+            ApplicationModel.workflow_state.in_(counted_states),
+            ApplicationModel.updated_at >= since,
+        )
+        if source_type:
+            stmt = (
+                stmt.join(JobModel, ApplicationModel.job_id == JobModel.id)
+                .join(JobSourceModel, JobModel.source_id == JobSourceModel.id)
+                .where(JobSourceModel.source_type == source_type)
+            )
+        return (await self._session.scalar(stmt)) or 0
 
     async def count_by_state(self, user_id: str, state: str) -> int:
         stmt = select(func.count(ApplicationModel.id)).where(
@@ -355,6 +406,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             + counts.get(WorkflowStateEnum.SUBMISSION_UNKNOWN.value, 0)
         )
         needs_attention = failed + paused + reconciliation_required
+        # "success_rate" here means: share of all applications that reached the applied state.
+        # It is not an interview or offer rate (ANA-05).
         success_rate = round((applied / total) * 100, 1) if total > 0 else 0.0
 
         return {

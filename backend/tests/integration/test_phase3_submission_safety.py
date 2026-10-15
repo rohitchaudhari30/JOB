@@ -159,10 +159,12 @@ async def test_scenario_1_submission_succeeds_and_confirmation_recorded(db_sessi
     mock_page.goto = AsyncMock()
     mock_locator = MagicMock()
     mock_locator.first.click = AsyncMock()
+    mock_locator.first.wait_for = AsyncMock()
     mock_locator.count = AsyncMock(return_value=1)
     mock_page.locator.return_value = mock_locator
     mock_page.is_closed = MagicMock(return_value=False)
     mock_page.screenshot = AsyncMock(return_value=b"screenshot_bytes")
+    mock_page.evaluate = AsyncMock(return_value=False)
 
     mock_context = MagicMock()
     mock_context.pages = [mock_page]
@@ -273,6 +275,7 @@ async def test_scenario_3_external_outcome_unknown_never_auto_retries(db_session
     mock_page.goto = AsyncMock()
     mock_locator = MagicMock()
     mock_locator.first.click = AsyncMock()
+    mock_locator.first.wait_for = AsyncMock()
     mock_locator.count = AsyncMock(return_value=1)
     mock_page.locator.return_value = mock_locator
     mock_page.is_closed = MagicMock(return_value=False)

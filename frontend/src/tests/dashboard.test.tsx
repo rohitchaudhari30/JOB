@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import React from 'react';
 import { Dashboard } from '../pages/Dashboard';
 import { ToastProvider } from '../context/ToastContext';
 import { api } from '../services/api';
@@ -9,6 +8,9 @@ vi.mock('../services/api', () => ({
   api: {
     getDashboardOverview: vi.fn(),
     listApplications: vi.fn(),
+    listConnections: vi.fn().mockResolvedValue([
+      { platform: "naukri", display_name: "Naukri.com", status: "not_connected", session_active: false },
+    ]),
     createApplication: vi.fn(),
     pauseRun: vi.fn(),
     resumeRun: vi.fn(),

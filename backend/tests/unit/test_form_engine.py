@@ -160,3 +160,49 @@ async def test_form_engine_fills_form_successfully(sample_profile: CandidateProf
     assert len(result.filled_fields) == 2
     assert result.filled_fields[0].value == "Jane Doe"
     assert result.filled_fields[1].value == "jane.doe@example.com"
+
+
+# --- AUT-05: the form engine must never invent answers -----------------------
+
+def test_missing_work_authorization_is_not_guessed(sample_profile):
+    sample_profile.work_authorization = None
+    resolver = FieldValueResolver()
+    assert resolver.resolve(CanonicalIntent.WORK_AUTHORIZATION, sample_profile) is None
+
+
+def test_zero_notice_period_means_immediate_not_30_days(sample_profile):
+    sample_profile.notice_period_days = 0
+    resolver = FieldValueResolver()
+    assert resolver.resolve(CanonicalIntent.NOTICE_PERIOD, sample_profile) == "Immediate"
+
+
+def test_dropdown_without_a_real_match_is_left_unresolved(sample_profile):
+    sample_profile.work_authorization = "Citizen"
+    options = [ScannedOption(text="Select", value=""), ScannedOption(text="Visa holder", value="visa")]
+    resolver = FieldValueResolver()
+    # Must not fall back to the first non-empty option.
+    assert resolver.resolve(CanonicalIntent.WORK_AUTHORIZATION, sample_profile, options=options) is None
+
+
+@pytest.mark.asyncio
+async def test_unknown_screening_question_without_ai_is_not_answered_yes(sample_profile):
+    engine = FormEngine()
+    answer = await engine._solve_screening_question(
+        question_text="Do you have a security clearance?",
+        profile=sample_profile,
+        ai_provider=None,
+    )
+    assert answer is None
+
+
+@pytest.mark.asyncio
+async def test_ai_failure_returns_no_answer(sample_profile):
+    provider = MagicMock()
+    provider.generate_text = AsyncMock(side_effect=RuntimeError("provider down"))
+    engine = FormEngine()
+    answer = await engine._solve_screening_question(
+        question_text="Why do you want this job?",
+        profile=sample_profile,
+        ai_provider=provider,
+    )
+    assert answer is None

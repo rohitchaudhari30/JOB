@@ -9,7 +9,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from unittest.mock import patch
 
-from app.core.database import Base, AsyncSessionLocal
+import app.core.database as database
+from app.core.database import Base
+
+
+def AsyncSessionLocal():
+    # Look the factory up at call time so conftest's test-DB patch applies.
+    return database.AsyncSessionLocal()
 from app.core.security import decode_access_token
 from app.infrastructure.database.models.models import AutomationRunModel, AutomationEventModel, UserModel
 from app.application.automation.orchestrator import orchestrator, AutomationSession
@@ -17,8 +23,18 @@ from app.api.v1.ws import _ws_tickets
 
 
 @pytest.fixture
-async def authenticated_client(client: AsyncClient):
+async def authenticated_client(client: AsyncClient, monkeypatch):
     """Creates a distinct user and returns authenticated headers & client."""
+    # Never launch a real browser from these tests. A cancellable wait stands in for discovery,
+    # so a started run can always be stopped cleanly at teardown.
+    from app.application.jobs.use_cases import DiscoverJobsUseCase
+
+    async def waiting_discovery(self, *args, **kwargs):
+        await asyncio.sleep(30)
+        return {"discovered_total": 0, "new_jobs_count": 0, "skipped_duplicates": 0, "jobs": []}
+
+    monkeypatch.setattr(DiscoverJobsUseCase, "execute", waiting_discovery)
+
     user_payload = {
         "email": f"tester_{uuid.uuid4().hex[:6]}@example.com",
         "password": "Password123!",
@@ -449,6 +465,13 @@ async def test_sqlite_migration_repair_on_historical_and_duplicate_events():
 
         # Temporarily drop unique index to insert corrupted historical test data
         await session.execute(text("DROP INDEX IF EXISTS uq_run_event_seq"))
+        # Rebuild the table the way legacy databases had it: seq was nullable.
+        await session.execute(text("DROP TABLE automation_events"))
+        await session.execute(text(
+            "CREATE TABLE automation_events ("
+            "id VARCHAR PRIMARY KEY, run_id VARCHAR NOT NULL, seq INTEGER, "
+            "event_name VARCHAR, payload TEXT, created_at DATETIME)"
+        ))
         
         # Insert historical events: non-contiguous valid sequences (10, 50) alongside 0 and NULL
         cid1, cid2, cid3, cid4, cid5 = [f"evt_corrupt_{uuid.uuid4().hex[:6]}" for _ in range(5)]
@@ -748,3 +771,29 @@ async def test_run_lock_waiter_cancellation_and_leak_prevention():
         orchestrator.cleanup_run_lock(run_id)
         assert run_id not in orchestrator._run_locks
 
+
+
+@pytest.mark.asyncio
+async def test_events_endpoint_pages_with_limit_and_cursor(client: AsyncClient):
+    """DB-06: the events endpoint never returns an unbounded list."""
+    email = f"pager_{uuid.uuid4().hex[:6]}@example.com"
+    reg = await client.post("/api/v1/auth/register", json={"email": email, "password": "Password123!"})
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    user_id = reg.json()["id"]
+    run_id = f"run_page_{uuid.uuid4().hex[:6]}"
+
+    async with AsyncSessionLocal() as session:
+        session.add(AutomationRunModel(id=run_id, user_id=user_id, status="COMPLETED", worker_id="w", last_event_seq=5))
+        for seq in range(1, 6):
+            session.add(AutomationEventModel(
+                id=f"{run_id}_evt_{seq}", run_id=run_id, seq=seq, event_name="E", payload={}
+            ))
+        await session.commit()
+
+    first = (await client.get(f"/api/v1/automation/runs/{run_id}/events?limit=2", headers=headers)).json()
+    assert [e["seq"] for e in first] == [1, 2]
+    second = (await client.get(f"/api/v1/automation/runs/{run_id}/events?limit=2&after_seq=2", headers=headers)).json()
+    assert [e["seq"] for e in second] == [3, 4]
+    rest = (await client.get(f"/api/v1/automation/runs/{run_id}/events?after_seq=4", headers=headers)).json()
+    assert [e["seq"] for e in rest] == [5]
+    assert (await client.get(f"/api/v1/automation/runs/{run_id}/events?limit=0", headers=headers)).status_code == 422

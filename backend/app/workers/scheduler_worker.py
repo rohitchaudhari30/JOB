@@ -97,7 +97,11 @@ class AutomationSchedulerWorker:
 
     def shutdown(self):
         if self._scheduler and self._scheduler.running:
-            self._scheduler.shutdown(wait=False)
+            try:
+                self._scheduler.shutdown(wait=False)
+            except RuntimeError:
+                # The event loop it was started on is already closed, so there is nothing left to stop.
+                pass
             self._scheduler = None
             logger.info("APScheduler worker shut down.")
 
@@ -159,6 +163,67 @@ class AutomationSchedulerWorker:
 
     def get_schedule(self, schedule_id: str) -> Optional[ScheduleJobConfig]:
         return self._configs.get(schedule_id)
+
+
+async def scheduled_run_callback(schedule_id: str, user_id: str) -> None:
+    """What a schedule does when it fires.
+
+    For now it only records that the schedule fired. Starting a real automation run
+    (which may submit applications) from a timer is a product decision that has not
+    been made yet, so it is deliberately not done here.
+    """
+    logger.info("Schedule [%s] fired for user [%s]. No run is started automatically yet.", schedule_id, user_id)
+
+
+async def save_schedule(config: ScheduleJobConfig) -> None:
+    from app.core.database import AsyncSessionLocal
+    from app.infrastructure.database.models.models import AutomationScheduleModel
+
+    async with AsyncSessionLocal() as session:
+        session.add(
+            AutomationScheduleModel(id=config.schedule_id, user_id=config.user_id, config_json=config.model_dump_json())
+        )
+        await session.commit()
+
+
+async def delete_saved_schedule(schedule_id: str) -> None:
+    from sqlalchemy import delete
+
+    from app.core.database import AsyncSessionLocal
+    from app.infrastructure.database.models.models import AutomationScheduleModel
+
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(AutomationScheduleModel).where(AutomationScheduleModel.id == schedule_id))
+        await session.commit()
+
+
+async def restore_saved_schedules() -> int:
+    """Re-registers every saved, active schedule after a restart. Returns how many were restored."""
+    from sqlalchemy import select
+
+    from app.core.database import AsyncSessionLocal
+    from app.infrastructure.database.models.models import AutomationScheduleModel
+
+    async with AsyncSessionLocal() as session:
+        rows = (await session.scalars(select(AutomationScheduleModel))).all()
+
+    restored = 0
+    for row in rows:
+        try:
+            config = ScheduleJobConfig.model_validate_json(row.config_json)
+        except ValueError:
+            logger.warning("Skipping unreadable saved schedule [%s]", row.id)
+            continue
+        if not config.is_active:
+            continue
+        ok = scheduler_worker.add_schedule(
+            config=config,
+            task_callable=scheduled_run_callback,
+            schedule_id=config.schedule_id,
+            user_id=config.user_id,
+        )
+        restored += 1 if ok else 0
+    return restored
 
 
 scheduler_worker = AutomationSchedulerWorker()

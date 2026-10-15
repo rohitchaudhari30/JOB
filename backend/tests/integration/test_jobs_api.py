@@ -13,7 +13,7 @@ class MockNaukriSourceAdapter(BaseJobSourceAdapter):
     async def health_check(self, context) -> bool:
         return True
 
-    async def search_jobs(self, context, filters: SearchQueryFilter):
+    async def search_jobs(self, context, filters: SearchQueryFilter, **kwargs):
         # Emits 2 mocked jobs (one of which will be repeated to test deduplication)
         yield Job(
             id="job_mock_1",
@@ -139,7 +139,7 @@ class MockLinkedInSourceAdapter(BaseJobSourceAdapter):
     async def health_check(self, context) -> bool:
         return True
 
-    async def search_jobs(self, context, filters: SearchQueryFilter):
+    async def search_jobs(self, context, filters: SearchQueryFilter, **kwargs):
         # Emits a cross-posted job that has different external_job_id but identical company, title, location, description
         yield Job(
             id="job_mock_linkedin_1",
@@ -241,6 +241,7 @@ async def test_pagination_and_sorting_flow(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+@pytest.mark.file_db
 async def test_concurrent_job_ingestion_race_recovery():
     """Verifies that concurrent insertions of identical/canonical jobs recover safely without unhandled integrity errors."""
     import asyncio
@@ -309,3 +310,57 @@ async def test_concurrent_job_ingestion_race_recovery():
 
 
 
+
+
+async def _login(client, email):
+    payload = {"email": email, "password": "Password123!", "full_name": "Job Tester"}
+    await client.post("/api/v1/auth/register", json=payload)
+    res = await client.post("/api/v1/auth/login", json={"email": email, "password": payload["password"]})
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+@pytest.mark.asyncio
+async def test_regular_user_cannot_delete_or_clear_shared_jobs(client):
+    """SEC-01: jobs are shared, so deleting them needs an administrator."""
+    headers = await _login(client, "regular.user@example.com")
+    assert (await client.delete("/api/v1/jobs/some-job", headers=headers)).status_code == 403
+    assert (await client.delete("/api/v1/jobs", headers=headers)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_can_clear_jobs(client, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ADMIN_EMAILS", "boss@example.com")
+    headers = await _login(client, "boss@example.com")
+    res = await client.delete("/api/v1/jobs", headers=headers)
+    assert res.status_code == 200
+    assert res.json()["status"] == "cleared"
+
+
+@pytest.mark.asyncio
+async def test_discovery_can_start_in_the_background(client: AsyncClient, monkeypatch):
+    import asyncio
+
+    from app.api.v1 import jobs as jobs_api
+
+    reg = {"email": "bg.discover@example.com", "password": "Password123!", "full_name": "Bg"}
+    await client.post("/api/v1/auth/register", json=reg)
+    login = await client.post("/api/v1/auth/login", json={"email": reg["email"], "password": reg["password"]})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    started = []
+
+    async def fake_discovery(user_id, source_type, filters, auto_evaluate):
+        started.append((user_id, source_type))
+
+    monkeypatch.setattr(jobs_api, "_discover_in_background", fake_discovery)
+    res = await client.post(
+        "/api/v1/jobs/discover",
+        json={"source_type": "naukri", "roles": ["Python Developer"], "background": True},
+        headers=headers,
+    )
+    assert res.status_code == 202
+    assert res.json()["status"] == "started"
+    await asyncio.sleep(0.05)
+    assert len(started) == 1 and started[0][1] == "naukri"

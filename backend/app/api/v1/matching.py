@@ -327,5 +327,6 @@ async def get_matching_weights(
 
 
 matching_weights_alias_router = APIRouter(prefix="/matching", tags=["Job Matching & Scoring"])
-matching_weights_alias_router.add_api_route("/weights", update_matching_weights, methods=["POST"], status_code=status.HTTP_200_OK)
-matching_weights_alias_router.add_api_route("/weights", get_matching_weights, methods=["GET"], status_code=status.HTTP_200_OK)
+# Older URL kept for existing clients; the /jobs/matches/weights routes are the main ones (DUP-06).
+matching_weights_alias_router.add_api_route("/weights", update_matching_weights, methods=["POST"], status_code=status.HTTP_200_OK, deprecated=True)
+matching_weights_alias_router.add_api_route("/weights", get_matching_weights, methods=["GET"], status_code=status.HTTP_200_OK, deprecated=True)

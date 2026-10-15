@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
-from app.application.analytics.analytics_service import AnalyticsService
+from app.infrastructure.database.read_models.analytics_queries import AnalyticsService
 from app.core.database import get_db_session
 from app.domain.auth.entities import User
 
@@ -301,7 +301,7 @@ class AIStatusResponse(BaseModel):
 
 
 @router.get("/ai-status", response_model=AIStatusResponse)
-async def get_ai_status():
+async def get_ai_status(current_user: User = Depends(get_current_user)):
     from app.infrastructure.ai.gateway import MultiTierAIGateway
     from app.core.config import settings
 

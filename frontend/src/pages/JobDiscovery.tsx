@@ -1,27 +1,20 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Search,
-  RefreshCw,
   Building,
   MapPin,
   DollarSign,
   ExternalLink,
   Clock,
-  Flame,
-  Calendar,
   Sparkles,
   ArrowUpDown,
   Compass,
-  Briefcase,
-  Radio,
-  SlidersHorizontal,
   Trash2,
   CheckSquare,
   Square,
   Play,
   Zap,
   CheckCircle2,
-  Layers,
   AlertTriangle,
   FileText,
   ShieldCheck,
@@ -1007,7 +1000,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                         )}
 
                         {/* Dismiss / Delete Button */}
-                        <button
+                        <button aria-label="Delete"
                           onClick={() => handleDeleteJob(job.id, job.title)}
                           disabled={deletingId === job.id}
                           title="Remove job from repository"

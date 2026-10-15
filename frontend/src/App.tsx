@@ -1,16 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Navbar } from './components/Navbar';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
-import { Dashboard } from './pages/Dashboard';
-import { LiveAutomation } from './pages/LiveAutomation';
-import { AIMatches } from './pages/AIMatches';
-import { JobDiscovery } from './pages/JobDiscovery';
-import { ApplicationCRM } from './pages/ApplicationCRM';
-import { ProfileManager } from './pages/ProfileManager';
-import { PlatformConnections } from './pages/PlatformConnections';
-import { DirectApply } from './pages/DirectApply';
-import { Analytics } from './pages/Analytics';
 import { useTheme } from './context/ThemeContext';
 import { api, setAuthToken } from './services/api';
 import { wsClient } from './services/ws';
@@ -18,6 +10,17 @@ import { AutomationRunStatus, User } from './types';
 import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
 import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES } from './utils/navigation';
+
+// Pages load on demand so the first screen downloads less code (FE-03).
+const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
+const LiveAutomation = lazy(() => import('./pages/LiveAutomation').then((m) => ({ default: m.LiveAutomation })));
+const AIMatches = lazy(() => import('./pages/AIMatches').then((m) => ({ default: m.AIMatches })));
+const JobDiscovery = lazy(() => import('./pages/JobDiscovery').then((m) => ({ default: m.JobDiscovery })));
+const ApplicationCRM = lazy(() => import('./pages/ApplicationCRM').then((m) => ({ default: m.ApplicationCRM })));
+const ProfileManager = lazy(() => import('./pages/ProfileManager').then((m) => ({ default: m.ProfileManager })));
+const PlatformConnections = lazy(() => import('./pages/PlatformConnections').then((m) => ({ default: m.PlatformConnections })));
+const DirectApply = lazy(() => import('./pages/DirectApply').then((m) => ({ default: m.DirectApply })));
+const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.Analytics })));
 
 export const App: React.FC = () => {
   const { theme } = useTheme();
@@ -159,6 +162,7 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    void api.logout(); // revoke tokens on the server; runs before we clear them below
     setAuthToken(null);
     setUser(null);
     wsClient.disconnect();
@@ -244,15 +248,18 @@ export const App: React.FC = () => {
               </span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleQuickDemoLogin}
-              disabled={authLoading}
-              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 flex items-center justify-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>⚡ 1-Click Instant Demo Access</span>
-            </button>
+            {/* Demo shortcut exists only in local dev builds (SEC-02). */}
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                onClick={handleQuickDemoLogin}
+                disabled={authLoading}
+                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 flex items-center justify-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>⚡ 1-Click Instant Demo Access</span>
+              </button>
+            )}
           </form>
 
           <div className="text-center pt-2 border-t border-slate-200 dark:border-slate-800">
@@ -311,6 +318,8 @@ export const App: React.FC = () => {
         />
 
         <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8 w-full">
+          <ErrorBoundary resetKey={activeTab}>
+          <Suspense fallback={<div className="p-8 text-sm text-slate-500" role="status">Loading…</div>}>
           {activeTab === 'dashboard' && (
             <Dashboard onNavigate={handleTabChange} activeRun={activeRun} />
           )}
@@ -337,6 +346,8 @@ export const App: React.FC = () => {
           {activeTab === 'analytics' && <Analytics onNavigate={handleTabChange} />}
           {activeTab === 'profile' && <ProfileManager onNavigate={handleTabChange} />}
           {activeTab === 'schedules' && <DirectApply onNavigate={handleTabChange} initialTab="schedules" />}
+          </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

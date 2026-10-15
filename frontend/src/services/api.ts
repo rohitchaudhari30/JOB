@@ -138,6 +138,21 @@ export const api = {
     const res = await apiClient.post('/auth/register', { email, password, full_name });
     return res.data;
   },
+  // Tell the server to revoke our tokens. Never blocks logging out locally.
+  logout: async (): Promise<void> => {
+    // Capture both tokens now: callers clear them right after calling us.
+    const refreshToken = localStorage.getItem('refresh_token');
+    const authHeader = apiClient.defaults.headers.common['Authorization'];
+    try {
+      await apiClient.post(
+        '/auth/logout',
+        refreshToken ? { refresh_token: refreshToken } : {},
+        authHeader ? { headers: { Authorization: String(authHeader) } } : undefined
+      );
+    } catch {
+      // Offline or already expired: the local sign-out still happens.
+    }
+  },
   getMe: async (): Promise<User> => {
     const res = await apiClient.get('/auth/me');
     return res.data;
@@ -371,13 +386,26 @@ export const api = {
     const res = await apiClient.post('/ws/ticket');
     return res.data;
   },
+  // The server returns events in pages (oldest first); keep asking until a page is not full.
   getRunEvents: async (runId: string, afterSeq?: number): Promise<TimelineEvent[]> => {
-    const params: Record<string, any> = {};
-    if (afterSeq !== undefined && afterSeq !== null) {
-      params.after_seq = afterSeq;
+    const pageSize = 1000;
+    const maxPages = 50;
+    const all: TimelineEvent[] = [];
+    let cursor = afterSeq;
+    for (let page = 0; page < maxPages; page++) {
+      const params: Record<string, any> = { limit: pageSize };
+      if (cursor !== undefined && cursor !== null) {
+        params.after_seq = cursor;
+      }
+      const res = await apiClient.get(`/automation/runs/${runId}/events`, { params });
+      const batch: TimelineEvent[] = res.data;
+      all.push(...batch);
+      if (batch.length < pageSize) break;
+      const lastSeq = batch[batch.length - 1]?.seq;
+      if (lastSeq === undefined || lastSeq === null) break;
+      cursor = lastSeq;
     }
-    const res = await apiClient.get(`/automation/runs/${runId}/events`, { params });
-    return res.data;
+    return all;
   },
   pauseRun: async (runId: string): Promise<AutomationRunStatus> => {
     const res = await apiClient.post(`/automation/runs/${runId}/pause`);
@@ -487,6 +515,11 @@ export const api = {
   },
   deleteCampaign: async (id: string): Promise<void> => {
     await apiClient.delete(`/campaigns/${id}`);
+  },
+  // Starts the campaign and its automation run together on the server (AUT-15).
+  launchCampaign: async (id: string, overrides: Record<string, any> = {}): Promise<{ run_id: string; execution: CampaignExecution; status: string }> => {
+    const res = await apiClient.post(`/campaigns/${id}/launch`, overrides);
+    return res.data;
   },
   startCampaign: async (id: string): Promise<CampaignExecution> => {
     const res = await apiClient.post(`/campaigns/${id}/start`);

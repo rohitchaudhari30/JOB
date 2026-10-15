@@ -48,3 +48,37 @@ def test_aes_256_gcm_session_storage_encryption():
     decrypted_json = encryptor.decrypt_json(encrypted_b64)
     assert decrypted_json == sample_cookies
     assert decrypted_json["cookies"][0]["value"] == "secret_session_token_xyz987"
+
+
+# --- SEC-12: strict encryption key handling ---------------------------------
+
+import base64 as _b64
+import os as _os
+
+import pytest as _pytest
+
+from app.core.security import SessionStorageEncryptor as _Enc
+
+
+def _key() -> str:
+    return _b64.b64encode(_os.urandom(32)).decode()
+
+
+@_pytest.mark.parametrize("bad", ["not base64 !!!", _b64.b64encode(b"too short").decode()])
+def test_bad_encryption_keys_are_rejected(bad):
+    with _pytest.raises(ValueError):
+        _Enc(bad, previous_keys=[])
+
+
+def test_old_key_can_still_decrypt_after_rotation():
+    old_key, new_key = _key(), _key()
+    blob = _Enc(old_key, previous_keys=[]).encrypt("secret session")
+    rotated = _Enc(new_key, previous_keys=[old_key])
+    assert rotated.decrypt(blob) == "secret session"
+    assert _Enc(new_key, previous_keys=[]).encrypt("x") != blob
+
+
+def test_unknown_key_cannot_decrypt():
+    blob = _Enc(_key(), previous_keys=[]).encrypt("secret")
+    with _pytest.raises(ValueError):
+        _Enc(_key(), previous_keys=[]).decrypt(blob)

@@ -20,12 +20,14 @@ class GreenhouseAdapter(BaseJobSourceAdapter):
     async def health_check(self, context: BrowserContext) -> bool:
         return True  # Direct public ATS board
 
-    async def search_jobs(self, context: BrowserContext, filters: SearchQueryFilter) -> AsyncGenerator[Job, None]:
+    async def search_jobs(self, context: BrowserContext, filters: SearchQueryFilter, **kwargs) -> AsyncGenerator[Job, None]:
         page: Optional[Page] = None
         try:
             page = await context.new_page()
             # If target URL is not configured in filters, use company keyword if present
-            company_slug = filters.roles[0].lower().replace(" ", "") if filters.roles else "stripe"
+            if not filters.companies:
+                raise ValueError("Greenhouse discovery needs at least one company board name in 'companies'.")
+            company_slug = filters.companies[0].lower().replace(" ", "")
             target_url = f"https://boards.greenhouse.io/{company_slug}"
             logger.info(f"Navigating to Greenhouse board: {target_url}")
 
@@ -62,6 +64,7 @@ class GreenhouseAdapter(BaseJobSourceAdapter):
                 )
         except Exception as e:
             logger.error(f"Greenhouse extraction failed: {e}")
+            raise
         finally:
             if page and not page.is_closed():
                 await page.close()

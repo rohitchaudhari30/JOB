@@ -20,11 +20,13 @@ class LeverAdapter(BaseJobSourceAdapter):
     async def health_check(self, context: BrowserContext) -> bool:
         return True
 
-    async def search_jobs(self, context: BrowserContext, filters: SearchQueryFilter) -> AsyncGenerator[Job, None]:
+    async def search_jobs(self, context: BrowserContext, filters: SearchQueryFilter, **kwargs) -> AsyncGenerator[Job, None]:
         page: Optional[Page] = None
         try:
             page = await context.new_page()
-            company_slug = filters.roles[0].lower().replace(" ", "") if filters.roles else "netflix"
+            if not filters.companies:
+                raise ValueError("Lever discovery needs at least one company board name in 'companies'.")
+            company_slug = filters.companies[0].lower().replace(" ", "")
             target_url = f"https://jobs.lever.co/{company_slug}"
             logger.info(f"Navigating to Lever career board: {target_url}")
 
@@ -61,6 +63,7 @@ class LeverAdapter(BaseJobSourceAdapter):
                 )
         except Exception as e:
             logger.error(f"Lever job extraction failed: {e}")
+            raise
         finally:
             if page and not page.is_closed():
                 await page.close()

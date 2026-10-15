@@ -1,4 +1,5 @@
 import asyncio
+from app.core.url_safety import unsafe_url_reason
 from datetime import datetime, timezone, timedelta
 import hashlib
 import inspect
@@ -6,7 +7,7 @@ import logging
 import os
 from typing import Any, List, Optional
 import uuid
-from app.api.v1.ws import ws_manager
+from app.application.notifier import ws_manager
 from app.core.exceptions import (
     AuthorizationException,
     DuplicateEntityException,
@@ -32,11 +33,14 @@ from app.domain.applications.entities import (
 from app.domain.applications.repositories import ApplicationRepository
 from app.domain.jobs.repositories import JobRepository
 from app.domain.profile.repositories import CandidateProfileRepository, ResumeRepository
-from app.infrastructure.browser.browser_manager import browser_manager
-from app.infrastructure.browser.dom_analyzer import DOMAnalyzer
-from app.infrastructure.browser.form_engine import FormEngine
-from app.infrastructure.browser.screenshot_streamer import ScreenshotStreamer
-from app.infrastructure.browser.trace_manager import trace_manager
+from app.application.runtime import (
+    adapter_registry,
+    browser_manager,
+    new_dom_analyzer,
+    new_form_engine,
+    new_screenshot_streamer,
+    trace_manager,
+)
 
 logger = logging.getLogger("app.application.applications")
 
@@ -108,8 +112,8 @@ class ExecuteApplicationUseCase:
         resume_repo: ResumeRepository,
         user_repo: Optional[Any] = None,
         session_repo: Optional[Any] = None,
-        dom_analyzer: Optional[DOMAnalyzer] = None,
-        form_engine: Optional[FormEngine] = None,
+        dom_analyzer: Optional[Any] = None,
+        form_engine: Optional[Any] = None,
         ai_provider: Optional[AIProvider] = None,
     ):
         self._app_repo = app_repo
@@ -118,8 +122,8 @@ class ExecuteApplicationUseCase:
         self._resume_repo = resume_repo
         self._user_repo = user_repo
         self._session_repo = session_repo
-        self._dom_analyzer = dom_analyzer or DOMAnalyzer()
-        self._form_engine = form_engine or FormEngine()
+        self._dom_analyzer = dom_analyzer or new_dom_analyzer()
+        self._form_engine = form_engine or new_form_engine()
         self._ai_provider = ai_provider
 
     async def execute(self, application_id: str, run_id: Optional[str] = None, headless: bool = True) -> Application:
@@ -201,24 +205,22 @@ class ExecuteApplicationUseCase:
 
         try:
             # 1. Acquire isolated browser context (with authenticated session if available)
-            try:
-                context = await browser_manager.create_isolated_context(
-                    encrypted_storage_state=encrypted_storage_state,
-                    headless=headless,
-                )
-            except TypeError:
-                context = await browser_manager.create_isolated_context(
-                    encrypted_storage_state=encrypted_storage_state,
-                )
+            context = await browser_manager.create_isolated_context(
+                encrypted_storage_state=encrypted_storage_state,
+                headless=headless,
+            )
             await trace_manager.start_tracing(context)
 
             pages = getattr(context, "pages", None)
             page = pages[0] if (isinstance(pages, list) and len(pages) > 0) else await context.new_page()
-            streamer = ScreenshotStreamer(page=page, user_id=app.user_id, run_id=run_id, fps=5)
+            streamer = new_screenshot_streamer(page=page, user_id=app.user_id, run_id=run_id, fps=5)
             streamer.start()
 
             # 2. Navigate to Application URL
             target_url = job.apply_url
+            blocked = unsafe_url_reason(target_url)
+            if blocked:
+                raise ValidationException(f"Blocked unsafe apply URL for job [{job.id}]: {blocked}.")
             logger.info(f"Navigating to job application URL: {target_url}")
             try:
                 await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
@@ -342,17 +344,9 @@ class ExecuteApplicationUseCase:
                     return fresh_app or app
 
                 # Context-aware Playwright click with fallback to text locator if CSS fails
-                import inspect
-
-                async def _safe_locator_call(func, *args, **kwargs):
-                    if callable(func):
-                        res = func(*args, **kwargs)
-                        if inspect.isawaitable(res):
-                            await res
-
                 btn_locator = page.locator(submit_btn.selector).first
                 try:
-                    await _safe_locator_call(getattr(btn_locator, "wait_for", None), state="visible", timeout=7000)
+                    await btn_locator.wait_for(state="visible", timeout=7000)
 
                     # Last-millisecond pre-click verification: ensure recovery hasn't reclaimed ownership while waiting
                     pre_click_check = await self._app_repo.get_by_id(app.id)
@@ -366,7 +360,7 @@ class ExecuteApplicationUseCase:
                         )
                         return pre_click_check or app
 
-                    await _safe_locator_call(getattr(btn_locator, "click", None), timeout=8000)
+                    await btn_locator.click(timeout=8000)
                 except Exception as click_err:
                     # Check ownership before falling back to text locator
                     pre_click_check = await self._app_repo.get_by_id(app.id)
@@ -383,7 +377,7 @@ class ExecuteApplicationUseCase:
                     logger.warning(f"Primary selector click failed ({click_err}). Trying semantic button text fallback...")
                     fallback_text = (submit_btn.label_text or "Submit").strip()
                     fallback_locator = page.locator(f"button:has-text('{fallback_text}'), input[type='submit']").first
-                    await _safe_locator_call(getattr(fallback_locator, "wait_for", None), state="visible", timeout=5000)
+                    await fallback_locator.wait_for(state="visible", timeout=5000)
 
                     pre_click_check = await self._app_repo.get_by_id(app.id)
                     if (
@@ -396,7 +390,7 @@ class ExecuteApplicationUseCase:
                         )
                         return pre_click_check or app
 
-                    await _safe_locator_call(getattr(fallback_locator, "click", None), timeout=5000)
+                    await fallback_locator.click(timeout=5000)
 
                 # Evidence-based post-click submission outcome verification
                 target_platform = (job.source_type or job.source_id or "").lower() if job else None
@@ -467,7 +461,7 @@ class ExecuteApplicationUseCase:
                         },
                     )
                 elif state == WorkflowStateEnum.FAILED:
-                    app.last_error_message = detail
+                    app.failure_reason = detail
                     await _safe_save_app(
                         self._app_repo,
                         app,
@@ -494,7 +488,7 @@ class ExecuteApplicationUseCase:
                         },
                     )
                 else:  # RECONCILIATION_REQUIRED
-                    app.last_error_message = detail
+                    app.failure_reason = detail
                     await _safe_save_app(
                         self._app_repo,
                         app,
@@ -593,7 +587,8 @@ class ExecuteApplicationUseCase:
                 if curr and curr.workflow_state in (
                     WorkflowStateEnum.APPLIED,
                     WorkflowStateEnum.RECONCILIATION_REQUIRED,
-                    WorkflowStateEnum.CANCELLED,
+                    WorkflowStateEnum.SUBMISSION_UNKNOWN,
+                    WorkflowStateEnum.SKIPPED,
                 ):
                     logger.warning(
                         f"Application [{app.id}] reached newer terminal/reconciliation state [{curr.workflow_state.value}]. Aborting exception save."
@@ -629,7 +624,6 @@ class ExecuteApplicationUseCase:
         # 1. Platform-specific confirmation check via adapter registry (if platform specified)
         if platform:
             try:
-                from app.infrastructure.browser.adapters.registry import adapter_registry
                 app_adapter = adapter_registry.get_application_adapter(platform)
                 if hasattr(app_adapter, "verify_submission"):
                     adapter_res = await app_adapter.verify_submission(page, original_url)
@@ -698,9 +692,7 @@ class ExecuteApplicationUseCase:
                     return foundErrors;
                 }
                 """
-                res = page.evaluate(error_check_script)
-                if inspect.isawaitable(res):
-                    res = await res
+                res = await page.evaluate(error_check_script)
                 if res and isinstance(res, list) and len(res) > 0:
                     first_err = res[0]
                     return (
@@ -740,9 +732,7 @@ class ExecuteApplicationUseCase:
                     return patterns.some(p => p.test(text));
                 }
                 """
-                res = page.evaluate(confirmation_script)
-                if inspect.isawaitable(res):
-                    res = await res
+                res = await page.evaluate(confirmation_script)
                 is_text_confirmed = bool(res)
         except Exception as txt_err:
             logger.warning(f"Confirmation text evaluation error: {txt_err}")
@@ -760,9 +750,7 @@ class ExecuteApplicationUseCase:
                     });
                 }
                 """
-                res = page.evaluate(btn_state_script)
-                if inspect.isawaitable(res):
-                    res = await res
+                res = await page.evaluate(btn_state_script)
                 is_btn_confirmed = bool(res)
         except Exception as btn_err:
             logger.warning(f"Button state confirmation check error: {btn_err}")
@@ -1044,7 +1032,9 @@ class ResumeApplicationUseCase:
             WorkflowStateEnum.QUESTIONS_PENDING,
         ]:
             raise InvalidStateTransitionException(
-                f"Cannot resume application currently in [{app.workflow_state.value}] state."
+                app.workflow_state.value,
+                WorkflowStateEnum.APPROVED.value,
+                "only a paused application can be resumed",
             )
 
         app.workflow_state = WorkflowStateEnum.APPROVED

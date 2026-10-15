@@ -57,6 +57,11 @@ class ConnectionManager:
 
 ws_manager = ConnectionManager()
 
+# Let the application layer reach this manager without importing the API layer (ARC-01).
+from app.application.notifier import ws_manager as _notifier  # noqa: E402
+
+_notifier.register(ws_manager)
+
 import time
 from app.api.deps import get_current_user
 from app.domain.auth.entities import User
@@ -71,6 +76,12 @@ async def create_ws_ticket(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     import uuid
+
+    # Drop tickets nobody used, so the dict cannot grow forever. (SEC-07)
+    now = time.time()
+    for stale in [t for t, d in _ws_tickets.items() if d.get("expires_at", 0) < now]:
+        _ws_tickets.pop(stale, None)
+
     ticket = f"wst_{uuid.uuid4().hex}"
     _ws_tickets[ticket] = {
         "user_id": current_user.id,
@@ -85,7 +96,7 @@ async def websocket_endpoint(
     token: Optional[str] = Query(None),
     ticket: Optional[str] = Query(None),
 ):
-    user_id = "anonymous"
+    user_id = None
 
     # 1. Ticket-based authentication (Recommended industry standard)
     if ticket:
@@ -99,10 +110,15 @@ async def websocket_endpoint(
     elif token:
         try:
             payload = decode_access_token(token)
-            user_id = payload.get("sub", "anonymous")
+            user_id = payload.get("sub")
         except Exception:
             await websocket.close(code=4001)
             return
+
+    # No valid ticket or token: refuse instead of treating the caller as "anonymous". (SEC-07)
+    if not user_id:
+        await websocket.close(code=4001)
+        return
 
     await ws_manager.connect(user_id, websocket)
 

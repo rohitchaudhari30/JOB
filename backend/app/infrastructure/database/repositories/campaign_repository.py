@@ -60,6 +60,7 @@ class SqlAlchemyCampaignRepository(CampaignRepository):
             operating_start_time=model.safety_policy.operating_start_time if model.safety_policy else "09:00",
             operating_end_time=model.safety_policy.operating_end_time if model.safety_policy else "18:00",
             max_concurrent_applications=model.safety_policy.max_concurrent_applications if model.safety_policy else 1,
+            timezone=(model.safety_policy.timezone if model.safety_policy else None) or "UTC",
         ) if model.safety_policy else CampaignSafetyPolicy()
 
         schedule = CampaignSchedule(
@@ -164,6 +165,7 @@ class SqlAlchemyCampaignRepository(CampaignRepository):
                 operating_start_time=campaign.safety_policy.operating_start_time,
                 operating_end_time=campaign.safety_policy.operating_end_time,
                 max_concurrent_applications=campaign.safety_policy.max_concurrent_applications,
+                timezone=campaign.safety_policy.timezone,
             )
             self._session.add(safety_model)
 
@@ -201,6 +203,7 @@ class SqlAlchemyCampaignRepository(CampaignRepository):
                 model.safety_policy.operating_start_time = campaign.safety_policy.operating_start_time
                 model.safety_policy.operating_end_time = campaign.safety_policy.operating_end_time
                 model.safety_policy.max_concurrent_applications = campaign.safety_policy.max_concurrent_applications
+                model.safety_policy.timezone = campaign.safety_policy.timezone
 
             if model.schedule:
                 model.schedule.is_active = campaign.schedule.is_active
@@ -466,7 +469,8 @@ class SqlAlchemyCampaignExecutionRepository(CampaignExecutionRepository):
         await self._session.commit()
         return await self.get_by_id(execution_id)
 
-    async def reclaim_expired_leases(self) -> int:
+    async def reclaim_expired_leases(self, user_id: str | None = None) -> int:
+        """Moves expired leases to RECOVERY_PENDING. With user_id, only that user's runs (AUT-20)."""
         import uuid
         now = datetime.now(timezone.utc)
         stmt = (
@@ -476,6 +480,8 @@ class SqlAlchemyCampaignExecutionRepository(CampaignExecutionRepository):
                 CampaignExecutionModel.lease_expires_at <= now,
             )
         )
+        if user_id is not None:
+            stmt = stmt.where(CampaignExecutionModel.user_id == user_id)
         res = await self._session.execute(stmt)
         expired_models = res.scalars().all()
         reclaimed_count = 0

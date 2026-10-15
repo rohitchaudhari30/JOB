@@ -1,10 +1,13 @@
 import os
 from pathlib import Path
 from typing import Annotated, Any, List, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.api.deps import (
+    get_execute_application_use_case,
     get_ai_gateway,
     get_application_repository,
     get_campaign_repository,
@@ -27,6 +30,7 @@ from app.application.applications.dtos import (
     StopApplicationDTO,
     TakeControlDTO,
 )
+from app.application.applications.deferred import DeferredExecuteUseCase
 from app.application.applications.use_cases import (
     ApproveApplicationUseCase,
     CreateApplicationUseCase,
@@ -53,6 +57,9 @@ from app.infrastructure.database.repositories.profile_repository import (
     SqlAlchemyResumeRepository,
 )
 
+from app.application.background import spawn
+
+logger = logging.getLogger("app.api.applications")
 router = APIRouter(prefix="/applications", tags=["Job Applications & Automation"])
 
 
@@ -276,17 +283,12 @@ async def create_application(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     from app.application.applications.application_orchestrator import ApplicationOrchestrator
     from app.application.applications.commands import ApplicationSource, QueueApplicationCommand
 
-    exec_uc = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    exec_uc = execute_application_uc
     orchestrator = ApplicationOrchestrator(
         app_repo=app_repo,
         job_repo=job_repo,
@@ -330,17 +332,12 @@ async def batch_queue_applications(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     from app.application.applications.application_orchestrator import ApplicationOrchestrator
     from app.application.applications.commands import ApplicationSource, BatchQueueApplicationCommand
 
-    exec_uc = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    exec_uc = execute_application_uc
     orchestrator = ApplicationOrchestrator(
         app_repo=app_repo,
         job_repo=job_repo,
@@ -395,15 +392,10 @@ async def approve_application(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    execute_use_case = execute_application_uc
     use_case = ApproveApplicationUseCase(
         app_repo=app_repo,
         execute_use_case=execute_use_case,
@@ -431,15 +423,10 @@ async def retry_application(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
 ):
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    execute_use_case = execute_application_uc
     use_case = RetryApplicationUseCase(
         app_repo=app_repo,
         execute_use_case=execute_use_case,
@@ -468,20 +455,20 @@ async def resume_application(
     profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
+    response: Response,
+    wait: bool = Query(False, description="true = run the browser flow inside this request"),
 ):
+    """Starts the browser flow in the background (202) unless wait=true."""
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    execute_use_case = _build_executor(app_repo, execute_application_uc, wait)
     use_case = ResumeApplicationUseCase(app_repo=app_repo, execute_use_case=execute_use_case)
     app = await use_case.execute(
         application_id=application_id,
         user_input=req.user_input,
     )
+    if getattr(execute_use_case, "scheduled", False):
+        response.status_code = status.HTTP_202_ACCEPTED
     return _to_response_dto(app)
 
 
@@ -510,15 +497,13 @@ async def reconcile_application(
     campaign_repo: Annotated[Any, Depends(get_campaign_repository)],
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
+    response: Response,
+    wait: bool = Query(False, description="true = run a retry inside this request"),
 ):
+    """A retry starts in the background (202) unless wait=true. Other actions finish immediately."""
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
+    execute_use_case = _build_executor(app_repo, execute_application_uc, wait)
     use_case = ReconcileApplicationUseCase(
         app_repo=app_repo,
         execute_use_case=execute_use_case,
@@ -536,6 +521,8 @@ async def reconcile_application(
             user_id=current_user.id,
             is_admin=is_admin,
         )
+        if getattr(execute_use_case, "scheduled", False):
+            response.status_code = status.HTTP_202_ACCEPTED
         return _to_response_dto(app)
     except AuthorizationException:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access to this application record.")
@@ -545,23 +532,53 @@ async def reconcile_application(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
+async def _execute_in_background(application_id: str) -> None:
+    """Runs the browser flow on its own database session, after the request has returned."""
+    from app.infrastructure.execution_factory import build_execute_application_use_case
+    from app.core import database
+
+    async with database.AsyncSessionLocal() as session:
+        try:
+            use_case = build_execute_application_use_case(session, commit_each_write=True)
+            await use_case.execute(application_id=application_id)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logger.exception("Background execution failed for application %s", application_id)
+
+
+def _build_executor(
+    app_repo: SqlAlchemyApplicationRepository,
+    real_use_case: ExecuteApplicationUseCase,
+    wait: bool,
+):
+    """Real use case when the caller asked to wait, otherwise one that starts the run in the background."""
+    if wait:
+        return real_use_case
+
+    def _start(application_id: str) -> None:
+        spawn(_execute_in_background(application_id), name=f"execute-{application_id}")
+
+    return DeferredExecuteUseCase(app_repo=app_repo, commit=app_repo._session.commit, start_in_background=_start)
+
+
 @router.post("/{application_id}/execute", response_model=ApplicationResponseDTO)
 async def execute_application(
     application_id: str,
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
     app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
-    job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
-    profile_repo: Annotated[SqlAlchemyProfileRepository, Depends(get_profile_repository)],
-    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
-    ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
+    execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
+    wait: bool = Query(False, description="true = run inside this request and return the final state"),
 ):
-    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    use_case = ExecuteApplicationUseCase(
-        app_repo=app_repo,
-        job_repo=job_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        ai_provider=ai_gateway,
-    )
-    app = await use_case.execute(application_id=application_id)
-    return _to_response_dto(app)
+    """By default the browser flow starts in the background (202). Poll the application for its state."""
+    application = await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
+    if wait:
+        app = await execute_application_uc.execute(application_id=application_id)
+        return _to_response_dto(app)
+
+    # Commit first so the background session sees the application, then let the run start.
+    await app_repo._session.commit()
+    spawn(_execute_in_background(application_id), name=f"execute-{application_id}")
+    response.status_code = status.HTTP_202_ACCEPTED
+    return _to_response_dto(application)

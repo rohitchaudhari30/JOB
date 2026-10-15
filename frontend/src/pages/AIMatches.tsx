@@ -13,7 +13,6 @@ import {
   XCircle,
   RefreshCw,
   Search,
-  Zap,
   BarChart3,
   Check,
   X,
@@ -73,7 +72,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   const handleApplySingle = async (jobId: string) => {
     try {
       setApplyingJobId(jobId);
-      const app = await api.createApplication(jobId, undefined, undefined, 'AI_MATCHES', false);
+      await api.createApplication(jobId, undefined, undefined, 'AI_MATCHES', false);
       showSuccess('Opportunity approved and queued for Campaign execution!');
       if (onNavigate) {
         setTimeout(() => onNavigate('applications'), 600);
@@ -197,7 +196,9 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
             disabled={loading}
             className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all cursor-pointer shadow-xs"
             title="Refresh AI Matches"
-          >
+          
+ aria-label="Refresh AI Matches"
+>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
 
@@ -282,7 +283,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
               className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none"
             />
             {searchQuery && (
-              <button
+              <button aria-label="Close"
                 onClick={() => setSearchQuery('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >

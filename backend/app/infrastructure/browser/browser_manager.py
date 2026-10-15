@@ -11,6 +11,37 @@ from app.core.security import session_encryptor
 logger = logging.getLogger("app.browser.manager")
 
 
+
+def _stealth_launch_args() -> list[str]:
+    """Flags that hide automation. Off unless BROWSER_STEALTH_ENABLED is set (COMP-01)."""
+    if not settings.BROWSER_STEALTH_ENABLED:
+        return []
+    return ["--disable-blink-features=AutomationControlled", "--disable-infobars"]
+
+
+def _identity_options() -> dict:
+    """Spoofed browser identity. Off by default: the browser reports its real user agent."""
+    if not settings.BROWSER_STEALTH_ENABLED:
+        return {}
+    return {
+        "user_agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/128.0.0.0 Safari/537.36"
+        )
+    }
+
+
+async def _apply_stealth_script(context) -> None:
+    if not settings.BROWSER_STEALTH_ENABLED:
+        return
+    await context.add_init_script(
+        """
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        window.chrome = { runtime: {} };
+        """
+    )
+
 class ProactorLoopThread:
     """Dedicated Proactor event loop thread for Playwright subprocess execution on Windows."""
 
@@ -56,8 +87,7 @@ class PlaywrightBrowserManager:
             self._playwright = await async_playwright().start()
         if not self._browser:
             launch_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--disable-infobars",
+                *_stealth_launch_args(),
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
@@ -111,11 +141,7 @@ class PlaywrightBrowserManager:
             storage_state=storage_state_dict,
             viewport={"width": viewport_width, "height": viewport_height},
             device_scale_factor=1.0,
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/128.0.0.0 Safari/537.36"
-            ),
+            **_identity_options(),
             locale="en-US",
             timezone_id="Asia/Kolkata",
         )
@@ -125,16 +151,7 @@ class PlaywrightBrowserManager:
         logger.info("context_created", extra={"session_loaded": bool(storage_state_dict)})
 
         # Apply stealth overrides to context
-        await context.add_init_script(
-            """
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            });
-            window.chrome = {
-                runtime: {}
-            };
-            """
-        )
+        await _apply_stealth_script(context)
         orig_ctx_close = context.close
         async def _wrapped_context_close():
             try:
@@ -154,8 +171,7 @@ class PlaywrightBrowserManager:
             self._playwright = await async_playwright().start()
 
         launch_args = [
-            "--disable-blink-features=AutomationControlled",
-            "--disable-infobars",
+            *_stealth_launch_args(),
             "--no-sandbox",
             "--disable-setuid-sandbox",
             f"--window-size={viewport_width},{viewport_height + 68}",
@@ -168,24 +184,11 @@ class PlaywrightBrowserManager:
             storage_state=storage_state_dict,
             viewport={"width": viewport_width, "height": viewport_height},
             device_scale_factor=1.0,
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/128.0.0.0 Safari/537.36"
-            ),
+            **_identity_options(),
             locale="en-US",
             timezone_id="Asia/Kolkata",
         )
-        await context.add_init_script(
-            """
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            });
-            window.chrome = {
-                runtime: {}
-            };
-            """
-        )
+        await _apply_stealth_script(context)
         orig_close = context.close
 
         async def _close_with_browser():
@@ -281,11 +284,7 @@ class PlaywrightBrowserManager:
                 browser.new_context(
                     storage_state=storage_state_dict,
                     viewport={"width": viewport_width, "height": viewport_height},
-                    user_agent=(
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/128.0.0.0 Safari/537.36"
-                    ),
+                    **_identity_options(),
                     locale="en-US",
                     timezone_id="Asia/Kolkata",
                 )
@@ -297,11 +296,7 @@ class PlaywrightBrowserManager:
         context = await browser.new_context(
             storage_state=storage_state_dict,
             viewport={"width": viewport_width, "height": viewport_height},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/128.0.0.0 Safari/537.36"
-            ),
+            **_identity_options(),
             locale="en-US",
             timezone_id="Asia/Kolkata",
         )

@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   resolveTab,
   getPathForTab,
   getTabFromLocation,
   TAB_TO_PATH,
-  PATH_TO_TAB,
 } from '../utils/navigation';
 
 describe('URL Navigation & Route Resolution', () => {

@@ -129,3 +129,28 @@ class SqlAlchemyAutomationRunRepository(AutomationRunRepository):
         )
         self._session.add(event)
         await self._session.commit()
+
+
+    # --- Read helpers used by the API (ARC-02). They return stored rows as they are. ---
+
+    async def get_row(self, run_id: str) -> Optional[AutomationRunModel]:
+        return await self._session.scalar(select(AutomationRunModel).where(AutomationRunModel.id == run_id))
+
+    async def get_latest_active_row(self, user_id: str) -> Optional[AutomationRunModel]:
+        stmt = (
+            select(AutomationRunModel)
+            .where(
+                AutomationRunModel.user_id == user_id,
+                AutomationRunModel.status.in_(["RUNNING", "STARTING", "PAUSED"]),
+            )
+            .order_by(desc(AutomationRunModel.created_at))
+            .limit(1)
+        )
+        return await self._session.scalar(stmt)
+
+    async def list_event_rows(self, run_id: str, after_seq: Optional[int], limit: int) -> List[AutomationEventModel]:
+        stmt = select(AutomationEventModel).where(AutomationEventModel.run_id == run_id)
+        if after_seq is not None:
+            stmt = stmt.where(AutomationEventModel.seq > after_seq)
+        stmt = stmt.order_by(AutomationEventModel.seq.asc()).limit(limit)
+        return list((await self._session.scalars(stmt)).all())

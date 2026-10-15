@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -18,6 +19,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from app.domain.applications.entities import ApplicationOutcomeStatus, WorkflowStateEnum
+
+
+def _allowed_values(column: str, enum_cls) -> str:
+    """SQL for a CHECK constraint that only allows the enum's values."""
+    return f"{column} IN ({', '.join(repr(m.value) for m in enum_cls)})"
 
 
 def generate_uuid() -> str:
@@ -65,6 +72,17 @@ class UserSessionModel(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     user = relationship("UserModel", back_populates="sessions")
+
+
+class RevokedTokenModel(Base):
+    """Tokens that were logged out or rotated. Rows can be deleted after expires_at."""
+
+    __tablename__ = "revoked_tokens"
+
+    jti = Column(String(64), primary_key=True)
+    user_id = Column(String(36), nullable=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class CandidateProfileModel(Base):
@@ -350,11 +368,15 @@ class ApplicationModel(Base):
     error_category = Column(String(64), nullable=True)
     next_retry_at = Column(DateTime(timezone=True), nullable=True)
     current_attempt_id = Column(String(64), nullable=True, index=True)
+    # Label of the resume used, kept even if the resume is deleted later (resume_id -> NULL).
+    resume_label_snapshot = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("user_id", "job_id", name="uq_user_job_application"),
+        CheckConstraint(_allowed_values("workflow_state", WorkflowStateEnum), name="ck_applications_workflow_state"),
+        CheckConstraint(_allowed_values("outcome_status", ApplicationOutcomeStatus), name="ck_applications_outcome_status"),
     )
 
     user = relationship("UserModel", back_populates="applications")
@@ -433,6 +455,17 @@ class AutomationRunModel(Base):
     events = relationship("AutomationEventModel", back_populates="run", cascade="all, delete-orphan")
 
 
+class AutomationScheduleModel(Base):
+    """A saved schedule, so it survives a restart (AUT-17). The settings are stored as JSON."""
+
+    __tablename__ = "automation_schedules"
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    config_json = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
 class AutomationEventModel(Base):
     __tablename__ = "automation_events"
 
@@ -498,6 +531,7 @@ class CampaignSafetyPolicyModel(Base):
     operating_start_time = Column(String(8), default="09:00", nullable=False)
     operating_end_time = Column(String(8), default="18:00", nullable=False)
     max_concurrent_applications = Column(Integer, default=1, nullable=False)
+    timezone = Column(String(64), default="UTC", nullable=False)
 
     campaign = relationship("CampaignModel", back_populates="safety_policy")
 

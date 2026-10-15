@@ -59,11 +59,10 @@ SUPPORTED_PLATFORMS: Dict[str, PlatformManifest] = {
         capabilities=[
             PlatformCapability.JOB_SEARCH,
             PlatformCapability.JOB_DETAILS,
-            PlatformCapability.APPLICATION,
         ],
         login_url="",
         is_auth_required=False,
-        description="Direct company application system with dynamic form filling and resume upload.",
+        description="Company job board discovery. Applying through Lever is not automated yet.",
     ),
     "workday": PlatformManifest(
         platform_id="workday",
@@ -73,11 +72,10 @@ SUPPORTED_PLATFORMS: Dict[str, PlatformManifest] = {
         capabilities=[
             PlatformCapability.JOB_SEARCH,
             PlatformCapability.JOB_DETAILS,
-            PlatformCapability.APPLICATION,
         ],
         login_url="",
         is_auth_required=False,
-        description="Enterprise multi-step job application wizard and resume parsing automation.",
+        description="Company job board discovery. Applying through Workday is not automated yet.",
     ),
     "ashby": PlatformManifest(
         platform_id="ashby",
@@ -87,11 +85,10 @@ SUPPORTED_PLATFORMS: Dict[str, PlatformManifest] = {
         capabilities=[
             PlatformCapability.JOB_SEARCH,
             PlatformCapability.JOB_DETAILS,
-            PlatformCapability.APPLICATION,
         ],
         login_url="",
         is_auth_required=False,
-        description="Modern high-growth startup ATS with rapid single-page application submission.",
+        description="Company job board discovery. Applying through Ashby is not automated yet.",
     ),
 }
 

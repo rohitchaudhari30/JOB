@@ -8,27 +8,22 @@ import {
   ArrowUpRight,
   ShieldCheck,
   CheckCircle2,
-  AlertTriangle,
   AlertOctagon,
   Clock,
   Sparkles,
   RefreshCw,
-  Briefcase,
   Globe,
   FileText,
   ChevronRight,
-  Info,
   Check,
   Activity,
-  Layers,
   Send,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { EmptyState } from '../components/ui/EmptyState';
 import {
   DashboardOverview,
   DashboardTopMatch,
-  DashboardAttentionItem,
-  DashboardReadinessItem,
   AutomationRunStatus,
   Application,
 } from '../types';
@@ -44,6 +39,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
 
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [recentApplications, setRecentApplications] = useState<Application[]>([]);
+  const [connections, setConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
@@ -59,10 +55,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
     }
 
     try {
-      const [overviewData, appsData] = await Promise.all([
+      const [overviewData, appsData, connectionsData] = await Promise.all([
         api.getDashboardOverview(clientTz),
         api.listApplications().catch(() => []),
+        api.listConnections().catch(() => []),
       ]);
+      setConnections(connectionsData);
 
       setOverview(overviewData);
       setRecentApplications(appsData.slice(0, 5));
@@ -179,7 +177,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
             <span>Quota Zone: <strong className="font-semibold">{clientTz}</strong></span>
           </div>
 
-          <button
+          <button aria-label="Refresh"
             onClick={() => loadData(true)}
             disabled={refreshing || loading}
             title="Refresh Operational State"
@@ -493,30 +491,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
           </div>
 
           <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between text-xs py-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-800 dark:text-slate-200">Naukri.com</span>
+            {connections.length === 0 && (
+              <div className="text-xs text-slate-400 py-2">No platform status available.</div>
+            )}
+            {connections.map((c) => (
+              <div key={c.platform} className="flex items-center justify-between text-xs py-1">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{c.display_name}</span>
+                <span
+                  className={
+                    c.session_active
+                      ? 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
+                      : 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                  }
+                >
+                  {String(c.status).toUpperCase()}
+                </span>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300">
-                ACTIVE
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs py-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-800 dark:text-slate-200">LinkedIn Easy Apply</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300">
-                ACTIVE
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs py-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-800 dark:text-slate-200">Direct ATS Engines</span>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300">
-                READY
-              </span>
-            </div>
+            ))}
           </div>
 
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
@@ -590,7 +581,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                       <Send className="w-3 h-3" />
                       <span>{applyingJobId === match.job_id ? 'Queuing...' : '1-Click Apply'}</span>
                     </button>
-                    <button
+                    <button aria-label="Open"
                       onClick={() => onNavigate('matches')}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
                       title="Inspect Match"
@@ -603,9 +594,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
             ))}
           </div>
         ) : (
-          <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
-            No high-confidence matches found yet. Run discovery or configure your campaign criteria to populate matches.
-          </div>
+          <EmptyState>No high-confidence matches found yet. Run discovery or configure your campaign criteria to populate matches.</EmptyState>
         )}
       </div>
 
@@ -675,7 +664,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                     {app.outcome_status || 'NOT_SUBMITTED'}
                   </span>
 
-                  <button
+                  <button aria-label="Open"
                     onClick={() => onNavigate('crm')}
                     className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                   >
@@ -686,9 +675,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
             ))}
           </div>
         ) : (
-          <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
-            No applications submitted yet. Start your first campaign to begin applying automatically.
-          </div>
+          <EmptyState>No applications submitted yet. Start your first campaign to begin applying automatically.</EmptyState>
         )}
       </div>
     </div>

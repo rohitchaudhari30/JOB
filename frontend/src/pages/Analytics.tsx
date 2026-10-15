@@ -4,7 +4,6 @@ import {
   BarChart3,
   Layers,
   FileText,
-  Sliders,
   Sparkles,
   CheckCircle2,
   RefreshCw,
@@ -16,12 +15,11 @@ import {
   Target,
   ArrowUpRight,
   Cpu,
-  Check,
   ChevronRight,
   Info,
-  ExternalLink,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { EmptyState } from '../components/ui/EmptyState';
 import {
   FunnelOverview,
   ResumePerformanceMetric,
@@ -209,7 +207,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           </div>
 
           {/* Refresh Button */}
-          <button
+          <button aria-label="Refresh"
             onClick={() => fetchAnalyticsData(true)}
             disabled={refreshing || loading}
             title="Refresh Analytics Telemetry"
@@ -402,9 +400,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
 
           <div className="space-y-3 pt-1">
             {resumes.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
-                Upload role-specific resumes in the Profile tab to observe comparative interview conversion rates.
-              </div>
+              <EmptyState>Upload role-specific resumes in the Profile tab to observe comparative interview conversion rates.</EmptyState>
             ) : (
               resumes.map((r) => (
                 <div
@@ -463,9 +459,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
 
           <div className="space-y-3 pt-1">
             {sources.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
-                No platform telemetry recorded for this date range yet.
-              </div>
+              <EmptyState>No platform telemetry recorded for this date range yet.</EmptyState>
             ) : (
               sources.map((src) => (
                 <div
@@ -563,9 +557,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
             </table>
           </div>
         ) : (
-          <div className="p-6 text-center text-xs text-slate-400 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
-            No active campaigns executed within this time window.
-          </div>
+          <EmptyState>No active campaigns executed within this time window.</EmptyState>
         )}
       </div>
 
@@ -586,9 +578,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {skills.length === 0 ? (
-            <div className="col-span-3 p-6 text-center text-xs text-slate-400 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
-              Discover jobs and run cascade evaluations to populate skill demand analysis.
-            </div>
+            <EmptyState className="col-span-3">Discover jobs and run cascade evaluations to populate skill demand analysis.</EmptyState>
           ) : (
             skills.map((sk) => (
               <div

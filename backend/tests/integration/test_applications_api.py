@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -116,6 +118,8 @@ async def test_application_lifecycle_and_api_flow(client: AsyncClient, monkeypat
         mock_page.wait_for_timeout = AsyncMock()
         mock_page.is_closed = MagicMock(return_value=False)
         mock_page.screenshot = AsyncMock(return_value=b"fake_jpeg")
+        # The page shows a success message, so the confirmation check finds it.
+        mock_page.evaluate = AsyncMock(return_value=True)
         mock_locator = MagicMock()
         mock_locator.first = mock_locator
         mock_locator.wait_for = AsyncMock()
@@ -151,8 +155,22 @@ async def test_application_lifecycle_and_api_flow(client: AsyncClient, monkeypat
                 has_challenge=False,
             )
 
+            # By default the run starts in the background and the request returns 202.
+            from app.api.v1 import applications as applications_api
+
+            started = []
+
+            async def fake_background_run(application_id):
+                started.append(application_id)
+
+            monkeypatch.setattr(applications_api, "_execute_in_background", fake_background_run)
+            bg_resp = await client.post(f"/api/v1/applications/{app_id}/execute", headers=headers)
+            assert bg_resp.status_code == 202
+            await asyncio.sleep(0.05)
+            assert started == [app_id]
+
             exec_resp = await client.post(
-                f"/api/v1/applications/{app_id}/execute",
+                f"/api/v1/applications/{app_id}/execute?wait=true",
                 headers=headers,
             )
             assert exec_resp.status_code == 200

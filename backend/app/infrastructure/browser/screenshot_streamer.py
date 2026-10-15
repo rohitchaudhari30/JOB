@@ -3,7 +3,7 @@ import base64
 import logging
 from typing import Optional
 from playwright.async_api import CDPSession, Page
-from app.api.v1.ws import ws_manager
+from app.application.notifier import ws_manager
 
 logger = logging.getLogger("app.browser.cdp_streamer")
 

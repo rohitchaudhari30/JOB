@@ -55,14 +55,17 @@ class MatchBreakdown:
 
 @dataclass
 class MatchRule:
+    # Freshness is deliberately NOT a weight here: MatchScore is pure candidate-job fit,
+    # and freshness only enters the separate RecommendationScore (AI-05).
+    # Note: the default weights add up to 1.10 and the result is capped at 100.
+    # Changing that needs an evaluation set first (AI-03), so it is left as is.
     skills_weight: float = 0.35
     experience_weight: float = 0.20
     role_title_weight: float = 0.15
     location_weight: float = 0.10
     salary_weight: float = 0.10
-    freshness_weight: float = 0.10
-    education_weight: float = 0.05
-    notice_period_weight: float = 0.05
+    semantic_weight: float = 0.10
+    ai_weight: float = 0.10
     min_match_score: float = 60.0
     auto_apply_threshold: float = 90.0
     approval_threshold: float = 75.0

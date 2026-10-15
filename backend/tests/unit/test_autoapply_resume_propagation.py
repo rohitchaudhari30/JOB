@@ -163,5 +163,8 @@ async def test_automation_orchestrator_initializes_session_with_resume_id():
         resume_id="res_selected_target",
         job_repo=mock_job_repo,
     )
-    assert session.resume_id == "res_selected_target"
-    assert session.user_id == "user_123"
+    try:
+        assert session.resume_id == "res_selected_target"
+        assert session.user_id == "user_123"
+    finally:
+        await orchestrator.cancel_background_tasks()

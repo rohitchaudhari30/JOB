@@ -104,6 +104,7 @@ async def get_ai_gateway(session: Annotated[AsyncSession, Depends(get_db_session
 async def get_current_user(
     token: Annotated[str | None, Depends(oauth2_scheme)],
     user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> User:
     if not token:
         raise HTTPException(
@@ -116,6 +117,12 @@ async def get_current_user(
         user_id: str | None = payload.get("sub")
         if not user_id:
             raise AuthenticationException("Token missing user subject.")
+        from app.infrastructure.database.repositories.revoked_token_repository import (
+            SqlAlchemyRevokedTokenRepository,
+        )
+
+        if await SqlAlchemyRevokedTokenRepository(session).is_revoked(payload.get("jti")):
+            raise AuthenticationException("Token has been revoked.")
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -131,3 +138,33 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def require_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Allow only users listed in ADMIN_EMAILS (case-insensitive)."""
+    from app.core.config import settings
+
+    admins = {e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()}
+    if current_user.email.lower() not in admins:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This operation affects data shared by all users and needs an administrator.",
+        )
+    return current_user
+
+
+async def get_execute_application_use_case(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+):
+    """Builds the apply use case through the shared factory so every route behaves the same (AUT-13)."""
+    from app.infrastructure.execution_factory import build_execute_application_use_case
+
+    return build_execute_application_use_case(session)
+
+
+async def get_automation_run_repository(session: Annotated[AsyncSession, Depends(get_db_session)]):
+    from app.infrastructure.database.repositories.automation_repository import SqlAlchemyAutomationRunRepository
+
+    return SqlAlchemyAutomationRunRepository(session)

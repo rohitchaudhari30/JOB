@@ -84,7 +84,7 @@ async def test_verify_outcome_detects_inline_validation_error(execute_app_use_ca
     )
 
     # Page evaluate returns validation errors
-    mock_page.evaluate = MagicMock(return_value=["Please fill in the required phone number field."])
+    mock_page.evaluate = AsyncMock(return_value=["Please fill in the required phone number field."])
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
         state, outcome, detail = await execute_app_use_case._verify_submission_outcome(
@@ -113,7 +113,7 @@ async def test_verify_outcome_detects_confirmation_url_redirect(execute_app_use_
             return []
         return False
 
-    mock_page.evaluate = MagicMock(side_effect=mock_eval)
+    mock_page.evaluate = AsyncMock(side_effect=mock_eval)
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
         state, outcome, detail = await execute_app_use_case._verify_submission_outcome(
@@ -144,7 +144,7 @@ async def test_verify_outcome_detects_confirmation_text(execute_app_use_case):
             return True
         return False
 
-    mock_page.evaluate = MagicMock(side_effect=mock_eval)
+    mock_page.evaluate = AsyncMock(side_effect=mock_eval)
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
         state, outcome, detail = await execute_app_use_case._verify_submission_outcome(
@@ -177,7 +177,7 @@ async def test_verify_outcome_detects_applied_button_state(execute_app_use_case)
             return True
         return False
 
-    mock_page.evaluate = MagicMock(side_effect=mock_eval)
+    mock_page.evaluate = AsyncMock(side_effect=mock_eval)
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
         state, outcome, detail = await execute_app_use_case._verify_submission_outcome(
@@ -206,7 +206,7 @@ async def test_verify_outcome_inconclusive_guards_with_reconciliation_required(e
             return []
         return False
 
-    mock_page.evaluate = MagicMock(side_effect=mock_eval)
+    mock_page.evaluate = AsyncMock(side_effect=mock_eval)
 
     with patch("asyncio.sleep", new_callable=AsyncMock):
         state, outcome, detail = await execute_app_use_case._verify_submission_outcome(

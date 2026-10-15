@@ -146,3 +146,52 @@ async def test_campaign_execution_automation_synchronization(client: AsyncClient
     db_exec = await db_session.scalar(stmt)
     assert db_exec is not None
     assert db_exec.status == "ABORTED"
+
+
+@pytest.mark.asyncio
+async def test_launch_starts_campaign_and_run_in_one_call(client: AsyncClient, monkeypatch):
+    async def idle_pipeline(session, *args, **kwargs):
+        try:
+            while not session.cancel_requested:
+                await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            pass
+
+    monkeypatch.setattr(orchestrator, "_execute_run_pipeline", idle_pipeline)
+
+    async def connected(self, user_id, platform):
+        return PlatformConnection(
+            id="conn-launch", user_id=user_id, platform=platform,
+            connection_type=ConnectionType.BROWSER_SESSION, status=ConnectionStatus.CONNECTED,
+        )
+
+    monkeypatch.setattr(SqlAlchemyConnectionRepository, "get_by_platform", connected)
+
+    user = {"email": "launch.test@example.com", "password": "Password123!", "full_name": "Launch Test"}
+    await client.post("/api/v1/auth/register", json=user)
+    login = await client.post("/api/v1/auth/login", json={"email": user["email"], "password": user["password"]})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    camp = await client.post(
+        "/api/v1/campaigns",
+        json={
+            "name": "Launch campaign",
+            "rule": {"target_roles": ["Python Engineer"], "target_platforms": ["naukri"]},
+            "safety_policy": {"daily_application_limit": 7, "operating_start_time": "00:00", "operating_end_time": "23:59"},
+        },
+        headers=headers,
+    )
+    campaign_id = camp.json()["id"]
+
+    res = await client.post(f"/api/v1/campaigns/{campaign_id}/launch", json={"auto_apply_matches": False}, headers=headers)
+    assert res.status_code == 202
+    body = res.json()
+    assert body["execution"]["status"] == "RUNNING"
+    assert body["run_id"] == body["execution"]["id"]
+
+    # The run exists on the server without any second call from the browser.
+    active = await client.get("/api/v1/automation/active", headers=headers)
+    assert active.json()["run_id"] == body["run_id"]
+
+    other = await client.post("/api/v1/campaigns/does-not-exist/launch", json={}, headers=headers)
+    assert other.status_code in (404, 409)

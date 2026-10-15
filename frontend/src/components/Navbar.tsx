@@ -36,44 +36,8 @@ interface NotificationItem {
   tabLink?: string;
 }
 
-const DEFAULT_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: '1',
-    title: 'AI Matching Completed',
-    description: '8 discovered jobs evaluated against your candidate profile.',
-    time: 'Just now',
-    type: 'match',
-    read: false,
-    tabLink: 'matches',
-  },
-  {
-    id: '2',
-    title: 'Naukri Discovery Synced',
-    description: 'Discovered high-priority Data Engineer roles.',
-    time: '15m ago',
-    type: 'discovery',
-    read: false,
-    tabLink: 'discovery',
-  },
-  {
-    id: '3',
-    title: 'Stealth Guard Active',
-    description: 'Browser fingerprint randomized and human delays enabled.',
-    time: '1h ago',
-    type: 'security',
-    read: true,
-    tabLink: 'connections',
-  },
-  {
-    id: '4',
-    title: 'Safe Automation Pipeline',
-    description: 'Zero unresolved CAPTCHA/OTP challenges. All systems nominal.',
-    time: '2h ago',
-    type: 'automation',
-    read: true,
-    tabLink: 'live_console',
-  },
-];
+// No made-up notifications: the list starts empty and only holds real events.
+const DEFAULT_NOTIFICATIONS: NotificationItem[] = [];
 
 export const Navbar: React.FC<NavbarProps> = ({
   user,
@@ -328,7 +292,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         {!n.read && (
                           <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400 ring-2 ring-white dark:ring-slate-900"></span>
                         )}
-                        <button
+                        <button aria-label="Close"
                           onClick={(e) => removeNotification(e, n.id)}
                           className="text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
                           title="Dismiss notification"

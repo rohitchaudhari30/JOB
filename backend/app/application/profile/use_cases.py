@@ -44,11 +44,70 @@ class UpdateProfileUseCase:
                 user_id=user_id,
             )
 
+        list_keys = ("experiences", "educations", "skills")
         for key, value in data.items():
-            if hasattr(profile, key) and key not in ("id", "user_id", "experiences", "educations", "skills"):
+            if hasattr(profile, key) and key not in ("id", "user_id", *list_keys):
                 setattr(profile, key, value)
 
-        return await self._profile_repo.save_profile(profile)
+        saved = await self._profile_repo.save_profile(profile)
+
+        # Replace each list only when the caller actually sent it.
+        if data.get("skills") is not None:
+            await self._replace_skills(saved, data["skills"])
+        if data.get("experiences") is not None:
+            await self._replace_experiences(saved, data["experiences"])
+        if data.get("educations") is not None:
+            await self._replace_educations(saved, data["educations"])
+
+        return await self._profile_repo.get_by_user_id(user_id)
+
+    async def _replace_skills(self, profile: CandidateProfile, items: List[Dict[str, Any]]) -> None:
+        skills = [
+            CandidateSkill(
+                id=str(uuid.uuid4()),
+                profile_id=profile.id,
+                skill_name=item["skill_name"],
+                years_experience=float(item.get("years_experience") or 0.0),
+                is_primary=bool(item.get("is_primary", False)),
+            )
+            for item in items
+        ]
+        await self._profile_repo.sync_skills(profile.id, skills)
+
+    async def _replace_experiences(self, profile: CandidateProfile, items: List[Dict[str, Any]]) -> None:
+        for old in list(profile.experiences):
+            await self._profile_repo.delete_experience(old.id, profile.id)
+        for item in items:
+            await self._profile_repo.add_experience(
+                Experience(
+                    id=str(uuid.uuid4()),
+                    profile_id=profile.id,
+                    company_name=item["company_name"],
+                    title=item["title"],
+                    location=item.get("location"),
+                    start_date=item.get("start_date"),
+                    end_date=item.get("end_date"),
+                    is_current=item.get("is_current", False),
+                    description=item.get("description"),
+                )
+            )
+
+    async def _replace_educations(self, profile: CandidateProfile, items: List[Dict[str, Any]]) -> None:
+        for old in list(profile.educations):
+            await self._profile_repo.delete_education(old.id, profile.id)
+        for item in items:
+            await self._profile_repo.add_education(
+                Education(
+                    id=str(uuid.uuid4()),
+                    profile_id=profile.id,
+                    institution=item["institution"],
+                    degree=item["degree"],
+                    field_of_study=item.get("field_of_study"),
+                    start_year=item.get("start_year"),
+                    end_year=item.get("end_year"),
+                    grade=item.get("grade"),
+                )
+            )
 
 
 class AddExperienceUseCase:
