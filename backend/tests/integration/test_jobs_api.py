@@ -13,7 +13,7 @@ class MockNaukriSourceAdapter(BaseJobSourceAdapter):
     async def health_check(self, context) -> bool:
         return True
 
-    async def search_jobs(self, context, filters: SearchQueryFilter):
+    async def search_jobs(self, context, filters: SearchQueryFilter, **kwargs):
         # Emits 2 mocked jobs (one of which will be repeated to test deduplication)
         yield Job(
             id="job_mock_1",
@@ -139,7 +139,7 @@ class MockLinkedInSourceAdapter(BaseJobSourceAdapter):
     async def health_check(self, context) -> bool:
         return True
 
-    async def search_jobs(self, context, filters: SearchQueryFilter):
+    async def search_jobs(self, context, filters: SearchQueryFilter, **kwargs):
         # Emits a cross-posted job that has different external_job_id but identical company, title, location, description
         yield Job(
             id="job_mock_linkedin_1",

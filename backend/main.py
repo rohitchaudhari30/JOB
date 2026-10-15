@@ -26,9 +26,12 @@ from app.core.config import settings
 from app.core.database import init_db, reconcile_orphaned_runs
 from app.core.exceptions import PlatformException
 from app.core.logging import logger, setup_logging
+from app.infrastructure.bootstrap import register_infrastructure
 from app.infrastructure.browser.browser_manager import browser_manager
 from app.workers.scheduler_worker import restore_saved_schedules, scheduler_worker
 
+
+register_infrastructure()
 
 
 def ensure_single_worker_process() -> None:

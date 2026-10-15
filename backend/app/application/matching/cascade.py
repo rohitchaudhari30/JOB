@@ -18,7 +18,7 @@ from app.domain.matching.entities import (
 )
 from app.domain.profile.entities import CandidateProfile, Resume
 from app.application.matching.recommendation import RecommendationEngine
-from app.infrastructure.ai.embedding_service import default_embedding_service
+from app.application.runtime import default_embedding_service
 
 logger = logging.getLogger("app.matching.cascade")
 

@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict, List, Optional
 import uuid
 from app.application.notifier import ws_manager
+from app.application.runtime import persistence
 from app.application.applications.application_orchestrator import ApplicationOrchestrator
 from app.application.applications.commands import ApplicationSource, QueueApplicationCommand
 from app.application.applications.use_cases import CreateApplicationUseCase, ExecuteApplicationUseCase
@@ -297,26 +298,17 @@ class AutomationOrchestrator:
         session.transition_to(AutomationState.STARTING)
         session.transition_to(AutomationState.RUNNING)
 
-        # Persist AutomationRunModel to database to satisfy foreign key for events and enable historical rehydration
-        from app.core.database import AsyncSessionLocal
-        from app.infrastructure.database.models.models import AutomationRunModel
-
+        # The run row must exist before events can point at it, and history is rebuilt from it.
         async def _persist_run_initial():
-            async with AsyncSessionLocal() as db_sess:
-                existing = await db_sess.get(AutomationRunModel, run_id)
-                if not existing:
-                    run_m = AutomationRunModel(
-                        id=run_id,
-                        user_id=user_id,
-                        status=session.status.value,
-                        source_type=source_type,
-                        target_count=max_applications,
-                        worker_id=worker_id or "worker-1",
-                        started_at=session.created_at,
-                        last_event_seq=0,
-                    )
-                    db_sess.add(run_m)
-                    await db_sess.commit()
+            await persistence.persist_run_start(
+                run_id=run_id,
+                user_id=user_id,
+                status=session.status.value,
+                source_type=source_type,
+                target_count=max_applications,
+                worker_id=worker_id or "worker-1",
+                started_at=session.created_at,
+            )
 
         try:
             await _persist_run_initial()
@@ -435,34 +427,7 @@ class AutomationOrchestrator:
 
         try:
             if job_repo is None or hasattr(job_repo, "_session"):
-                from app.core.database import AsyncSessionLocal
-                from app.infrastructure.ai.gateway import MultiTierAIGateway
-                from app.infrastructure.database.repositories.application_repository import SqlAlchemyApplicationRepository
-                from app.infrastructure.database.repositories.job_repository import (
-                    SqlAlchemyJobRepository,
-                    SqlAlchemyJobSourceRepository,
-                )
-                from app.infrastructure.database.repositories.matching_repository import SqlAlchemyMatchResultRepository
-                from app.infrastructure.database.repositories.profile_repository import (
-                    SqlAlchemyProfileRepository,
-                    SqlAlchemyResumeRepository,
-                )
-                from app.infrastructure.database.repositories.user_repository import SqlAlchemyUserRepository
-                from app.infrastructure.database.repositories.connection_repository import SqlAlchemyBrowserSessionRepository
-                from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyQuotaReservationRepository
-
-                async with AsyncSessionLocal() as db_session:
-                    j_repo = SqlAlchemyJobRepository(db_session)
-                    s_repo = SqlAlchemyJobSourceRepository(db_session)
-                    p_repo = SqlAlchemyProfileRepository(db_session)
-                    r_repo = SqlAlchemyResumeRepository(db_session)
-                    m_repo = SqlAlchemyMatchResultRepository(db_session)
-                    a_repo = SqlAlchemyApplicationRepository(db_session, commit_each_write=True)
-                    u_repo = SqlAlchemyUserRepository(db_session)
-                    sess_repo = SqlAlchemyBrowserSessionRepository(db_session)
-                    ai_gw = MultiTierAIGateway(session=db_session)
-                    q_repo = SqlAlchemyQuotaReservationRepository(db_session)
-
+                async with persistence.open_pipeline_repositories() as repos:
                     await self._run_pipeline_core(
                         session=session,
                         source_type=source_type,
@@ -472,19 +437,18 @@ class AutomationOrchestrator:
                         match_rule=match_rule,
                         auto_apply_matches=auto_apply_matches,
                         max_applications=max_applications,
-                        job_repo=j_repo,
-                        source_repo=s_repo,
-                        profile_repo=p_repo,
-                        resume_repo=r_repo,
-                        match_repo=m_repo,
-                        app_repo=a_repo,
-                        user_repo=u_repo,
-                        session_repo=sess_repo,
-                        ai_gateway=ai_gw,
+                        job_repo=repos.job_repo,
+                        source_repo=repos.source_repo,
+                        profile_repo=repos.profile_repo,
+                        resume_repo=repos.resume_repo,
+                        match_repo=repos.match_repo,
+                        app_repo=repos.app_repo,
+                        user_repo=repos.user_repo,
+                        session_repo=repos.session_repo,
+                        ai_gateway=repos.ai_gateway,
                         headless=headless,
-                        quota_repo=q_repo,
+                        quota_repo=repos.quota_repo,
                     )
-                    await db_session.commit()
             else:
                 await self._run_pipeline_core(
                     session=session,
@@ -534,9 +498,6 @@ class AutomationOrchestrator:
                 heartbeat_task.cancel()
             if session.execution_id:
                 try:
-                    from app.core.database import AsyncSessionLocal
-                    from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyCampaignExecutionRepository
-
                     async def _sync_final_state(repo):
                         exec_model = await repo.get_by_id(session.execution_id)
                         if exec_model:
@@ -576,10 +537,8 @@ class AutomationOrchestrator:
                     if execution_repo:
                         await _sync_final_state(execution_repo)
                     else:
-                        async with AsyncSessionLocal() as db_session:
-                            await _sync_final_state(SqlAlchemyCampaignExecutionRepository(db_session))
-                            # Repositories only flush, so commit or the final state is lost.
-                            await db_session.commit()
+                        async with persistence.open_execution_repository() as repo:
+                            await _sync_final_state(repo)
                 except Exception as sync_err:
                     logger.error(
                         f"Failed to synchronize final execution state for [{session.execution_id}]: {sync_err}",
@@ -596,9 +555,6 @@ class AutomationOrchestrator:
         interval_seconds: int = 30,
         execution_repo: Optional[Any] = None,
     ):
-        from app.core.database import AsyncSessionLocal
-        from app.infrastructure.database.repositories.campaign_repository import SqlAlchemyCampaignExecutionRepository
-
         while not session.cancel_requested:
             try:
                 await asyncio.sleep(interval_seconds)
@@ -611,20 +567,13 @@ class AutomationOrchestrator:
                             lease_version=getattr(session, "lease_version", None),
                         )
                     else:
-                        async with AsyncSessionLocal() as db_session:
-                            exec_repo = SqlAlchemyCampaignExecutionRepository(db_session)
-                            await exec_repo.record_heartbeat(
-                                execution_id=session.execution_id,
-                                worker_id=session.worker_id or "worker-1",
-                                lease_seconds=300,
-                                lease_version=getattr(session, "lease_version", None),
-                            )
-                            # Also update AutomationRunModel.last_heartbeat_at
-                            from app.infrastructure.database.models.models import AutomationRunModel
-                            run_m = await db_session.get(AutomationRunModel, session.run_id)
-                            if run_m:
-                                run_m.last_heartbeat_at = datetime.now(timezone.utc)
-                                await db_session.commit()
+                        await persistence.record_heartbeat(
+                            run_id=session.run_id,
+                            execution_id=session.execution_id,
+                            worker_id=session.worker_id or "worker-1",
+                            lease_seconds=300,
+                            lease_version=getattr(session, "lease_version", None),
+                        )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -1001,89 +950,46 @@ class AutomationOrchestrator:
         async with self.run_lock(session.run_id):
             for attempt in range(5):
                 try:
-                    from app.core.database import AsyncSessionLocal
-                    from app.infrastructure.database.models.models import AutomationEventModel, AutomationRunModel
-                    from sqlalchemy import select, func
+                    snapshot = {
+                        "run_id": session.run_id,
+                        "user_id": session.user_id,
+                        "status": session.status.value,
+                        "worker_id": session.worker_id or "worker-1",
+                        "created_at": session.created_at,
+                        "discovered": session.discovered_jobs_count,
+                        "matched": session.matched_jobs_count,
+                        "applied": session.applications_submitted_count,
+                        "failed": session.failed_applications_count,
+                        "current_job_title": session.current_job_title,
+                        "error_message": session.error_message,
+                        "completed_at": session.completed_at,
+                        "active_state": session.active_state,
+                        "is_finished": session.status
+                        in (AutomationState.COMPLETED, AutomationState.ABORTED, AutomationState.FAILED),
+                    }
+                    saved = await persistence.append_run_event(snapshot, event_name, message, payload or {})
+                    current_seq = saved["seq"]
+                    event_id = saved["event_id"]
+                    # Update in-memory sequence ONLY after successful database commit
+                    session._event_seq = current_seq
 
-                    async with AsyncSessionLocal() as db_sess:
-                        # 1. Fetch or create parent run
-                        run_m = await db_sess.get(AutomationRunModel, session.run_id)
-                        if not run_m:
-                            run_m = AutomationRunModel(
-                                id=session.run_id,
-                                user_id=session.user_id,
-                                status=session.status.value,
-                                worker_id=session.worker_id or "worker-1",
-                                started_at=session.created_at,
-                                last_event_seq=0,
-                            )
-                            db_sess.add(run_m)
-                            await db_sess.flush()
-
-                        # 2. Check maximum existing seq in database to guarantee strictly monotonic allocation
-                        max_seq_res = await db_sess.execute(
-                            select(func.max(AutomationEventModel.seq)).where(AutomationEventModel.run_id == session.run_id)
-                        )
-                        db_max_seq = max_seq_res.scalar() or 0
-                        current_seq = max(run_m.last_event_seq or 0, db_max_seq) + 1
-                        
-                        run_m.last_event_seq = current_seq
-                        event_id = f"{session.run_id}_evt_{current_seq}"
-
-                        # 3. Synchronize run counters and state atomically with the event
-                        run_m.status = session.status.value
-                        run_m.discovered_count = session.discovered_jobs_count
-                        run_m.matched_count = session.matched_jobs_count
-                        run_m.applied_count = session.applications_submitted_count
-                        run_m.failed_count = session.failed_applications_count
-                        run_m.current_job_title = session.current_job_title
-                        run_m.last_heartbeat_at = datetime.now(timezone.utc)
-                        if session.error_message:
-                            run_m.error_message = session.error_message
-                        if session.status in (AutomationState.COMPLETED, AutomationState.ABORTED, AutomationState.FAILED):
-                            run_m.finished_at = session.completed_at or datetime.now(timezone.utc)
-
-                        # 4. Insert timeline event
-                        evt_model = AutomationEventModel(
-                            id=event_id,
-                            run_id=session.run_id,
-                            seq=current_seq,
-                            event_name=event_name,
-                            payload={
-                                "seq": current_seq,
-                                "message": message,
-                                "state": session.active_state,
-                                "stats": {
-                                    "discovered": session.discovered_jobs_count,
-                                    "matched": session.matched_jobs_count,
-                                    "applied": session.applications_submitted_count,
-                                },
-                                **(payload or {}),
-                            },
-                        )
-                        db_sess.add(evt_model)
-                        await db_sess.commit()
-
-                        # Update in-memory sequence ONLY after successful database commit
-                        session._event_seq = current_seq
-
-                        event_dict = {
-                            "type": "AUTOMATION_TIMELINE_EVENT",
-                            "id": event_id,
-                            "seq": current_seq,
-                            "run_id": session.run_id,
-                            "event_name": event_name,
-                            "state": session.active_state,
-                            "message": message,
-                            "stats": {
-                                "discovered": session.discovered_jobs_count,
-                                "matched": session.matched_jobs_count,
-                                "applied": session.applications_submitted_count,
-                            },
-                            "payload": payload or {},
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        }
-                        break  # Success
+                    event_dict = {
+                        "type": "AUTOMATION_TIMELINE_EVENT",
+                        "id": event_id,
+                        "seq": current_seq,
+                        "run_id": session.run_id,
+                        "event_name": event_name,
+                        "state": session.active_state,
+                        "message": message,
+                        "stats": {
+                            "discovered": session.discovered_jobs_count,
+                            "matched": session.matched_jobs_count,
+                            "applied": session.applications_submitted_count,
+                        },
+                        "payload": payload or {},
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    break  # Success
                 except Exception as persist_err:
                     err_str = str(persist_err).lower()
                     is_retryable = any(kw in err_str for kw in ("locked", "busy", "unique constraint", "integrityerror"))

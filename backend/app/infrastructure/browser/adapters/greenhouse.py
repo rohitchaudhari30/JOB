@@ -20,7 +20,7 @@ class GreenhouseAdapter(BaseJobSourceAdapter):
     async def health_check(self, context: BrowserContext) -> bool:
         return True  # Direct public ATS board
 
-    async def search_jobs(self, context: BrowserContext, filters: SearchQueryFilter) -> AsyncGenerator[Job, None]:
+    async def search_jobs(self, context: BrowserContext, filters: SearchQueryFilter, **kwargs) -> AsyncGenerator[Job, None]:
         page: Optional[Page] = None
         try:
             page = await context.new_page()

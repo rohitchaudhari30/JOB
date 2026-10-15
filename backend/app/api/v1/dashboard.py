@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.application.dashboard.dashboard_service import DashboardService
+from app.infrastructure.database.read_models.dashboard_queries import DashboardService
 from app.core.database import get_db_session
 from app.domain.auth.entities import User
 

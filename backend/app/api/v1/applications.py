@@ -523,7 +523,7 @@ async def reconcile_application(
 
 async def _execute_in_background(application_id: str) -> None:
     """Runs the browser flow on its own database session, after the request has returned."""
-    from app.application.applications.factory import build_execute_application_use_case
+    from app.infrastructure.execution_factory import build_execute_application_use_case
     from app.core import database
 
     async with database.AsyncSessionLocal() as session:

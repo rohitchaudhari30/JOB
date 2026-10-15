@@ -159,7 +159,7 @@ async def get_execute_application_use_case(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     """Builds the apply use case through the shared factory so every route behaves the same (AUT-13)."""
-    from app.application.applications.factory import build_execute_application_use_case
+    from app.infrastructure.execution_factory import build_execute_application_use_case
 
     return build_execute_application_use_case(session)
 

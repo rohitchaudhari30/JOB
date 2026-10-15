@@ -4,8 +4,7 @@ from typing import Any, Dict, List, Optional
 from app.core.exceptions import EntityNotFoundException
 from app.domain.jobs.entities import Job, JobSource, SearchQueryFilter
 from app.domain.jobs.repositories import JobRepository, JobSourceRepository
-from app.infrastructure.browser.adapters.registry import adapter_registry
-from app.infrastructure.browser.browser_manager import browser_manager
+from app.application.runtime import adapter_registry, browser_manager
 
 logger = logging.getLogger("app.application.jobs")
 
@@ -66,12 +65,7 @@ class DiscoverJobsUseCase:
 
         try:
             logger.info(f"Starting job discovery on [{source_type}] for user [{user_id}]...")
-            import inspect
-            sig = inspect.signature(adapter.search_jobs)
-            if "user_id" in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
-                job_stream = adapter.search_jobs(context, filters, user_id=user_id, run_id=run_id)
-            else:
-                job_stream = adapter.search_jobs(context, filters)
+            job_stream = adapter.search_jobs(context, filters, user_id=user_id, run_id=run_id)
 
             async for raw_job in job_stream:
                 if run_id:

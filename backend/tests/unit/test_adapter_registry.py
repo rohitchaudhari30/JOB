@@ -13,7 +13,7 @@ class DummySourceAdapter(BaseJobSourceAdapter):
     async def health_check(self, context) -> bool:
         return True
 
-    async def search_jobs(self, context, filters: SearchQueryFilter):
+    async def search_jobs(self, context, filters: SearchQueryFilter, **kwargs):
         yield Job(
             id="job_1",
             source_id="dummy_source",

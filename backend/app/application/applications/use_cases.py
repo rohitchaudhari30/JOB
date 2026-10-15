@@ -33,11 +33,14 @@ from app.domain.applications.entities import (
 from app.domain.applications.repositories import ApplicationRepository
 from app.domain.jobs.repositories import JobRepository
 from app.domain.profile.repositories import CandidateProfileRepository, ResumeRepository
-from app.infrastructure.browser.browser_manager import browser_manager
-from app.infrastructure.browser.dom_analyzer import DOMAnalyzer
-from app.infrastructure.browser.form_engine import FormEngine
-from app.infrastructure.browser.screenshot_streamer import ScreenshotStreamer
-from app.infrastructure.browser.trace_manager import trace_manager
+from app.application.runtime import (
+    adapter_registry,
+    browser_manager,
+    new_dom_analyzer,
+    new_form_engine,
+    new_screenshot_streamer,
+    trace_manager,
+)
 
 logger = logging.getLogger("app.application.applications")
 
@@ -109,8 +112,8 @@ class ExecuteApplicationUseCase:
         resume_repo: ResumeRepository,
         user_repo: Optional[Any] = None,
         session_repo: Optional[Any] = None,
-        dom_analyzer: Optional[DOMAnalyzer] = None,
-        form_engine: Optional[FormEngine] = None,
+        dom_analyzer: Optional[Any] = None,
+        form_engine: Optional[Any] = None,
         ai_provider: Optional[AIProvider] = None,
     ):
         self._app_repo = app_repo
@@ -119,8 +122,8 @@ class ExecuteApplicationUseCase:
         self._resume_repo = resume_repo
         self._user_repo = user_repo
         self._session_repo = session_repo
-        self._dom_analyzer = dom_analyzer or DOMAnalyzer()
-        self._form_engine = form_engine or FormEngine()
+        self._dom_analyzer = dom_analyzer or new_dom_analyzer()
+        self._form_engine = form_engine or new_form_engine()
         self._ai_provider = ai_provider
 
     async def execute(self, application_id: str, run_id: Optional[str] = None, headless: bool = True) -> Application:
@@ -202,20 +205,15 @@ class ExecuteApplicationUseCase:
 
         try:
             # 1. Acquire isolated browser context (with authenticated session if available)
-            try:
-                context = await browser_manager.create_isolated_context(
-                    encrypted_storage_state=encrypted_storage_state,
-                    headless=headless,
-                )
-            except TypeError:
-                context = await browser_manager.create_isolated_context(
-                    encrypted_storage_state=encrypted_storage_state,
-                )
+            context = await browser_manager.create_isolated_context(
+                encrypted_storage_state=encrypted_storage_state,
+                headless=headless,
+            )
             await trace_manager.start_tracing(context)
 
             pages = getattr(context, "pages", None)
             page = pages[0] if (isinstance(pages, list) and len(pages) > 0) else await context.new_page()
-            streamer = ScreenshotStreamer(page=page, user_id=app.user_id, run_id=run_id, fps=5)
+            streamer = new_screenshot_streamer(page=page, user_id=app.user_id, run_id=run_id, fps=5)
             streamer.start()
 
             # 2. Navigate to Application URL
@@ -626,7 +624,6 @@ class ExecuteApplicationUseCase:
         # 1. Platform-specific confirmation check via adapter registry (if platform specified)
         if platform:
             try:
-                from app.infrastructure.browser.adapters.registry import adapter_registry
                 app_adapter = adapter_registry.get_application_adapter(platform)
                 if hasattr(app_adapter, "verify_submission"):
                     adapter_res = await app_adapter.verify_submission(page, original_url)
