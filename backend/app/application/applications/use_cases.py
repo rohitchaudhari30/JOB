@@ -1032,7 +1032,9 @@ class ResumeApplicationUseCase:
             WorkflowStateEnum.QUESTIONS_PENDING,
         ]:
             raise InvalidStateTransitionException(
-                f"Cannot resume application currently in [{app.workflow_state.value}] state."
+                app.workflow_state.value,
+                WorkflowStateEnum.APPROVED.value,
+                "only a paused application can be resumed",
             )
 
         app.workflow_state = WorkflowStateEnum.APPROVED

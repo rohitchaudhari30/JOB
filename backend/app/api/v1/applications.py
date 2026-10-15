@@ -30,6 +30,7 @@ from app.application.applications.dtos import (
     StopApplicationDTO,
     TakeControlDTO,
 )
+from app.application.applications.deferred import DeferredExecuteUseCase
 from app.application.applications.use_cases import (
     ApproveApplicationUseCase,
     CreateApplicationUseCase,
@@ -455,14 +456,19 @@ async def resume_application(
     resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
     execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
+    response: Response,
+    wait: bool = Query(False, description="true = run the browser flow inside this request"),
 ):
+    """Starts the browser flow in the background (202) unless wait=true."""
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = execute_application_uc
+    execute_use_case = _build_executor(app_repo, execute_application_uc, wait)
     use_case = ResumeApplicationUseCase(app_repo=app_repo, execute_use_case=execute_use_case)
     app = await use_case.execute(
         application_id=application_id,
         user_input=req.user_input,
     )
+    if getattr(execute_use_case, "scheduled", False):
+        response.status_code = status.HTTP_202_ACCEPTED
     return _to_response_dto(app)
 
 
@@ -492,9 +498,12 @@ async def reconcile_application(
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
     execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
+    response: Response,
+    wait: bool = Query(False, description="true = run a retry inside this request"),
 ):
+    """A retry starts in the background (202) unless wait=true. Other actions finish immediately."""
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = execute_application_uc
+    execute_use_case = _build_executor(app_repo, execute_application_uc, wait)
     use_case = ReconcileApplicationUseCase(
         app_repo=app_repo,
         execute_use_case=execute_use_case,
@@ -512,6 +521,8 @@ async def reconcile_application(
             user_id=current_user.id,
             is_admin=is_admin,
         )
+        if getattr(execute_use_case, "scheduled", False):
+            response.status_code = status.HTTP_202_ACCEPTED
         return _to_response_dto(app)
     except AuthorizationException:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unauthorized access to this application record.")
@@ -534,6 +545,21 @@ async def _execute_in_background(application_id: str) -> None:
         except Exception:
             await session.rollback()
             logger.exception("Background execution failed for application %s", application_id)
+
+
+def _build_executor(
+    app_repo: SqlAlchemyApplicationRepository,
+    real_use_case: ExecuteApplicationUseCase,
+    wait: bool,
+):
+    """Real use case when the caller asked to wait, otherwise one that starts the run in the background."""
+    if wait:
+        return real_use_case
+
+    def _start(application_id: str) -> None:
+        spawn(_execute_in_background(application_id), name=f"execute-{application_id}")
+
+    return DeferredExecuteUseCase(app_repo=app_repo, commit=app_repo._session.commit, start_in_background=_start)
 
 
 @router.post("/{application_id}/execute", response_model=ApplicationResponseDTO)
