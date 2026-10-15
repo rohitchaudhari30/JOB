@@ -15,7 +15,6 @@ import {
   Globe,
   Plus,
   X,
-  Calendar,
   Pause,
   Square,
   Activity,
@@ -23,6 +22,14 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { SafetyScheduleTab } from './campaigns/SafetyScheduleTab';
+import {
+  DEFAULT_SAFETY,
+  SafetySettings,
+  applyCampaignToSafety,
+  toSafetyPolicyPayload,
+  toSchedulePayload,
+} from './campaigns/safetySettings';
 import { ActivityStream } from './campaigns/ActivityStream';
 import { NewCampaignModal } from './campaigns/NewCampaignModal';
 import { CandidateProfile, Resume, PlatformConnectionInfo, Campaign, CampaignPacingStatus, CampaignActivityLog } from '../types';
@@ -63,8 +70,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
 
   // Autonomous Campaign Schedule Cadence
-  const [schedulePreset, setSchedulePreset] = useState<'manual' | '3hours' | 'morning' | 'evening' | 'custom'>('3hours');
-  const [scheduleIntervalMins, setScheduleIntervalMins] = useState(180);
+  const [safety, setSafety] = useState<SafetySettings>(DEFAULT_SAFETY);
 
   // Autonomous Campaign Engine State
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -77,11 +83,6 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
   const [campaignActionLoading, setCampaignActionLoading] = useState(false);
 
   // Safety Policy State
-  const [dailyLimit, setDailyLimit] = useState(20);
-  const [hourlyLimit, setHourlyLimit] = useState(5);
-  const [cooldownSecs, setCooldownSecs] = useState(90);
-  const [operatingStart, setOperatingStart] = useState('09:00');
-  const [operatingEnd, setOperatingEnd] = useState('18:00');
 
   // Rule State
   const [autoApplyThreshold, setAutoApplyThreshold] = useState(80);
@@ -138,27 +139,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
         setSelectedSources(camp.rule.target_platforms);
       }
     }
-    if (camp.safety_policy) {
-      setDailyLimit(camp.safety_policy.daily_application_limit || 20);
-      setHourlyLimit(camp.safety_policy.hourly_application_limit || 5);
-      setCooldownSecs(camp.safety_policy.cooldown_seconds || 90);
-      setOperatingStart(camp.safety_policy.operating_start_time || '09:00');
-      setOperatingEnd(camp.safety_policy.operating_end_time || '18:00');
-    }
-    if (camp.schedule) {
-      if (!camp.schedule.is_active) {
-        setSchedulePreset('manual');
-      } else if (camp.schedule.cron_expression === '0 9 * * 1-5') {
-        setSchedulePreset('morning');
-      } else if (camp.schedule.cron_expression === '0 19 * * *') {
-        setSchedulePreset('evening');
-      } else if (camp.schedule.interval_minutes === 180) {
-        setSchedulePreset('3hours');
-      } else if (camp.schedule.interval_minutes) {
-        setSchedulePreset('custom');
-        setScheduleIntervalMins(camp.schedule.interval_minutes);
-      }
-    }
+    setSafety((prev) => applyCampaignToSafety(prev, camp));
     loadCampaignPacingAndLogs(camp.id);
   };
 
@@ -262,18 +243,8 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
           mandatory_skills: mandatorySkillsInput.split(',').map((s) => s.trim()).filter(Boolean),
           target_platforms: selectedSources,
         },
-        safety_policy: {
-          daily_application_limit: dailyLimit,
-          hourly_application_limit: hourlyLimit,
-          cooldown_seconds: cooldownSecs,
-          operating_start_time: operatingStart,
-          operating_end_time: operatingEnd,
-        },
-        schedule: {
-          is_active: schedulePreset !== 'manual',
-          interval_minutes: schedulePreset === '3hours' ? 180 : schedulePreset === 'custom' ? scheduleIntervalMins : undefined,
-          cron_expression: schedulePreset === 'morning' ? '0 9 * * 1-5' : schedulePreset === 'evening' ? '0 19 * * *' : undefined,
-        },
+        safety_policy: toSafetyPolicyPayload(safety),
+        schedule: toSchedulePayload(safety),
       });
       showSuccess(`Campaign "${created.name}" created!`, 'Campaign Initialized');
       setCampaigns([created, ...campaigns]);
@@ -302,18 +273,8 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
           mandatory_skills: mandatorySkillsInput.split(',').map((s) => s.trim()).filter(Boolean),
           target_platforms: selectedSources,
         },
-        safety_policy: {
-          daily_application_limit: dailyLimit,
-          hourly_application_limit: hourlyLimit,
-          cooldown_seconds: cooldownSecs,
-          operating_start_time: operatingStart,
-          operating_end_time: operatingEnd,
-        },
-        schedule: {
-          is_active: schedulePreset !== 'manual',
-          interval_minutes: schedulePreset === '3hours' ? 180 : schedulePreset === 'custom' ? scheduleIntervalMins : undefined,
-          cron_expression: schedulePreset === 'morning' ? '0 9 * * 1-5' : schedulePreset === 'evening' ? '0 19 * * *' : undefined,
-        },
+        safety_policy: toSafetyPolicyPayload(safety),
+        schedule: toSchedulePayload(safety),
         target_resume_id: selectedResumeId || undefined,
       });
       showSuccess('Campaign schedule, rules, and safety limits persisted!', 'Campaign Saved');
@@ -689,10 +650,10 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
 
             <div className="text-xs font-medium text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60">
-                Operating Window: <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">{operatingStart} - {operatingEnd}</strong>
+                Operating Window: <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">{safety.operatingStart} - {safety.operatingEnd}</strong>
               </span>
               <span className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60">
-                Pacing Delay: <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">{cooldownSecs}s</strong>
+                Pacing Delay: <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">{safety.cooldownSecs}s</strong>
               </span>
             </div>
           </div>
@@ -733,22 +694,22 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                 </div>
                 <div className="flex items-baseline justify-between mb-2">
                   <span className="text-base font-black text-slate-900 dark:text-white">
-                    {pacingStatus?.today_count ?? 0} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">/ {dailyLimit} applications</span>
+                    {pacingStatus?.today_count ?? 0} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">/ {safety.dailyLimit} applications</span>
                   </span>
                   <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 font-mono">
-                    {Math.round(((pacingStatus?.today_count ?? 0) / (dailyLimit || 1)) * 100)}%
+                    {Math.round(((pacingStatus?.today_count ?? 0) / (safety.dailyLimit || 1)) * 100)}%
                   </span>
                 </div>
                 {/* Progress bar */}
                 <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                   <div
                     className="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.round(((pacingStatus?.today_count ?? 0) / (dailyLimit || 1)) * 100))}%` }}
+                    style={{ width: `${Math.min(100, Math.round(((pacingStatus?.today_count ?? 0) / (safety.dailyLimit || 1)) * 100))}%` }}
                   />
                 </div>
               </div>
               <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px] text-slate-500 dark:text-slate-400">
-                Hourly velocity: <strong className="text-slate-800 dark:text-slate-200 font-bold">{pacingStatus?.hourly_count ?? 0}/{hourlyLimit}</strong> max
+                Hourly velocity: <strong className="text-slate-800 dark:text-slate-200 font-bold">{pacingStatus?.hourly_count ?? 0}/{safety.hourlyLimit}</strong> max
               </div>
             </div>
 
@@ -1220,221 +1181,12 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
 
       {/* Schedule & Safety Policy Tab Body */}
       {activeCampaignTab === 'safety' && (
-        <div className="space-y-6">
-          <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="flex items-center space-x-2.5">
-                <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <div>
-                  <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                    Schedule &amp; Safety Policy Configuration
-                  </h2>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Recurring execution cadence, account protection, cooldown intervals, velocity limits, and daily operating windows
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleSaveCampaignConfig}
-                disabled={campaignActionLoading}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>Save Schedule &amp; Safety Policy</span>
-              </button>
-            </div>
-
-            {/* Recurring Execution Cadence (Background Autopilot) */}
-            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-                    <Clock className="w-4 h-4 text-indigo-500" />
-                    <span>Recurring Execution Cadence (Background Autopilot)</span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Choose how frequently the autonomous worker wakes up to discover matching jobs and submit applications.
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  {schedulePreset === 'manual' ? 'Manual Only' : 'Autopilot Active'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1">
-                {[
-                  { id: 'manual', label: 'Manual Only', desc: 'Trigger on-demand' },
-                  { id: '3hours', label: 'Every 3 Hours', desc: 'Continuous stream (Recommended)' },
-                  { id: 'morning', label: 'Weekdays 9 AM', desc: 'Recruiter morning peak' },
-                  { id: 'evening', label: 'Daily 7 PM', desc: 'Evening sync' },
-                  { id: 'custom', label: 'Custom Interval', desc: 'User-defined frequency' },
-                ].map((preset) => {
-                  const active = schedulePreset === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => setSchedulePreset(preset.id as any)}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                        active
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-600/25'
-                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
-                      }`}
-                    >
-                      <div className="text-xs font-bold">{preset.label}</div>
-                      <div className={`text-[10px] mt-1 ${active ? 'text-indigo-100' : 'text-slate-400'}`}>
-                        {preset.desc}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {schedulePreset === 'custom' && (
-                <div className="pt-2 flex items-center space-x-3">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Run Every (minutes):
-                  </label>
-                  <input
-                    type="number"
-                    min="30"
-                    max="1440"
-                    step="15"
-                    value={scheduleIntervalMins}
-                    onChange={(e) => setScheduleIntervalMins(Math.max(15, Number(e.target.value)))}
-                    className="w-32 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                  <span className="text-[11px] text-slate-500">
-                    ({Math.round(scheduleIntervalMins / 60 * 10) / 10} hours)
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Daily Limit */}
-              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                    <span>Daily Application Limit</span>
-                  </label>
-                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
-                    {dailyLimit} apps / day
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={dailyLimit}
-                  onChange={(e) => setDailyLimit(Number(e.target.value))}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Maximum total submissions allowed per 24 hours across all job boards to keep recruiter standing natural.
-                </p>
-              </div>
-
-              {/* Hourly Velocity */}
-              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
-                    <Activity className="w-4 h-4 text-indigo-500" />
-                    <span>Hourly Velocity Cap</span>
-                  </label>
-                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
-                    {hourlyLimit} apps / hour
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={hourlyLimit}
-                  onChange={(e) => setHourlyLimit(Number(e.target.value))}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Prevents bursts of submissions within any rolling 60-minute window.
-                </p>
-              </div>
-
-              {/* Cooldown Interval */}
-              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
-                    <Clock className="w-4 h-4 text-amber-500" />
-                    <span>Cooldown Between Applications</span>
-                  </label>
-                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
-                    {cooldownSecs} seconds ({Math.round(cooldownSecs / 60 * 10) / 10} min)
-                  </span>
-                </div>
-                <input
-                  type="number"
-                  min="30"
-                  max="600"
-                  step="15"
-                  value={cooldownSecs}
-                  onChange={(e) => setCooldownSecs(Number(e.target.value))}
-                  className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Deliberate pause between successive browser sessions for account safety and rate moderation.
-                </p>
-              </div>
-
-              {/* Operating Window */}
-              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
-                    <Calendar className="w-4 h-4 text-sky-500" />
-                    <span>Permitted Operating Window</span>
-                  </label>
-                  <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
-                    {operatingStart} - {operatingEnd}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Start Time</label>
-                    <input
-                      type="time"
-                      value={operatingStart}
-                      onChange={(e) => setOperatingStart(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">End Time</label>
-                    <input
-                      type="time"
-                      value={operatingEnd}
-                      onChange={(e) => setOperatingEnd(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Applications will only execute during these active recruiter business hours.
-                </p>
-              </div>
-            </div>
-
-            {/* Account Protection Explanatory Box */}
-            <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/60 flex items-start space-x-3">
-              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-              <div className="text-xs text-emerald-900 dark:text-emerald-300 space-y-1">
-                <div className="font-bold">Enterprise Safety &amp; Integrity Compliance</div>
-                <p className="text-[11px] text-emerald-800/80 dark:text-emerald-400/80">
-                  AutoApply.ai enforces server-side rate limits, daily caps, and operating windows to ensure high recruiter delivery rates, prevent spam flagging, and guarantee account health across job boards. CAPTCHAs and OTPs always trigger human intervention.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SafetyScheduleTab
+          settings={safety}
+          saving={campaignActionLoading}
+          onChange={(patch) => setSafety((prev) => ({ ...prev, ...patch }))}
+          onSave={handleSaveCampaignConfig}
+        />
       )}
 
       {/* Activity Stream Tab Body */}
