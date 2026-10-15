@@ -44,3 +44,10 @@ To scale to several processes later, in this order:
 | DUP-12 repeated UI pieces | Helpers moved out of the applications page; further shared components are future work. |
 | DUP-13 encryptor alias | One name: `session_encryptor`. |
 | DUP-14 start/stop buttons | Not duplicates. Kept. |
+
+## Layer rule for browsers, adapters and storage (ARC-01)
+The application layer imports nothing from `app.infrastructure`; `tests/unit/test_architecture_rules.py` enforces it.
+- Browser manager, trace manager, adapter registry, embedding service and run storage are reached through `app/application/runtime.py`.
+- `app/infrastructure/bootstrap.py` registers the real ones when the app starts.
+- Run, event and heartbeat storage lives in `SqlRunPersistence`; the dashboard and analytics queries live in `infrastructure/database/read_models/`.
+- Resume and reconcile start browser work in the background through `DeferredExecuteUseCase`; `?wait=true` runs it inside the request.
