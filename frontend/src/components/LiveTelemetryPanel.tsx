@@ -18,7 +18,6 @@ import {
   Check,
   X,
   Activity,
-  RotateCcw,
 } from 'lucide-react';
 import { TimelineEvent, AutomationRunStatus } from '../types';
 

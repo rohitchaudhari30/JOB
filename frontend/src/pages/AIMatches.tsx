@@ -13,7 +13,6 @@ import {
   XCircle,
   RefreshCw,
   Search,
-  Zap,
   BarChart3,
   Check,
   X,
@@ -73,7 +72,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   const handleApplySingle = async (jobId: string) => {
     try {
       setApplyingJobId(jobId);
-      const app = await api.createApplication(jobId, undefined, undefined, 'AI_MATCHES', false);
+      await api.createApplication(jobId, undefined, undefined, 'AI_MATCHES', false);
       showSuccess('Opportunity approved and queued for Campaign execution!');
       if (onNavigate) {
         setTimeout(() => onNavigate('applications'), 600);

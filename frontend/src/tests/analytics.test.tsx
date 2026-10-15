@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import React from 'react';
 import { Analytics } from '../pages/Analytics';
 import { ToastProvider } from '../context/ToastContext';
 import { api } from '../services/api';

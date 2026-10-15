@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Play,
   Pause,
   RotateCcw,
   Square,
@@ -15,10 +14,7 @@ import {
   CheckCircle2,
   Loader2,
   Clock,
-  Sparkles,
-  FileText,
   ExternalLink,
-  Globe,
   Lock,
 } from 'lucide-react';
 import { api } from '../services/api';

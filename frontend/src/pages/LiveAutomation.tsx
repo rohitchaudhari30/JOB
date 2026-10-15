@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Play,
   Pause,
   RotateCcw,
   Square,
@@ -10,10 +9,8 @@ import {
   Compass,
   Rocket,
   CheckCircle2,
-  Clock,
   Sparkles,
   Lock,
-  Monitor,
   Layers,
   Maximize2,
   Minimize2,
@@ -44,7 +41,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [otpModalOpen, setOtpModalOpen] = useState(false);
   const [otpValue, setOtpValue] = useState('');
-  const [sourceType, setSourceType] = useState('naukri');
+  const [sourceType] = useState('naukri');
   const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {

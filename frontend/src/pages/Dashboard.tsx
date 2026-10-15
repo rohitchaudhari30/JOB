@@ -8,27 +8,22 @@ import {
   ArrowUpRight,
   ShieldCheck,
   CheckCircle2,
-  AlertTriangle,
   AlertOctagon,
   Clock,
   Sparkles,
   RefreshCw,
-  Briefcase,
   Globe,
   FileText,
   ChevronRight,
-  Info,
   Check,
   Activity,
-  Layers,
   Send,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { EmptyState } from '../components/ui/EmptyState';
 import {
   DashboardOverview,
   DashboardTopMatch,
-  DashboardAttentionItem,
-  DashboardReadinessItem,
   AutomationRunStatus,
   Application,
 } from '../types';
@@ -599,9 +594,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
             ))}
           </div>
         ) : (
-          <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-xs rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
-            No high-confidence matches found yet. Run discovery or configure your campaign criteria to populate matches.
-          </div>
+          <EmptyState>No high-confidence matches found yet. Run discovery or configure your campaign criteria to populate matches.</EmptyState>
         )}
       </div>
 
@@ -682,9 +675,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
             ))}
           </div>
         ) : (
-          <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-dashed border-slate-200 dark:border-slate-800">
-            No applications submitted yet. Start your first campaign to begin applying automatically.
-          </div>
+          <EmptyState>No applications submitted yet. Start your first campaign to begin applying automatically.</EmptyState>
         )}
       </div>
     </div>
