@@ -462,3 +462,19 @@ Local branch `claude/phase0-quick-fixes` (not pushed). See `redesig.md` §28 for
 | IMP-016 | **Mostly done** — duplicate view toggle and dead `LiveConsoleDrawer` removed; start-path consolidation waits on Q-04 |
 | IMP-020 | **Started** — Button, StatusChip, Modal/Drawer, ConfirmDialog built and tested; page migration pending |
 | IMP-014 | **Not done** — navigation-level merge only (see `redesig.md` §28.1) |
+
+### Appendix C — update (third pass, local, not pushed)
+
+| ID | Status now |
+|---|---|
+| IMP-006 | **Done and verified with axe** (labels, contrast, focus ring); 4 dimmed captions remain |
+| IMP-008 | **Done** — server-side 409 guard + 12 dead client methods removed |
+| IMP-010 | **Mostly done** — routes, redirects, record deep link (`/applications/:id`), URL filters on Applications and Insights. Jobs/campaign record routes not added |
+| IMP-012 | **Partly done** — 2 of 7 profile tabs extracted; no unsaved-changes guard |
+| IMP-018 | **Done** (drawer, deep link, URL filters). One-primary-action-per-state row redesign not done |
+| IMP-019 | **Done** (tabs). Empty-state polish not done |
+| IMP-021 | **Ratchet done**; page splitting itself still open |
+| IMP-022 | **Partly done** — 105 vitest tests + optional Chromium/axe smoke (`frontend/e2e/smoke.py`, not in CI) |
+| IMP-050 | **Done** (pypdf/python-docx pinned) |
+| IMP-055 | **Done** (frontend image Node 22; not built here) |
+| Still open | IMP-014, 020 (migration), 030–034, 040–042, 051–054 |

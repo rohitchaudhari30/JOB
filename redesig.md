@@ -526,3 +526,23 @@ Verification: `tsc` clean, 82 frontend tests pass (44 → 82), production build 
 | Jobs merge (UX-09) | **Not done** | Still two components under one Jobs section. Decision: a full merge is a large, risky rewrite of ~1,850 lines without browser verification; the user-facing duplication (guard, controls) is addressed instead. Revisit with the Applications/Jobs drawers |
 
 Tests: 96 frontend tests pass (44 at the start of the redesign); `tsc` clean; production build succeeds.
+
+### 28.2 Update — third implementation pass and first real-browser verification (local, not pushed)
+
+**Verification (this closes the §3 "no browser" limit for the checks below).** A Chromium run against the production build with every `/api/v1` call mocked (no backend, no side effects) — `frontend/e2e/smoke.py`, optional and not in CI — passes **38/38** behaviour checks: legacy URL redirects, 6-item nav, honest idle status, alert deep link, `/applications/:id` drawer and Esc, `?status=` filters, no horizontal page scroll on 9 pages at 375 px and 768 px, mobile drawer open/Esc/navigate. **Not verified:** dark mode, real data volumes, real backend behaviour, screen-reader announcement, touch devices, Firefox/Safari.
+
+**axe-core findings (SUS-01/03/04 confirmed in part) and fixes:** `color-contrast` 64 nodes, `select-name` 9, `label` 3, `heading-order` 4. After fixes: **0 serious/critical on 8 of 9 pages**. Remaining: 4 dimmed "ATS" captions in Campaigns (contrast 2.4:1, inside an intentionally dimmed card) and 2 `heading-order` (moderate) on Home / empty Matches state.
+
+| Item | State | Notes |
+|---|---|---|
+| Applications drawer + deep links + URL filters (IMP-018) | **Done** | `/applications/:id`, `?status=`, `?q=`; reconcile flow unchanged and still the only path for uncertain outcomes. The drawer finds the record in the already-loaded list; a deep link to an id that is not in that list shows nothing (no get-by-id call is used) |
+| Insights tabs (IMP-019) | **Done** | Overview · Sources · Resumes · Campaigns · Skills · Scoring weights, `?view=` |
+| Profile split (IMP-012, partial) | **Partly done** | Resume Library and Saved Answers extracted; `ProfileManager.tsx` 1430 → 1008 lines. No unsaved-changes guard yet |
+| Component-size ratchet (IMP-021) | **Done as a ratchet** | CI fails for new files >400 lines and for growth of 13 baselined files. The big pages are **not** yet split (Applications 1472, DirectApply 1283, Discovery 1184, Profile 1008 …) |
+| Server-side campaign delete guard (IMP-008) | **Done** | `409` for RUNNING/PAUSED campaigns or active executions; backend 356 tests pass |
+| Dead client methods (IMP-008) | **Done** | 12 unused methods removed (kept in git history). Orphan *backend* endpoints are untouched |
+| Alert links | **Done** | Backend now emits `/settings/connections`; `/settings` resolves to Profile (consistent with the sidebar) |
+| Deps / image | **Done** | `pypdf==5.9.0`, `python-docx==1.2.0`, frontend image `node:22-alpine` (image build itself not run) |
+| Jobs component merge (IMP-014) | **Not done** | Deliberately; see §28.1 |
+| Migrating old pages/modals to the new UI kit and tokens (IMP-020) | **Not done** | Only ConfirmDialog (campaign delete), Drawer (Applications) and the global contrast overrides |
+| Schedules launching runs, token storage, matches pagination, Account tab | **Not done** | Need your decisions (Q-02, Q-03, Q-08, auth design) |
