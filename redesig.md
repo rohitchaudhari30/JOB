@@ -1,0 +1,492 @@
+# AutoApply — Premium Redesign & Information Architecture Proposal
+
+> **Status:** proposal only. Nothing in this document has been implemented. No source, API contract, DB schema, migration, config or dependency was changed to produce it.
+> **Companion:** [`improvement.md`](improvement.md) (actionable roadmap, IDs `IMP-001…`). Finding IDs used here (`UX-xx`, `BE-xx`, `SUS-xx`) are referenced from there.
+
+---
+
+## 1. Executive summary
+
+AutoApply has ten frontend "tabs" (nine in the sidebar plus a hidden `schedules` tab) that were each built as a self-contained feature. From the code, the product's real job is one loop:
+
+**Set up (profile + platform connection) → find jobs → decide which to pursue → apply (manual, queued or campaign) → watch/intervene → track outcomes → learn.**
+
+The current navigation mirrors *features* (Discovery, AI Matches, Auto-Apply, Live Console…) rather than that loop, and as a result the same action is available from several pages with different labels, different tags and different guard-rails.
+
+**Headline recommendations (all evidence-backed below):**
+
+| # | Recommendation | Evidence |
+|---|---|---|
+| 1 | Reduce primary navigation from 9 (10) to **6**: Home · Jobs · Applications · Automation · Insights · Settings | §5, §11 |
+| 2 | **Merge AI Matches into Jobs** (Discovery). Matches are `Match` rows joined to `Job` rows; both pages list them, evaluate them and create applications from them | UX-08, UX-09 |
+| 3 | **Fold Live Console into Automation** as the "Live run" view, and surface run state with one global run chip. Remove run controls from Dashboard | UX-06, UX-07 |
+| 4 | **Remove the hidden `schedules` tab**; Schedule & Safety already lives inside the campaign workspace | UX-02 |
+| 5 | **Move Candidate Profiles and Platform Connection into Settings** (contextual deep-links remain where they unblock a task) | §12 |
+| 6 | Keep Dashboard (as "Home"), Applications and Analytics (as "Insights") as distinct jobs-to-be-done | §12 |
+| 7 | Introduce **addressable routes** (deep links, sub-tabs, record IDs), keep **every** existing URL as a redirect | UX-01, §23 |
+| 8 | Fix confirmed UX defects first (hard-coded "Autopilot Active", dead badges, broken `/settings` action link, no mobile nav, `w-68` class that Tailwind 3.4 does not generate) — these are cheap and independent of the redesign | UX-03…UX-12 |
+
+**Roughly 85 % of the redesign is frontend-only.** Backend/DB changes are small and mostly optional (see §21). No change to AI score semantics, `MatchScore` / `RecommendationScore` separation, application idempotency, or honest handling of uncertain outcomes is proposed or required.
+
+**Limits (§3):** no browser/visual verification was possible in this session; accessibility and responsive findings are from code inspection only and labelled accordingly.
+
+---
+
+## 2. Revision and repository state
+
+| Item | Value |
+|---|---|
+| Branch (working) | `claude/redesign-proposal` (created from `main`) |
+| Base commit | `ed4ae9a` — "Merge audit fixes: security, automation safety, matching, ops, layering (PR #1)" |
+| `git status --short` at start | *(empty — clean tree)* |
+| Files added by this task | `redesig.md`, `improvement.md` (rewrites the earlier roadmap; see its Appendix A) |
+| Application code changed | **None** |
+
+## 3. Scope, method and limits
+
+**Method:** read `App.tsx`, `utils/navigation.ts`, `components/Sidebar.tsx`, `services/api.ts` in full; extracted every `<button>` / `onClick` / `onNavigate` / API call per page with a script; read targeted regions of each page; inspected `tailwind.config.js`, `index.css`, `package.json`; listed the 91 backend routes; read the dashboard read-model.
+
+**Limits — be explicit:**
+
+* **No visual/runtime verification.** The app was not run; no screenshots, no keyboard walk-through, no contrast measurement, no Lighthouse. Findings about layout, responsive behaviour and accessibility come from reading class names and markup and are tagged *(code-read)*.
+* Button counts (≈202) are regex-extracted and approximate; label lists were reviewed by hand but nested JSX may be undercounted.
+* Server-side filtering/pagination capability of `GET /jobs/matches` and `GET /applications` was **not** verified in this pass (see Q-03).
+* Page internals below the first read of each file were sampled, not read line-by-line; the five largest pages (≈1,200–1,400 lines each) deserve a second pass at Phase 0.
+* This document does not claim the proposed IA is optimal — only that it removes the duplication and dead ends found in the code. User testing is listed as a validation step (§26).
+
+---
+
+## 4. Current architecture
+
+### 4.1 Stack (confirmed)
+
+* **Backend:** FastAPI, Pydantic v2, SQLAlchemy 2 (async) on SQLite (WAL) via aiosqlite, Alembic (0001–0004), APScheduler, Playwright, JWT + bcrypt, AES-GCM for stored secrets. Layering `domain → application → infrastructure → api`, enforced by `tests/unit/test_architecture_rules.py`; application reaches infrastructure only through `app/application/runtime.py`.
+* **Frontend:** React 18, TypeScript, Vite 5, Tailwind **3.4**, axios, lucide-react, vitest (44 tests at last run). No router, no state library, no component library.
+* **Runtime:** single-process by design (live run state in memory; `WEB_CONCURRENCY` guard). nginx + docker-compose (backend, frontend).
+
+### 4.2 Frontend shell (confirmed)
+
+* `App.tsx` holds `activeTab`; `handleTabChange` calls `history.pushState`. `utils/navigation.ts` maps 10 tabs ↔ paths plus ~15 aliases.
+* Pages are lazy-loaded; `ErrorBoundary` is keyed by `activeTab`.
+* The shell polls `api.getActiveRun()` every **5 s** while logged in and opens a WebSocket.
+* `Sidebar` (207 lines) and `Navbar` (notifications, profile menu with shortcuts to Profile and Auto-Apply).
+
+### 4.3 Nine-page inventory
+
+| Page | Lines | Primary job | Key API calls | Outbound navigation |
+|---|---:|---|---|---|
+| Dashboard | 683 | Operational overview, alerts, active-run control | `getDashboardOverview`, `listApplications`, `listConnections`, `pauseRun/resumeRun/stopRun`, `createApplication` | connections, crm, direct_apply, live_console, matches, profile |
+| Auto Apply | 1212 | Campaign CRUD, rules, safety/schedule, launch/pause/stop, logs | `createCampaign`, `updateCampaign`, `launchCampaign`, `pause/resume/stopCampaign`, `startAutomation`, `getCampaignPacing`, `getCampaignLogs`, `listResumes`, `listConnections`, `getProfile` | connections, live_console |
+| Live Console | 733 | Watch run, replay events, OTP/resume, stop | `getRunEvents`, `pause/resume/stopRun`, `startAutomation`, `getProfile` | crm, discovery |
+| Job Discovery | 1218 | Fetch jobs, list/filter, evaluate, queue to apply | `discoverJobs`, `listJobs`, `listMatches`, `evaluateMatch`, `batchQueueApplications`, `deleteJob`, `clearJobs`, `getAppliedJobMap`, `listConnections`, `listResumes`, `getProfile`, `listApplications` | applications, connections, live_console, profile |
+| AI Matches | 632 | Ranked match list, run AI matching, apply to one | `listMatches`, `evaluateAllMatches`, `createApplication` | applications, profile |
+| Applications | 1407 | Pipeline/CRM, approve/reject/retry/reconcile, screenshots | `listApplications`, `getApplicationStats`, `listMatches`, `approve/stop/retry/resume/reconcileApplication`, `getApplicationScreenshot` | direct_apply, discovery |
+| Analytics | 729 | Funnel, sources, skills, resume & campaign performance, weight tuning | 7 analytics endpoints + `getAIStatus` | direct_apply, matches |
+| Candidate Profiles | 1430 | Profile, skills, experience, resumes, saved answers | `getProfile`, `updateProfile`, `listResumes`, `uploadResume`, `setDefaultResume`, `downloadResume`, `deleteResume`, saved-answers | direct_apply |
+| Platform Connection | 505 | Connect/verify/disconnect portals and ATS | `listConnections`, `connectPlatform`, `verifyPlatform`, `disconnectPlatform` | discovery |
+
+Hidden 10th tab: **`schedules`** → renders `<DirectApply initialTab="schedules" />`; sidebar highlights Auto-Apply for it.
+
+---
+
+## 5. Current journeys and pain points
+
+**J1 — First-run setup.** Login (inline in `App.tsx`) → lands on Dashboard → must discover on their own that Profile, Resume and a Platform connection are prerequisites. Prerequisite hints exist in several places (Dashboard, Discovery, Auto-Apply each link to Connections/Profile) but there is no single readiness checklist. *Pain:* 3 pages each re-explain "connect a platform".
+
+**J2 — Find and apply to one job.** Discovery → (optionally evaluate) → "Apply" **or** AI Matches → "Apply" **or** Dashboard → "Quick apply". Three entry points, three `source` tags (`DISCOVERY`-style batch, `AI_MATCHES`, `DASHBOARD`). *Pain:* the user cannot tell which is canonical; Applications later shows them identically.
+
+**J3 — Apply to many.** Discovery multi-select → `batchQueueApplications` **or** create a campaign in Auto-Apply → `launchCampaign` **or** Live Console "Start profile run" → `startAutomation`. *Pain:* three mental models for "run it for me", with different safety coverage (only campaigns carry the Safety & Schedule policy tab).
+
+**J4 — Watch and intervene.** Dashboard shows a run strip with Pause/Resume/Stop; Live Console has Pause/Resume/Stop (twice: header + drawer); Auto-Apply campaign card has its own Pause/Resume/Stop. *Pain:* up to four control sets for the same run state; unclear which scope (run vs campaign execution) each acts on.
+
+**J5 — Track and resolve.** Applications: filter, approve/reject, retry, reconcile uncertain outcomes (`CONFIRM_SUBMITTED` / `MARK_NOT_SUBMITTED_AND_RETRY` / `DISMISS`). Good, honest handling — keep. *Pain:* 39 controls on one page, many icon-only.
+
+**J6 — Learn.** Analytics → "Go to Auto-Apply" / "AI Matches" CTAs. Read-only; coherent.
+
+---
+
+## 6. Navigation and interaction inventory
+
+Regex extraction of buttons/links/handlers (approximate): Dashboard 20 · Auto-Apply 26 · Live Console 42 · Discovery 26 · AI Matches 9 · Applications 39 · Analytics 4 · Profile 15 · Connections 11 · Navbar 9 · Sidebar 1 = **≈202**.
+
+Interaction patterns found: ~25 distinct filter/segment toggles (score presets, posted-within chips, status chips, category tabs, source toggles), 5 modals (campaign, screenshot, rationale, reconciliation, OTP ×2), 1 drawer (Live Console), 3 polling loops, 1 WebSocket.
+
+---
+
+## 7. Evidence-backed cross-page duplication matrix
+
+"Same job" = same endpoint **and** same user intent. "Looks similar only" = shares data but intent differs (**not** a merge reason).
+
+| Action / data | Where it appears | Same job? | Evidence | Canonical home (proposed) |
+|---|---|---|---|---|
+| Pause / Resume / Stop **run** | Dashboard (`handlePause/Resume/StopActiveRun`), Live Console header + drawer (`handlePause/Resume/Stop`) | **Yes** | `api.pauseRun/resumeRun/stopRun` in both | Automation › Live run; global run chip shows state + links there |
+| Start a run | Auto-Apply (`startAutomation`, `handleStartCampaignExecution`), Live Console (`handleStartProfileRun` → `startAutomation`), campaign `launchCampaign` | **Yes** (three ways to start) | `DirectApply.tsx:452`, `LiveAutomation.tsx:264` | Campaign "Run" (server-side `launchCampaign`); "profile run" becomes a one-click campaign-less preset inside Automation |
+| Apply to one match | Dashboard `handleQuickApply`, AI Matches `handleApplySingle`, Discovery `handleSingleJobApply` | **Yes** | `createApplication(…,'DASHBOARD'/'AI_MATCHES')` | Jobs (single canonical `Apply` / `Queue`) |
+| Batch queue to apply | Discovery `handleLaunchQueue` → `batchQueueApplications` | single home | `JobDiscovery.tsx:400` | Jobs (bulk bar) |
+| Evaluate match | Discovery `handleEvaluateSingle`, AI Matches `handleEvaluateAll` | **Yes** (single vs batch of the same use case) | `evaluateMatch`, `evaluateAllMatches(50)` | Jobs (row action + "Re-evaluate all") |
+| List matches | Discovery, AI Matches, Applications (`listMatches` ×3) | **Looks similar only** for Applications (joins to show rationale); **same job** for Discovery/AI Matches | | Jobs (matches lens); Applications keeps its join |
+| "Connect a platform" prompt | Dashboard, Auto-Apply, Discovery, Applications empty states | **Yes** | `onNavigate('connections')` ×5 | One readiness banner component linking to Settings › Connections |
+| "Complete your profile" prompt | Dashboard, Discovery, AI Matches, Navbar menu | **Yes** | `onNavigate('profile')` | Same readiness component |
+| Campaign Pause/Resume/Stop | Auto-Apply campaign card | Different scope (campaign execution) from run controls | `pauseCampaign` vs `pauseRun` | Keep in campaign detail; label scope explicitly |
+| Applications list | Dashboard recent list, Applications page | **Looks similar only** (Dashboard is a 5-row summary) | `listApplications` | Dashboard summary stays; links to Applications |
+| Pagination | Discovery, Applications, AI Matches | Same UI pattern | shared `Pagination` already exists | keep shared component |
+| Saved schedules | Hidden `schedules` tab; Safety & Schedule tab inside campaign | **Yes** | `navigation.ts`, `App.tsx` | Campaign › Schedule & safety |
+| Analytics vs Dashboard KPIs | Both show totals | **Looks similar only** (live ops vs historical, different read models) | `dashboard_queries.py` vs `analytics_queries.py` | Keep separate |
+
+---
+
+## 8. Page responsibility matrix (current vs proposed)
+
+| Responsibility | Today (owners) | Proposed single owner |
+|---|---|---|
+| Readiness (profile/resume/connection) | scattered | Home readiness card + Settings |
+| Find jobs | Discovery | Jobs |
+| Rank / explain fit | AI Matches (+Discovery badges) | Jobs (match lens) |
+| Choose what to apply to | Discovery, AI Matches, Dashboard | Jobs |
+| Rules/limits/schedule for unattended apply | Auto-Apply (+hidden schedules) | Automation › Campaigns |
+| Observe & intervene in a run | Dashboard, Live Console, Auto-Apply | Automation › Live run |
+| Outcome tracking & resolution | Applications | Applications |
+| Historical performance | Analytics | Insights |
+| Identity data & resumes | Profile | Settings › Profile |
+| Credentials/sessions | Connections | Settings › Connections |
+
+---
+
+## 9. Current data-flow diagrams
+
+```mermaid
+flowchart LR
+  subgraph UI
+    D[Dashboard] -- createApplication DASHBOARD --> API
+    AM[AI Matches] -- createApplication AI_MATCHES --> API
+    JD[Discovery] -- discover / evaluate / batchQueue --> API
+    AA[Auto-Apply] -- launchCampaign / startAutomation --> API
+    LC[Live Console] -- startAutomation / pause / stop --> API
+    CRM[Applications] -- approve / retry / reconcile --> API
+  end
+  API[(/api/v1)] --> UC[application use-cases]
+  UC --> RT[runtime proxies] --> INF[infrastructure: SQLite, Playwright, adapters]
+  INF --> WS[(in-memory run state + WS events)]
+  WS --> LC
+  WS --> D
+```
+
+```mermaid
+sequenceDiagram
+  participant App as App.tsx
+  participant API
+  loop every 5 s (logged in)
+    App->>API: GET /automation/active
+  end
+  loop every 15 s (Dashboard open)
+    Dashboard->>API: GET /dashboard/overview
+  end
+  loop every 5 s (campaign selected)
+    AutoApply->>API: pacing + logs
+  end
+  App->>API: WS connect (ticket)
+```
+
+*Pain:* the WebSocket already exists, yet three REST pollers duplicate its information.
+
+---
+
+## 10. UX problems
+
+### 10.1 Confirmed (verifiable in code)
+
+| ID | Problem | Evidence |
+|---|---|---|
+| UX-01 | No router: no deep links to a record, campaign, run or sub-tab; sub-tab state is local `useState` | `App.tsx`, `utils/navigation.ts`; `setActiveCampaignTab`, `setActiveTab` in pages |
+| UX-02 | Hidden `schedules` tab duplicates Auto-Apply | `navigation.ts` (`schedules`), `App.tsx`, `Sidebar.tsx:134` |
+| UX-03 | Sidebar footer shows a **hard-coded** "Autopilot Active" pulse regardless of state — a fake status | `Sidebar.tsx:198-199` |
+| UX-04 | Sidebar `badge` props (`totalMatches`, `activeApplications`) are never passed → dead code | `Sidebar.tsx:33-35,89,95`; `App.tsx` |
+| UX-05 | Dashboard alert actions with `action_url="/settings"` ("Reconnect Session") resolve to **Dashboard** (unknown tab falls through to default) — the button goes nowhere | `dashboard_queries.py:227,245`; `Dashboard` `onNavigate(item.action_url.replace('/',''))`; `resolveTab` default |
+| UX-06 | Run controls duplicated (Dashboard, Live Console ×2, campaign) | §7 |
+| UX-07 | Three ways to start work | §7 |
+| UX-08 | Three single-apply entry points with different `source` tags | §7 |
+| UX-09 | Evaluation split between Discovery and AI Matches | §7 |
+| UX-10 | Three independent polling loops plus a WebSocket | §9 |
+| UX-11 | Brand inconsistency: "ApplyFlow.AI" (login) vs "AutoApply.ai" (page titles) | `App.tsx`, `navigation.ts` |
+| UX-12 | Sidebar has **no responsive classes** and uses `w-68`, which Tailwind 3.4's default scale does not define (no match in built CSS), so width is content-driven and there is no mobile collapse | `Sidebar.tsx:122`; `tailwind.config.js` (no spacing extension) |
+| UX-13 | 13 API-client methods never used by UI; backend features with no UI: campaign delete, saved schedules, matching weights, structured profile endpoints | `services/api.ts` vs grep |
+| UX-14 | Five pages are 1,200–1,400 lines, mixing data fetching, state and markup | line counts |
+| UX-15 | No `:focus-visible` styling in global CSS; 47 `aria-*` attributes across all TSX; ~157 uses of 9–10 px text | `index.css`, grep *(code-read)* |
+| UX-16 | Tailwind config has only a `brand` colour scale; pages use raw `slate/indigo/emerald/rose` utility classes directly (no semantic tokens) | `tailwind.config.js` |
+
+### 10.2 Suspected (need browser verification)
+
+| ID | Suspicion | How to confirm |
+|---|---|---|
+| SUS-01 | Colour contrast of 10 px slate-400 labels on white/dark fails WCAG AA | axe / contrast tool |
+| SUS-02 | Tables/lists overflow horizontally below 768 px | viewport test at 375/768 |
+| SUS-03 | Modals lack focus trap / Esc handling | keyboard walk |
+| SUS-04 | Icon-only buttons lack accessible names in Applications/Live Console | axe |
+| SUS-05 | Back/forward behave oddly when sub-tab state is not in the URL | manual |
+| SUS-06 | Live Console `viewMode` (split/expanded/fullscreen/wide/minimized) is more modes than users need | usability test |
+
+### 10.3 Design preferences (not defects)
+
+Sidebar grouping labels, density, and the choice to fold Analytics under "Insights" are preferences; they are justified in §12 but are not claimed as bugs.
+
+---
+
+## 11. Design principles
+
+1. **Organise by user goal, not by feature or database table.**
+2. **One canonical home per action.** Elsewhere: show status and link, don't duplicate controls.
+3. **Truthful status.** No decorative "active" indicators; uncertain outcomes stay uncertain (`UNCERTAIN`/reconcile flow preserved).
+4. **Every state is addressable** — URL reflects page, sub-tab, selected record.
+5. **Progressive disclosure.** Primary action visible; advanced filters and rare actions behind a clear "More"/panel.
+6. **Safety before speed.** Dangerous actions (clear all, stop, delete) confirm; automated apply always shows its guard-rails (daily cap, approval mode).
+7. **Calm, dense-but-readable UI.** Solid surfaces, 1 px borders, subtle shadow; no heavy gradients, glass or decorative motion.
+8. **Accessible by default.** Keyboard, visible focus, ≥4.5:1 text contrast, no information by colour alone, `prefers-reduced-motion` respected.
+9. **Don't rewrite semantics.** Score meaning, state machines and API contracts are unchanged.
+
+---
+
+## 12. Target information architecture
+
+```
+Home                     /home               (alias /dashboard)
+Jobs                     /jobs               ?view=matches|all  ?q= ?minScore= ?source=
+  └ job drawer           /jobs/:jobId
+Applications             /applications       ?status= ?q=
+  └ application drawer   /applications/:id
+Automation               /automation
+  ├ Campaigns            /automation/campaigns[/:campaignId[?tab=rules|safety|logs]]
+  └ Live run             /automation/live[/:runId]
+Insights                 /insights           (alias /analytics)
+Settings                 /settings
+  ├ Profile & resumes    /settings/profile
+  ├ Platform connections /settings/connections
+  └ Account              /settings/account   (optional; password/logout/privacy — conditional)
+```
+
+**Shell:** left rail (desktop ≥1024) / bottom or drawer nav (<1024); top bar with global **run chip** (state from `/automation/active` + WS; shows "No active run" honestly), notifications, user menu.
+
+### 12.1 Disposition for each of the nine pages
+
+| Page | Disposition | Rationale and trade-offs |
+|---|---|---|
+| **Dashboard** | **KEEP TOP-LEVEL** as *Home* | Distinct job: "what needs me now?" (alerts, readiness, run status, recent outcomes). Remove run controls and Quick-apply (moved/linked). Trade-off: loses one-click Pause on the landing page → mitigated by the always-visible global run chip. |
+| **Auto Apply** | **KEEP TOP-LEVEL** as *Automation › Campaigns* | Unique job: policy for unattended apply. Rename "Auto-Apply" ambiguity: the section is "Automation"; campaigns are the unit. |
+| **Live Console** | **WORKSPACE inside Automation** (tab *Live run*) + **CONTEXTUAL VIEW** from run chip / campaign card | A run is an instance of a campaign execution; it has no meaning outside Automation. Keeping it top-level made 4 control sets. Trade-off: one more click for operators → solved by the chip. Retains OTP/resume and replay. |
+| **Job Discovery** | **KEEP TOP-LEVEL** as *Jobs* (absorbs AI Matches) | Core hub of the loop. |
+| **AI Matches** | **MERGE into Jobs** (lens `?view=matches`, default when matches exist) | Same entities, same actions (evaluate, apply). Not merged because "they look similar" but because `evaluateMatch/evaluateAllMatches`, `createApplication`, `listMatches` are the same use-cases. Scores unchanged. `/matches` → redirect. |
+| **Applications** | **KEEP TOP-LEVEL** | Distinct job: outcome tracking and resolution; contains the safety-critical reconcile flow. |
+| **Analytics** | **KEEP TOP-LEVEL** as *Insights* (lowest nav priority) | Read-only historical reporting with separate read models; merging into Applications would overload an already-large page. Re-evaluate after Phase 3 telemetry (§26). |
+| **Candidate Profiles** | **MOVE INTO SETTINGS** (*Profile & resumes*) | Configuration used by every flow, visited rarely. Resume pick remains inline in campaign/queue flows. |
+| **Platform Connection** | **MOVE INTO SETTINGS** (*Connections*) + **CONTEXTUAL** compact status inside Jobs/Campaign | Same reasoning; context banners deep-link to it. |
+| *(hidden)* **schedules** | **REDIRECT** → `/automation/campaigns?tab=safety` | Duplicate surface. |
+
+### 12.2 Explicit decisions
+
+* **Job Discovery vs AI Matches:** one page, two lenses. *Discover* = fetch from sources; *Matches* = scored/ranked list. Shared filter bar, shared row, shared apply/queue action. Rejected alternative: keep both and cross-link — leaves UX-08/09 unresolved.
+* **Campaign creation vs Auto Apply:** creating a campaign is a **modal/wizard inside Automation › Campaigns** (already `NewCampaignModal`), not a destination. Auto Apply "page" == campaign list/detail.
+* **Dashboard / Live Console / Applications / Analytics:** four different time horizons — *now* (Home), *this run* (Live), *each application* (Applications), *history* (Insights). Keep four, remove cross-duplicated controls.
+* **Candidate Profiles & Platform Connection:** Settings (both), with contextual prompts.
+
+---
+
+## 13. Proposed journeys
+
+1. **Setup:** Home shows a 3-step readiness card (Profile → Resume → Connect platform). Each step deep-links to the Settings tab and returns to Home on completion.
+2. **Find & apply:** Jobs → *Matches* lens → open job drawer (rationale, score breakdown, "Apply" / "Queue" / "Skip") → Applications.
+3. **Unattended:** Automation › Campaigns → New → rules → safety & schedule → Run → redirected to Live run.
+4. **Intervene:** run chip → Live run → Pause / Resume / Stop / OTP.
+5. **Resolve:** Applications → filter "Needs attention" → drawer → reconcile.
+6. **Review:** Insights.
+
+---
+
+## 14. Page layout specifications
+
+**Common page frame:** page header (title, one-line description, primary action right-aligned), optional readiness banner, content. Max content width 1280 px; page gutters 16 / 24 / 32 px (mobile / tablet / desktop).
+
+**Home:** (1) readiness card (hidden when complete), (2) "Needs attention" list from dashboard alerts with working deep links, (3) run status panel (read-only + link), (4) KPI row (4 tiles), (5) recent applications (5 rows).
+
+**Jobs:** header primary action "Find jobs". Toolbar: search, lens segmented control (*Matches · All jobs*), filter popover (min score, posted within, source, hide applied), sort. Result list rows: title/company, location, score chip with label, status chip, row actions [Apply] [Queue] and overflow [Re-evaluate, Delete]. Selection → sticky bulk bar [Queue n] [Clear selection]. Row click → right drawer `/jobs/:id`. "Clear all jobs" moves to overflow menu with confirmation (destructive).
+
+**Applications:** status segment (All · In progress · Needs attention · Applied · Failed), search, filter popover (company, date). Table rows with status chip and one primary row action determined by state (Approve / Retry / Reconcile); everything else in the drawer. Drawer: timeline, rationale, screenshot, reconcile actions.
+
+**Automation › Campaigns:** left list (name, status, today's usage) with "New campaign"; right detail with tabs *Overview · Rules · Safety & schedule · Activity*. Run controls here are scoped "Campaign execution".
+
+**Automation › Live run:** one control cluster (Pause/Resume/Stop), event stream with filter (All · Matches · Applied · Discovery · Alerts), queue panel, optional screenshot panel. Collapse the five view modes to **two**: *Split* and *Focus* (fullscreen). OTP in an accessible modal.
+
+**Insights:** date preset, KPI tiles, funnel, tabs *Sources · Skills · Resumes · Campaigns · Scoring weights*. Empty states link to Automation or Jobs.
+
+**Settings:** vertical tabs (horizontal scroll on mobile). *Profile & resumes* is itself sectioned (Basics · Skills · Experience · Resumes · Saved answers) with a sticky Save bar and unsaved-changes guard.
+
+---
+
+## 15. Button / tab / filter consolidation matrix
+
+| Control | Today | Proposed |
+|---|---|---|
+| Pause/Resume/Stop run | 4 clusters | 1 cluster (Live run) + chip status |
+| Start run | 3 ways | Campaign "Run" (+ "Quick run" preset) |
+| Apply single | 3 pages | Jobs only |
+| Evaluate | 2 pages | Jobs only |
+| Refresh buttons | 6 pages | one shared `RefreshButton` in header |
+| "Connect platform" / "Complete profile" CTAs | ≥8 | 1 `ReadinessBanner` |
+| Score presets, posted-within, min-fit toggle | page-local | one `FilterBar` component |
+| Live view modes | 5 | 2 |
+| Campaign tabs | rules/safety/logs + hidden schedules page | Overview/Rules/Safety & schedule/Activity |
+| Navbar profile menu shortcuts | Profile, Auto-Apply | Settings, Sign out (nav rail already has the rest) |
+| Sidebar items | 9 (+hidden) | 6 |
+
+Net: approximately **202 → ≈130** controls (estimate, not a measurement), mainly by removing duplicates rather than features.
+
+---
+
+## 16. Design system
+
+### 16.1 Typography
+Keep Plus Jakarta Sans / JetBrains Mono (already loaded). Scale: 12 (caption, **minimum**), 14 (body), 16 (emphasis), 20 / 24 (page/section titles). Remove 9–10 px text. Line-height 1.5 body, 1.25 headings. Numerals tabular in tables and KPIs.
+
+### 16.2 Colour tokens (CSS variables, mapped in Tailwind `theme.extend.colors`)
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--surface` | #FFFFFF | #0F172A | cards |
+| `--surface-muted` | #F8FAFC | #111C31 | page bg |
+| `--border` | #E2E8F0 | #1E293B | dividers |
+| `--text` | #0F172A | #E2E8F0 | primary text |
+| `--text-muted` | #475569 | #94A3B8 | secondary (≥4.5:1 on surface) |
+| `--accent` | #4F46E5 | #818CF8 | primary action |
+| `--success` / `--warning` / `--danger` / `--info` | emerald-700 / amber-700 / rose-700 / sky-700 | lighter equivalents | status text + icon + label (never colour alone) |
+
+Values are starting points; contrast must be measured at implementation (SUS-01). Remove gradients from avatar/CTA surfaces.
+
+### 16.3 Spacing, radius, elevation
+4-px grid (4/8/12/16/24/32). Radius: 6 (inputs/chips), 8 (buttons), 12 (cards/modals); retire the mix of `rounded-xl/2xl`. One subtle shadow for floating layers only.
+
+### 16.4 Component rules
+`Button` (primary/secondary/ghost/danger, sizes, loading, icon-only requires `aria-label`) · `StatusChip` (icon+text) · `ScoreChip` (value + label; **never** blends MatchScore and RecommendationScore) · `FilterBar` · `DataTable`/`List` · `Drawer` · `Modal` (focus trap, Esc) · `Tabs` (URL-bound) · `EmptyState` (exists) · `Pagination` (exists) · `ReadinessBanner` · `RunChip` · `ConfirmDialog` · `Toast`. All interactive elements: 2 px `:focus-visible` ring, min 40×40 px hit area (44 on touch).
+
+---
+
+## 17. Responsive and accessible behaviour
+
+* Breakpoints: <640 mobile, 640–1023 tablet, ≥1024 desktop.
+* <1024: rail becomes a slide-over drawer opened from a labelled menu button; run chip stays in the top bar. Tables become stacked cards (title, status, one action). Drawers become full-screen sheets.
+* Keyboard: logical tab order; skip-to-content link; Esc closes drawers/modals and returns focus to trigger; arrow keys within Tabs and segmented controls.
+* Screen readers: landmarks (`nav`, `main`, `aside`), `aria-current="page"`, live region for run state changes and toasts, table headers scoped.
+* Motion: no decorative animation; status pulse only when a run is truly active, disabled under `prefers-reduced-motion`.
+* Targets and text per §16.
+
+---
+
+## 18. Frontend module architecture
+
+```
+src/
+  app/            shell, providers, router config, route redirects (legacy map)
+  features/
+    home/ jobs/ applications/ automation/{campaigns,live}/ insights/ settings/{profile,connections}/
+      api/        thin typed wrappers over services/api (per feature)
+      components/ hooks/ model/
+  shared/ui/      Button, Chip, Tabs, Drawer, Modal, FilterBar, EmptyState, Pagination…
+  shared/hooks/   useActiveRun (single source; WS-first, polling fallback), usePolling, useUrlState
+  shared/lib/     format, status maps (derive from backend enums)
+```
+
+Rules: pages ≤ ~300 lines; features import `shared`, never each other; one `ActiveRunProvider` replaces three pollers; the existing `components/ui` and `pages/{applications,campaigns}` extractions are the starting point. Router: either `react-router-dom` (new dependency, **requires approval**) or extend `navigation.ts` with a pattern table — see Q-01.
+
+---
+
+## 19. API / data changes (classification)
+
+| Class | Items |
+|---|---|
+| **Frontend-only** | IA, routes, merges, shared components, design tokens, responsive, a11y, removing duplicate controls, dead code/badges, truthful footer status, ReadinessBanner, URL-bound filters |
+| **Refactor on existing APIs** | `ActiveRunProvider` consuming `/automation/active` + WS; unify single-apply on `createApplication` with a single `source` value; campaign delete UI (`DELETE /campaigns/{id}` exists); use `POST /campaigns/{id}/launch` for every start |
+| **API contract change (small, additive)** | Dashboard alert `action_url` should use real routes (`/settings/connections`) — or keep and map client-side (preferred, frontend-only mapping first) |
+| **Backend logic change** | Saved schedules actually launch (AUT-17) — **only if** the user wants schedules in the product; otherwise hide the UI |
+| **DB / migration** | None required. Optional: persisted "readiness dismissed" flag (not needed if derived) |
+| **Worker / integration** | None |
+| **Cross-cutting** | Server-side pagination/filter for matches if SUS-/Q-03 shows client-side filtering of large sets |
+
+---
+
+## 20. Performance considerations
+
+Replace three pollers with one provider (fewer requests; WS first). Lazy-load per route (already done) and per drawer. Virtualise lists only if >500 rows is realistic (unverified; Q-03). Memoise row components; debounce search (300 ms). Keep bundle budget: record current `vite build` size at Phase 0 and fail CI on >10 % growth.
+
+## 21. Security and regression considerations
+
+* Redesign must not weaken auth: tokens still via the existing client (move out of `localStorage` is separate — IMP of the audit).
+* Deep links to `/applications/:id` must still enforce server-side ownership (already tested: BOLA probe was started but unfinished — see `improvement.md`).
+* Destructive actions keep confirmations; reconcile flow text and outcomes unchanged.
+* Do not change `MatchScore`/`RecommendationScore` display semantics; snapshot-test labels.
+* Regression guard: keep 44 vitest tests green; add route-redirect table test, nav a11y tests, and a Playwright/axe smoke set.
+
+## 22. Route compatibility and migration strategy
+
+Every existing path stays valid via a redirect table (tested):
+
+| Legacy | New |
+|---|---|
+| `/dashboard`, `/` | `/home` |
+| `/auto-apply`, `/direct-apply`, `/direct_apply`, `/apply` | `/automation/campaigns` |
+| `/live-console`, `/live_console`, `/live`, `/live-automation` | `/automation/live` |
+| `/discovery`, `/job-discovery`, `/job_discovery`, `/jobs` | `/jobs?view=all` |
+| `/matches`, `/ai-matches`, `/ai_matches` | `/jobs?view=matches` |
+| `/applications`, `/crm`, `/application` | `/applications` |
+| `/analytics` | `/insights` |
+| `/profile`, `/candidate-profile` | `/settings/profile` |
+| `/connections`, `/platform-connections` | `/settings/connections` |
+| `/schedules`, `/schedule` | `/automation/campaigns?tab=safety` |
+| backend `action_url` `/settings` | `/settings/connections` |
+
+Strategy: feature-flag the new shell (`VITE_NEW_SHELL`), ship pages behind it one at a time, keep old shell until parity checklist passes, then delete the flag. `onNavigate('<tab>')` call sites are replaced by a `navigate()` helper that accepts old tab IDs during transition.
+
+---
+
+## 23. Implementation phases (after approval)
+
+| Phase | Content | Exit |
+|---|---|---|
+| **0 — Baseline & quick fixes** | Record bundle size/test baseline; fix UX-03, 04, 05, 11, 12; add focus ring; second read of 5 large pages | tests green, no IA change |
+| **1 — Foundation** | Tokens, shared UI kit, router/redirect table, `ActiveRunProvider`, new shell behind flag | old pages render inside new shell |
+| **2 — Settings & Home** | Settings (Profile, Connections), Home with ReadinessBanner | parity checklist |
+| **3 — Jobs** | Merge Discovery + AI Matches, drawer, bulk bar | no duplicate apply/evaluate |
+| **4 — Automation** | Campaigns + Live run, remove run controls elsewhere, campaign delete UI | single control cluster |
+| **5 — Applications & Insights** | Drawer, state-driven row action, filters in URL | a11y/axe pass |
+| **6 — Cleanup** | Remove flag, legacy tabs, dead API methods; docs | redirect tests pass |
+
+## 24. Acceptance criteria (redesign overall)
+
+1. Primary nav has 6 items; every legacy URL redirects correctly (automated test).
+2. Each action in §7 has exactly one canonical control surface.
+3. No hard-coded status text; run indicator reflects `/automation/active`.
+4. Every page usable at 375, 768, 1280 px without horizontal page scroll; keyboard-only completion of J2, J3, J5.
+5. axe reports no serious/critical violations on the six top-level pages; text contrast ≥4.5:1.
+6. Only one automatic poller for run state.
+7. Existing frontend (44) and backend (353) tests pass; new tests added for routes and shared components.
+8. No change in API request/response contracts except those explicitly listed in §19.
+9. No change to match-score semantics; reconcile outcomes unchanged.
+
+## 25. Risks and unresolved questions
+
+**Risks:** large-file refactors can regress behaviour (mitigate: characterisation tests before splitting); merging Discovery + Matches may produce a dense page (mitigate: lens + drawer, usability check); users used to old URLs (mitigate: redirects); router dependency choice; WS reliability (keep polling fallback).
+
+**Unresolved questions (need the product owner):**
+
+* **Q-01** Approve adding `react-router-dom`, or extend the custom router?
+* **Q-02** Should saved schedules actually start auto-apply (AUT-17), or should schedule UI stay hidden?
+* **Q-03** Typical data volume (jobs/matches/applications per user)? Determines server-side pagination and virtualisation.
+* **Q-04** Is "Quick run" (campaign-less profile run) a wanted feature, or should every run belong to a campaign?
+* **Q-05** Mobile priority: monitoring-only, or full management?
+* **Q-06** Brand name: "AutoApply" or "ApplyFlow"?
+* **Q-07** Keep Insights top-level, or fold into Applications?
+* **Q-08** Is an Account settings tab (password, data export/delete) in scope?
+
+## 26. Validation plan
+
+5-user task test (J2, J3, J5) on old vs new IA; track clicks-to-apply and misclicks; axe + keyboard audit; compare bundle size; review at the end of Phase 3 whether Insights placement still makes sense.
+
+## 27. Final recommendation
+
+Approve **Phase 0 immediately** (independent, low-risk, fixes confirmed defects), then proceed with the 6-item IA behind a feature flag in the order above. The two highest-value structural changes are **(a)** merging AI Matches into Jobs and **(b)** collapsing run controls into Automation with one global run chip. Everything else is polish that makes the product consistent and accessible. This proposal is not claimed to be perfect; its weakest assumptions are the unverified responsive/a11y findings (§3) and the open questions in §25.
