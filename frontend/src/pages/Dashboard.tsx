@@ -24,6 +24,7 @@ import {
   Application,
 } from '../types';
 import { useToast } from '../context/ToastContext';
+import { usePolling } from '../hooks/usePolling';
 
 interface DashboardProps {
   onNavigate: (tab: any) => void;
@@ -71,11 +72,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(() => {
-      loadData(true);
-    }, 15000); // Polling every 15s for operational status
-    return () => clearInterval(interval);
   }, [loadData]);
+
+  // Operational status refresh every 15 s, paused while the tab is hidden.
+  usePolling(() => void loadData(true), 15000);
 
   const effectiveRunning =
     overview?.active_run.is_running || propActiveRun?.status === 'RUNNING';

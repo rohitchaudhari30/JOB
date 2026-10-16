@@ -2,13 +2,14 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Navbar } from './components/Navbar';
 import { Sidebar, NavTab } from './components/Sidebar';
+import { useActiveRun } from './hooks/useActiveRun';
 import { SectionTabs } from './components/SectionTabs';
 import { BRAND_NAME, BRAND_SUFFIX } from './utils/brand';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
+import { User } from './types';
 import { api, setAuthToken } from './services/api';
 import { wsClient } from './services/ws';
-import { AutomationRunStatus, User } from './types';
 import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
 import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES } from './utils/navigation';
@@ -30,7 +31,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>(() => getTabFromLocation());
   const [user, setUser] = useState<User | null>(null);
   const [navOpen, setNavOpen] = useState(false);
-  const [activeRun, setActiveRun] = useState<AutomationRunStatus | null>(null);
+  const { activeRun, refresh: loadActiveRun } = useActiveRun(user !== null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authFullName, setAuthFullName] = useState('');
@@ -81,10 +82,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (user) {
       wsClient.connect();
-      loadActiveRun();
-      const interval = setInterval(loadActiveRun, 5000);
       return () => {
-        clearInterval(interval);
         wsClient.disconnect();
       };
     }
@@ -98,15 +96,6 @@ export const App: React.FC = () => {
       console.warn('Session expired or invalid token');
       setAuthToken(null);
       setUser(null);
-    }
-  };
-
-  const loadActiveRun = async () => {
-    try {
-      const run = await api.getActiveRun();
-      setActiveRun(run);
-    } catch (e) {
-      // Ignored if unauthenticated or network error
     }
   };
 

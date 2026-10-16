@@ -35,6 +35,7 @@ import { ActivityStream } from './campaigns/ActivityStream';
 import { NewCampaignModal } from './campaigns/NewCampaignModal';
 import { CandidateProfile, Resume, PlatformConnectionInfo, Campaign, CampaignPacingStatus, CampaignActivityLog } from '../types';
 import { useToast } from '../context/ToastContext';
+import { usePolling } from '../hooks/usePolling';
 
 interface DirectApplyProps {
   onNavigate: (tab: any) => void;
@@ -99,13 +100,14 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
     }
   }, [initialTab]);
 
-  useEffect(() => {
-    if (!selectedCampaign?.id) return;
-    const interval = setInterval(() => {
-      loadCampaignPacingAndLogs(selectedCampaign.id);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [selectedCampaign?.id]);
+  // Pacing/logs refresh every 5 s while a campaign is selected; paused when the tab is hidden.
+  usePolling(
+    () => {
+      if (selectedCampaign?.id) void loadCampaignPacingAndLogs(selectedCampaign.id);
+    },
+    5000,
+    Boolean(selectedCampaign?.id)
+  );
 
   const loadCampaignPacingAndLogs = async (campId: string) => {
     try {
