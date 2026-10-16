@@ -101,7 +101,7 @@ describe('Dashboard (Operational Command Center)', () => {
     });
   });
 
-  it('renders actionable high-scoring match card with 1-click apply', async () => {
+  it('renders high-scoring match card that links to Jobs (no duplicate apply control)', async () => {
     const onNavigate = vi.fn();
     render(
       <ToastProvider>
@@ -113,7 +113,8 @@ describe('Dashboard (Operational Command Center)', () => {
       expect(screen.getByText('Staff Fullstack Engineer')).toBeDefined();
       expect(screen.getByText(/Stripe/)).toBeDefined();
       expect(screen.getByText('95% Match')).toBeDefined();
-      expect(screen.getByText('1-Click Apply')).toBeDefined();
+      expect(screen.getByText('Review in Jobs')).toBeDefined();
+      expect(screen.queryByText('1-Click Apply')).toBeNull();
     });
   });
 

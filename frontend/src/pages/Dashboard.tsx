@@ -2,8 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   LayoutDashboard,
   Play,
-  Pause,
-  Square,
   Tv,
   ArrowUpRight,
   ShieldCheck,
@@ -17,13 +15,11 @@ import {
   ChevronRight,
   Check,
   Activity,
-  Send,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { EmptyState } from '../components/ui/EmptyState';
 import {
   DashboardOverview,
-  DashboardTopMatch,
   AutomationRunStatus,
   Application,
 } from '../types';
@@ -35,15 +31,13 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: propActiveRun }) => {
-  const { showSuccess, showError, showInfo } = useToast();
+  const { showError } = useToast();
 
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [recentApplications, setRecentApplications] = useState<Application[]>([]);
   const [connections, setConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
 
   const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
 
@@ -82,66 +76,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
     }, 15000); // Polling every 15s for operational status
     return () => clearInterval(interval);
   }, [loadData]);
-
-  // Operational Controls
-  const handlePauseActiveRun = async () => {
-    const runId = overview?.active_run.run_id || propActiveRun?.run_id;
-    if (!runId) return;
-    try {
-      setActionLoading(true);
-      await api.pauseRun(runId);
-      showInfo('Automation session paused safely.');
-      await loadData(true);
-    } catch (e: any) {
-      showError(`Failed to pause session: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleResumeActiveRun = async () => {
-    const runId = overview?.active_run.run_id || propActiveRun?.run_id;
-    if (!runId) return;
-    try {
-      setActionLoading(true);
-      await api.resumeRun(runId);
-      showSuccess('Automation session resumed.');
-      await loadData(true);
-    } catch (e: any) {
-      showError(`Failed to resume session: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleStopActiveRun = async () => {
-    const runId = overview?.active_run.run_id || propActiveRun?.run_id;
-    if (!runId) return;
-    if (!window.confirm('Are you sure you want to stop the active automation run?')) return;
-    try {
-      setActionLoading(true);
-      await api.stopRun(runId, 'Stopped from dashboard');
-      showInfo('Automation session stopped.');
-      await loadData(true);
-    } catch (e: any) {
-      showError(`Failed to stop session: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleQuickApply = async (match: DashboardTopMatch) => {
-    try {
-      setApplyingJobId(match.job_id);
-      await api.createApplication(match.job_id, undefined, undefined, 'DASHBOARD', false);
-      showSuccess(`Queued application for ${match.title} at ${match.company}!`);
-      await loadData(true);
-    } catch (e: any) {
-      showError(`Application request failed: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setApplyingJobId(null);
-    }
-  };
 
   const effectiveRunning =
     overview?.active_run.is_running || propActiveRun?.status === 'RUNNING';
@@ -302,58 +236,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
 
             {/* Active Run Controls */}
             <div className="flex items-center gap-2 self-start sm:self-auto">
-              {effectiveRunning ? (
-                <>
-                  <button
-                    onClick={handlePauseActiveRun}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Pause className="w-3.5 h-3.5" />
-                    <span>Pause</span>
-                  </button>
-                  <button
-                    onClick={handleStopActiveRun}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Square className="w-3.5 h-3.5" />
-                    <span>Stop</span>
-                  </button>
-                  <button
-                    onClick={() => onNavigate('live_console')}
-                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Tv className="w-3.5 h-3.5" />
-                    <span>Live Console</span>
-                  </button>
-                </>
-              ) : effectiveStatus.startsWith('PAUSED') ? (
-                <>
-                  <button
-                    onClick={handleResumeActiveRun}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Resume</span>
-                  </button>
-                  <button
-                    onClick={handleStopActiveRun}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Square className="w-3.5 h-3.5" />
-                    <span>Stop</span>
-                  </button>
-                  <button
-                    onClick={() => onNavigate('live_console')}
-                    className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Tv className="w-3.5 h-3.5" />
-                    <span>Inspect</span>
-                  </button>
-                </>
+              {effectiveRunning || effectiveStatus.startsWith('PAUSED') ? (
+                <button
+                  onClick={() => onNavigate('live_console')}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Tv className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Open live run</span>
+                </button>
               ) : (
                 <button
                   onClick={() => onNavigate('direct_apply')}
@@ -574,19 +464,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleQuickApply(match)}
-                      disabled={applyingJobId === match.job_id}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
-                    >
-                      <Send className="w-3 h-3" />
-                      <span>{applyingJobId === match.job_id ? 'Queuing...' : '1-Click Apply'}</span>
-                    </button>
-                    <button aria-label="Open"
                       onClick={() => onNavigate('matches')}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                      title="Inspect Match"
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
                     >
-                      <ArrowUpRight className="w-4 h-4" />
+                      <span>Review in Jobs</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   </div>
                 </div>

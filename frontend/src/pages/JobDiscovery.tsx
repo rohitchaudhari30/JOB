@@ -1,3 +1,4 @@
+import { ReadinessBanner } from '../components/ReadinessBanner';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Search,
@@ -606,47 +607,11 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
         </div>
       </div>
 
-      {/* Pre-flight Readiness Alert Banner */}
-      {(!isPlatformConnected || !hasResume) && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 dark:bg-amber-950/30 dark:border-amber-700/50 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-fadeIn">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                Pre-flight Setup Required for {platform.toUpperCase()}
-              </h4>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                {!isPlatformConnected && !hasResume
-                  ? `Your ${platform.toUpperCase()} session is disconnected and no active resume was found.`
-                  : !isPlatformConnected
-                  ? `Your ${platform.toUpperCase()} session is disconnected. Connect session cookies to allow bot submission.`
-                  : 'No resume uploaded. Upload a PDF resume in Profile to attach to applications.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {!isPlatformConnected && onNavigate && (
-              <button
-                onClick={() => onNavigate('connections')}
-                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
-              >
-                Connect {platform === 'linkedin' ? 'LinkedIn' : 'Naukri'}
-              </button>
-            )}
-            {!hasResume && onNavigate && (
-              <button
-                onClick={() => onNavigate('profile')}
-                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
-              >
-                Upload Resume
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <ReadinessBanner
+        missing={[...(!isPlatformConnected ? (['connection'] as const) : []), ...(!hasResume ? (['resume'] as const) : [])]}
+        platformLabel={platform === 'linkedin' ? 'LinkedIn' : platform === 'naukri' ? 'Naukri' : platform.toUpperCase()}
+        onNavigate={(tab) => onNavigate?.(tab)}
+      />
 
       {/* Freshness & Filter Toolbar */}
       <div className="p-4 rounded-2xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-xs">

@@ -431,3 +431,23 @@ The full previous text is available in git history (`git show ed4ae9a:improvemen
 | IMP-055 | `frontend/Dockerfile` Node 22 | CI already on 22; Dockerfile unverified | Confirmed, S |
 
 These were observed in the earlier adversarial pass, which was paused when the redesign request arrived. Treat them as leads, not fully reproduced defects, except where marked Confirmed.
+
+## Appendix C — Implementation status
+
+Local branch `claude/phase0-quick-fixes` (not pushed). See `redesig.md` §28 for decisions taken in place of the open questions.
+
+| ID | Status |
+|---|---|
+| IMP-001, 002, 003, 005, 006 | **Done** (commit `cfd6073`) |
+| IMP-004 | **Done** (brand = AutoApply, `utils/brand.ts`) |
+| IMP-008 | **Partly done** — campaign delete UI added; dead client methods not removed; backend delete does not reject RUNNING/PAUSED campaigns (follow-up: enforce server-side) |
+| IMP-010 | **Partly done** — routes + redirect table + tests; record-level deep links and URL-bound filters pending |
+| IMP-011 | **Partly done** — 6-item nav + section tabs; top-bar run chip already existed (Navbar pill) |
+| IMP-013 | **Partly done** — component built, used in Jobs › Discover only |
+| IMP-014 | **Partly done** — navigation-level merge only |
+| IMP-016 | **Partly done** — Dashboard controls removed; Live Console view-mode reduction and start-path consolidation pending |
+| IMP-017 | **Done** — `/schedules` is a deep link to Campaigns › Safety & schedule |
+| IMP-020 | **Started** — tokens only |
+| IMP-022 | **Partly done** — route/nav/section/readiness tests; no e2e/axe |
+| IMP-007, 012, 015, 018, 019, 021 | **Not started** |
+| IMP-030…034, 040…042, 050…055 | **Not started** (need decisions or are optional) |

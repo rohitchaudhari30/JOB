@@ -20,6 +20,7 @@ import {
   Activity,
   BarChart3,
   RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { SafetyScheduleTab } from './campaigns/SafetyScheduleTab';
@@ -386,6 +387,31 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
   };
 
 
+  const handleDeleteCampaign = async () => {
+    if (!selectedCampaign) return;
+    if (selectedCampaign.state === 'RUNNING' || selectedCampaign.state === 'PAUSED') {
+      showWarning('Stop the campaign before deleting it.');
+      return;
+    }
+    if (!confirm(`Delete campaign "${selectedCampaign.name}"? This cannot be undone.`)) return;
+    try {
+      setCampaignActionLoading(true);
+      await api.deleteCampaign(selectedCampaign.id);
+      const remaining = campaigns.filter((c) => c.id !== selectedCampaign.id);
+      setCampaigns(remaining);
+      if (remaining.length > 0) {
+        syncFormFromCampaign(remaining[0]);
+      } else {
+        setSelectedCampaign(null);
+      }
+      showSuccess('Campaign deleted.');
+    } catch (err: any) {
+      showError(`Delete failed: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setCampaignActionLoading(false);
+    }
+  };
+
   const handleAddRole = () => {
     if (newRoleInput.trim() && !targetRoles.includes(newRoleInput.trim())) {
       setTargetRoles([...targetRoles, newRoleInput.trim()]);
@@ -594,6 +620,21 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                   <span>Run Campaign</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={handleDeleteCampaign}
+                disabled={
+                  campaignActionLoading ||
+                  selectedCampaign.state === 'RUNNING' ||
+                  selectedCampaign.state === 'PAUSED'
+                }
+                aria-label="Delete campaign"
+                title="Delete campaign (stop it first if it is running)"
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+              </button>
 
               <button
                 type="button"

@@ -490,3 +490,26 @@ Strategy: feature-flag the new shell (`VITE_NEW_SHELL`), ship pages behind it on
 ## 27. Final recommendation
 
 Approve **Phase 0 immediately** (independent, low-risk, fixes confirmed defects), then proceed with the 6-item IA behind a feature flag in the order above. The two highest-value structural changes are **(a)** merging AI Matches into Jobs and **(b)** collapsing run controls into Automation with one global run chip. Everything else is polish that makes the product consistent and accessible. This proposal is not claimed to be perfect; its weakest assumptions are the unverified responsive/a11y findings (§3) and the open questions in §25.
+
+---
+
+## 28. Implementation status (added after approval; local branch `claude/phase0-quick-fixes`, not pushed)
+
+Decisions taken where §25 was unanswered (all reversible): **Q-01** no new dependency — the custom router was extended; **Q-02** schedule UI stays a deep link to the campaign "Safety & schedule" tab, saved schedules still only log (AUT-17 untouched); **Q-06** product name is **AutoApply** (single constant `utils/brand.ts`); **Q-07** Insights stays top-level; **Q-04/Q-08** no change.
+
+| Area | State | Notes |
+|---|---|---|
+| Quick fixes (UX-03/04/05/11/12/15) | **Done** | Real run status in sidebar, dead badges removed, `/settings` alert link mapped, valid sidebar width + mobile drawer, focus ring, reduced motion, single brand constant |
+| Routes + redirects (UX-01/02) | **Done (partial)** | Canonical paths `/home`, `/jobs`, `/jobs/matches`, `/applications`, `/automation/campaigns[/safety]`, `/automation/live`, `/insights`, `/settings/profile`, `/settings/connections`. All 26 legacy URLs resolve (tested), `?view=matches` and nested record paths fall back to the parent. **Not done:** record deep links (`/applications/:id`, `/jobs/:id`) and filter state in the URL — they need the drawers |
+| 6-item navigation | **Done** | Home · Jobs · Applications · Automation · Insights · Settings; `SectionTabs` provides Discover/AI matches, Campaigns/Live run, Profile/Platform connections as real links |
+| Jobs merge (UX-08/09) | **Partially done** | Navigation merge only: one "Jobs" section with two views. The two page components are **not** merged; evaluate/apply controls still exist in both views |
+| Run controls (UX-06/07) | **Partially done** | Dashboard Pause/Resume/Stop and 1-click apply removed (link to Live run / Jobs instead). Live Console still has its 5 view modes and duplicate drawer controls; "Start profile run" still exists beside campaign Run |
+| Campaign delete (UX-13) | **Done** | Button with confirmation, disabled while RUNNING/PAUSED. The backend does not itself refuse deleting a running campaign — the guard is UI-only (see IMP-008 follow-up) |
+| ReadinessBanner | **Partially done** | Shared component used by Jobs › Discover; Dashboard readiness cards, Auto-Apply and AI Matches prompts not yet migrated |
+| Design tokens | **Started** | CSS variables + Tailwind semantic colours defined; existing pages not yet migrated; shared Button/Drawer/Modal kit not built |
+| Single run-state poller (UX-10) | **Not done** | Three pollers remain |
+| Page splitting / module architecture (UX-14) | **Not done** | |
+| Applications drawer, Insights tabs, Settings sub-sections | **Not done** | |
+| Browser/a11y verification (SUS-01…06) | **Not done** | No browser run in this environment |
+
+Verification: `tsc` clean, 82 frontend tests pass (44 → 82), production build succeeds. Backend untouched (353 tests not re-run — no backend change).

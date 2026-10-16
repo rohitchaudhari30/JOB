@@ -1,19 +1,35 @@
-import { NavTab } from '../components/Sidebar';
+import type { NavTab } from '../components/Sidebar';
+import { BRAND_NAME } from './brand';
 
+/**
+ * Canonical URLs (redesign IA). Internal tab ids are unchanged so pages keep
+ * working; every previous URL remains valid through PATH_TO_TAB (redirects).
+ */
 export const TAB_TO_PATH: Record<NavTab, string> = {
-  dashboard: '/dashboard',
-  direct_apply: '/auto-apply',
-  live_console: '/live-console',
-  discovery: '/discovery',
-  matches: '/matches',
+  dashboard: '/home',
+  discovery: '/jobs',
+  matches: '/jobs/matches',
   crm: '/applications',
-  analytics: '/analytics',
-  profile: '/profile',
-  connections: '/connections',
-  schedules: '/schedules',
+  direct_apply: '/automation/campaigns',
+  schedules: '/automation/campaigns/safety',
+  live_console: '/automation/live',
+  analytics: '/insights',
+  profile: '/settings/profile',
+  connections: '/settings/connections',
 };
 
 export const PATH_TO_TAB: Record<string, NavTab> = {
+  // canonical
+  '/home': 'dashboard',
+  '/jobs/matches': 'matches',
+  '/automation': 'direct_apply',
+  '/automation/campaigns': 'direct_apply',
+  '/automation/campaigns/safety': 'schedules',
+  '/automation/live': 'live_console',
+  '/insights': 'analytics',
+  '/settings/profile': 'profile',
+  '/settings/connections': 'connections',
+  // legacy (kept as redirects)
   '/dashboard': 'dashboard',
   '/': 'dashboard',
   '/auto-apply': 'direct_apply',
@@ -41,20 +57,79 @@ export const PATH_TO_TAB: Record<string, NavTab> = {
   '/settings': 'connections',
   '/platform-connections': 'connections',
   '/schedules': 'schedules',
+  '/schedule': 'schedules',
 };
 
 export const TAB_TITLES: Record<NavTab, string> = {
-  dashboard: 'Dashboard | AutoApply.ai',
-  direct_apply: 'Auto-Apply Campaigns | AutoApply.ai',
-  live_console: 'Live Console & Telemetry | AutoApply.ai',
-  discovery: 'Job Discovery | AutoApply.ai',
-  matches: 'AI Matches & Strategy | AutoApply.ai',
-  crm: 'Applications CRM | AutoApply.ai',
-  analytics: 'Analytics & Funnel | AutoApply.ai',
-  profile: 'Candidate Profile | AutoApply.ai',
-  connections: 'Platform Connections | AutoApply.ai',
-  schedules: 'Automation Schedules | AutoApply.ai',
+  dashboard: `Home | ${BRAND_NAME}`,
+  discovery: `Jobs | ${BRAND_NAME}`,
+  matches: `Jobs · Matches | ${BRAND_NAME}`,
+  crm: `Applications | ${BRAND_NAME}`,
+  direct_apply: `Automation · Campaigns | ${BRAND_NAME}`,
+  schedules: `Automation · Safety & schedule | ${BRAND_NAME}`,
+  live_console: `Automation · Live run | ${BRAND_NAME}`,
+  analytics: `Insights | ${BRAND_NAME}`,
+  profile: `Settings · Profile & resumes | ${BRAND_NAME}`,
+  connections: `Settings · Platform connections | ${BRAND_NAME}`,
 };
+
+export type NavGroupId = 'home' | 'jobs' | 'applications' | 'automation' | 'insights' | 'settings';
+
+export interface SectionTab {
+  tab: NavTab;
+  label: string;
+}
+
+export interface NavGroup {
+  id: NavGroupId;
+  label: string;
+  /** Tab opened when the group is chosen from the primary navigation. */
+  entry: NavTab;
+  /** Tabs that belong to the group (first-class sub-views). */
+  members: NavTab[];
+  /** Sub-navigation shown inside the page frame (omitted for single-view groups). */
+  sections?: SectionTab[];
+}
+
+export const NAV_GROUPS: NavGroup[] = [
+  { id: 'home', label: 'Home', entry: 'dashboard', members: ['dashboard'] },
+  {
+    id: 'jobs',
+    label: 'Jobs',
+    entry: 'discovery',
+    members: ['discovery', 'matches'],
+    sections: [
+      { tab: 'discovery', label: 'Discover' },
+      { tab: 'matches', label: 'AI matches' },
+    ],
+  },
+  { id: 'applications', label: 'Applications', entry: 'crm', members: ['crm'] },
+  {
+    id: 'automation',
+    label: 'Automation',
+    entry: 'direct_apply',
+    members: ['direct_apply', 'schedules', 'live_console'],
+    sections: [
+      { tab: 'direct_apply', label: 'Campaigns' },
+      { tab: 'live_console', label: 'Live run' },
+    ],
+  },
+  { id: 'insights', label: 'Insights', entry: 'analytics', members: ['analytics'] },
+  {
+    id: 'settings',
+    label: 'Settings',
+    entry: 'profile',
+    members: ['profile', 'connections'],
+    sections: [
+      { tab: 'profile', label: 'Profile & resumes' },
+      { tab: 'connections', label: 'Platform connections' },
+    ],
+  },
+];
+
+export function getGroupForTab(tab: NavTab): NavGroup {
+  return NAV_GROUPS.find((g) => g.members.includes(tab)) || NAV_GROUPS[0];
+}
 
 /**
  * Resolves any tab ID, alias, or pathname string to a canonical NavTab.
@@ -66,8 +141,8 @@ export function resolveTab(input: NavTab | string | null | undefined): NavTab {
 
   // If it's a known pathname
   if (clean.startsWith('/')) {
-    const stripped = clean.replace(/\/+$/, '') || '/';
-    return PATH_TO_TAB[stripped] || 'dashboard';
+    const [pathPart, queryPart = ''] = clean.split('?');
+    return resolvePathname(pathPart, queryPart ? `?${queryPart}` : '');
   }
 
   // If it's already a known canonical tab
@@ -112,6 +187,10 @@ export function resolveTab(input: NavTab | string | null | undefined): NavTab {
     case 'schedules':
     case 'schedule':
       return 'schedules';
+    case 'home':
+      return 'dashboard';
+    case 'insights':
+      return 'analytics';
     case 'analytics':
       return 'analytics';
     case 'dashboard':
@@ -125,8 +204,26 @@ export function resolveTab(input: NavTab | string | null | undefined): NavTab {
  */
 export function getTabFromLocation(): NavTab {
   if (typeof window === 'undefined') return 'dashboard';
-  const pathname = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
-  return PATH_TO_TAB[pathname] || 'dashboard';
+  return resolvePathname(window.location.pathname, window.location.search);
+}
+
+/**
+ * Maps a pathname (+ optional query) to a tab. Unknown trailing segments
+ * (e.g. a future /applications/:id) fall back to the parent route.
+ */
+export function resolvePathname(pathname: string, search = ''): NavTab {
+  let path = pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  if (path === '/jobs' && new URLSearchParams(search).get('view') === 'matches') {
+    return 'matches';
+  }
+  while (path) {
+    const hit = PATH_TO_TAB[path];
+    if (hit) return hit;
+    const idx = path.lastIndexOf('/');
+    if (idx <= 0) break;
+    path = path.slice(0, idx);
+  }
+  return 'dashboard';
 }
 
 /**
@@ -134,5 +231,5 @@ export function getTabFromLocation(): NavTab {
  */
 export function getPathForTab(tab: NavTab | string): string {
   const resolved = resolveTab(tab);
-  return TAB_TO_PATH[resolved] || '/dashboard';
+  return TAB_TO_PATH[resolved] || '/home';
 }

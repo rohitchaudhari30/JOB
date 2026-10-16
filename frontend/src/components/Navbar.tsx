@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { User, AutomationRunStatus } from '../types';
 import { ThemeToggle } from './ThemeToggle';
+import { BRAND_NAME, BRAND_SUFFIX } from '../utils/brand';
 
 interface NavbarProps {
   user: User | null;
@@ -170,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
         <div className="flex items-center space-x-2">
           <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white">
-            ApplyFlow<span className="text-indigo-600 dark:text-indigo-400">.ai</span>
+            {BRAND_NAME}<span className="text-indigo-600 dark:text-indigo-400">{BRAND_SUFFIX}</span>
           </span>
         </div>
       </div>

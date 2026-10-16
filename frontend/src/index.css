@@ -3,14 +3,36 @@
 @tailwind utilities;
 
 @layer base {
+  /* Design tokens (redesign §16). New components use these; existing pages
+     migrate incrementally. Text tokens are chosen to stay >=4.5:1 on surface. */
   :root {
     color-scheme: light;
+    --surface: #ffffff;
+    --surface-muted: #f8fafc;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #475569;
+    --accent: #4f46e5;
+    --success: #047857;
+    --warning: #b45309;
+    --danger: #be123c;
+    --info: #0369a1;
   }
 
   html.dark,
   body.dark,
   .dark {
     color-scheme: dark;
+    --surface: #0f172a;
+    --surface-muted: #111c31;
+    --border: #1e293b;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --accent: #818cf8;
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #fb7185;
+    --info: #38bdf8;
   }
 
   body {

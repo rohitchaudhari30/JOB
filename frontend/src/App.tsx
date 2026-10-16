@@ -2,6 +2,8 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Navbar } from './components/Navbar';
 import { Sidebar, NavTab } from './components/Sidebar';
+import { SectionTabs } from './components/SectionTabs';
+import { BRAND_NAME, BRAND_SUFFIX } from './utils/brand';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
 import { api, setAuthToken } from './services/api';
@@ -41,19 +43,19 @@ export const App: React.FC = () => {
       const tab = getTabFromLocation();
       setActiveTab(tab);
       if (typeof document !== 'undefined') {
-        document.title = TAB_TITLES[tab] || 'AutoApply.ai';
+        document.title = TAB_TITLES[tab] || BRAND_NAME;
       }
     };
 
-    // Ensure URL in browser matches activeTab on initial mount (e.g. normalize '/' to '/dashboard')
+    // Ensure URL in browser matches activeTab on initial mount (e.g. normalize '/' to '/home')
     if (typeof window !== 'undefined') {
       const currentPath = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
-      const targetPath = TAB_TO_PATH[activeTab] || '/dashboard';
+      const targetPath = TAB_TO_PATH[activeTab] || '/home';
       if (currentPath === '/' || currentPath === '' || currentPath !== targetPath) {
         window.history.replaceState({ tab: activeTab }, '', targetPath);
       }
       if (typeof document !== 'undefined') {
-        document.title = TAB_TITLES[activeTab] || 'AutoApply.ai';
+        document.title = TAB_TITLES[activeTab] || BRAND_NAME;
       }
     }
 
@@ -188,7 +190,7 @@ export const App: React.FC = () => {
               <Bot className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight pt-1">
-              ApplyFlow<span className="text-indigo-600 dark:text-indigo-400">.AI</span>
+              {BRAND_NAME}<span className="text-indigo-600 dark:text-indigo-400">{BRAND_SUFFIX}</span>
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               Autonomous Multi-Platform Job Application Engine
@@ -281,7 +283,7 @@ export const App: React.FC = () => {
 
   const handleTabChange = (target: NavTab | string, replace = false) => {
     const canonicalTab = resolveTab(target);
-    const targetPath = TAB_TO_PATH[canonicalTab] || '/dashboard';
+    const targetPath = TAB_TO_PATH[canonicalTab] || '/home';
     setActiveTab(canonicalTab);
 
     if (typeof window !== 'undefined') {
@@ -293,7 +295,7 @@ export const App: React.FC = () => {
         }
       }
       if (typeof document !== 'undefined') {
-        document.title = TAB_TITLES[canonicalTab] || 'AutoApply.ai';
+        document.title = TAB_TITLES[canonicalTab] || BRAND_NAME;
       }
     }
   };
@@ -324,6 +326,7 @@ export const App: React.FC = () => {
         />
 
         <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8 w-full">
+          <SectionTabs activeTab={activeTab} onTabChange={handleTabChange} />
           <ErrorBoundary resetKey={activeTab}>
           <Suspense fallback={<div className="p-8 text-sm text-slate-500" role="status">Loading…</div>}>
           {activeTab === 'dashboard' && (

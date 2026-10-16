@@ -7,21 +7,28 @@ describe('Sidebar Component', () => {
     const onTabChange = vi.fn();
     render(<Sidebar activeTab="dashboard" onTabChange={onTabChange} />);
 
-    expect(screen.getByText('Dashboard')).toBeDefined();
-    expect(screen.getByText('Auto-Apply')).toBeDefined();
-    expect(screen.getByText('Live Console')).toBeDefined();
-    expect(screen.getByText('Job Discovery')).toBeDefined();
-    expect(screen.getByText('AI Matches')).toBeDefined();
+    for (const label of ['Home', 'Jobs', 'Applications', 'Automation', 'Insights', 'Settings']) {
+      expect(screen.getByText(label)).toBeDefined();
+    }
+    expect(screen.getByRole('navigation', { name: 'Primary navigation' }).querySelectorAll('a').length).toBe(6);
+  });
+
+  it('highlights the owning section for sub-views', () => {
+    render(<Sidebar activeTab="live_console" onTabChange={vi.fn()} />);
+    expect(screen.getByText('Automation').closest('a')?.getAttribute('aria-current')).toBe('page');
+    expect(screen.getByText('Home').closest('a')?.getAttribute('aria-current')).toBeNull();
   });
 
   it('triggers onTabChange when a tab is clicked', () => {
     const onTabChange = vi.fn();
     render(<Sidebar activeTab="dashboard" onTabChange={onTabChange} />);
 
-    const autoApplyButton = screen.getByText('Auto-Apply');
-    fireEvent.click(autoApplyButton);
-
+    fireEvent.click(screen.getByText('Automation'));
     expect(onTabChange).toHaveBeenCalledWith('direct_apply');
+    fireEvent.click(screen.getByText('Jobs'));
+    expect(onTabChange).toHaveBeenCalledWith('discovery');
+    fireEvent.click(screen.getByText('Settings'));
+    expect(onTabChange).toHaveBeenCalledWith('profile');
   });
 
   it('does not claim an active run when nothing is running', () => {
@@ -43,7 +50,7 @@ describe('Sidebar Component', () => {
     const onClose = vi.fn();
     render(<Sidebar activeTab="crm" onTabChange={vi.fn()} open onClose={onClose} />);
     expect(screen.getByText('Applications').closest('a')?.getAttribute('aria-current')).toBe('page');
-    fireEvent.click(screen.getByText('Analytics'));
+    fireEvent.click(screen.getByText('Insights'));
     expect(onClose).toHaveBeenCalled();
   });
 });
