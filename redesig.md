@@ -513,3 +513,16 @@ Decisions taken where §25 was unanswered (all reversible): **Q-01** no new depe
 | Browser/a11y verification (SUS-01…06) | **Not done** | No browser run in this environment |
 
 Verification: `tsc` clean, 82 frontend tests pass (44 → 82), production build succeeds. Backend untouched (353 tests not re-run — no backend change).
+
+### 28.1 Update — second implementation pass (local, not pushed)
+
+| Item | State now | Notes |
+|---|---|---|
+| Single run-state poller (UX-10) | **Done** | `hooks/useActiveRun`: 5 s only while a run is RUNNING/PAUSED, 30 s idle, none while the tab is hidden, plus debounced refresh on WebSocket messages carrying run/state. The fixed 5 s poller in `App.tsx` is gone. Dashboard (15 s) and campaign pacing (5 s) are data pollers, now visibility-aware via `usePolling`. Which WS message types the backend emits for run changes was **not verified**; the hook reacts to any message with `run_id`/`state`/`status`, and polling remains the fallback |
+| Live Console modes (UX-06, SUS-06) | **Mostly done** | Removed the duplicate expand/restore icon button. Two view modes (Split / Full viewport) + browser fullscreen remain. `LiveConsoleDrawer.tsx` (the source of the "duplicate drawer controls") had **no importers**, so it was dead code and was deleted. "Start profile run" still sits beside campaign Run (open question Q-04) |
+| ReadinessBanner (IMP-013) | **Done where it applies** | Jobs › Discover, Jobs › AI matches, Automation › Campaigns. Dashboard readiness cards and the Dashboard "Platform Health" / Auto-Apply "Reconnect Platform" links are *status and context actions*, not setup prompts, so they were intentionally left |
+| Apply guard (UX-08) | **Done, and a correction** | AI Matches single-apply did **not** run the connection/resume checks that Jobs › Discover runs — a real inconsistency. Both now use `useApplyReadiness`. **Correction to §7:** the two apply paths are equivalent in effect (both queue with `auto_execute=false` through the backend's single canonical command), and the `source` tags (`JOB_DISCOVERY`, `AI_MATCHES`, `DASHBOARD`) are valid provenance values in the backend enum. IMP-015 ("one source value") is therefore **withdrawn**, not needed |
+| Shared UI kit (IMP-020) | **Started** | `Button`, `StatusChip`, `Modal` (focus trap, Esc, focus restore, labelled), `Drawer`, `ConfirmDialog` + tests. Campaign delete now uses `ConfirmDialog`. Existing pages/modals are not migrated yet |
+| Jobs merge (UX-09) | **Not done** | Still two components under one Jobs section. Decision: a full merge is a large, risky rewrite of ~1,850 lines without browser verification; the user-facing duplication (guard, controls) is addressed instead. Revisit with the Applications/Jobs drawers |
+
+Tests: 96 frontend tests pass (44 at the start of the redesign); `tsc` clean; production build succeeds.

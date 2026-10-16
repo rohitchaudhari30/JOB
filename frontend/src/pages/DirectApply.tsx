@@ -37,6 +37,7 @@ import { CandidateProfile, Resume, PlatformConnectionInfo, Campaign, CampaignPac
 import { useToast } from '../context/ToastContext';
 import { usePolling } from '../hooks/usePolling';
 import { ReadinessBanner } from '../components/ReadinessBanner';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 interface DirectApplyProps {
   onNavigate: (tab: any) => void;
@@ -390,13 +391,15 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
   };
 
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const handleDeleteCampaign = async () => {
     if (!selectedCampaign) return;
     if (selectedCampaign.state === 'RUNNING' || selectedCampaign.state === 'PAUSED') {
       showWarning('Stop the campaign before deleting it.');
+      setConfirmDelete(false);
       return;
     }
-    if (!confirm(`Delete campaign "${selectedCampaign.name}"? This cannot be undone.`)) return;
     try {
       setCampaignActionLoading(true);
       await api.deleteCampaign(selectedCampaign.id);
@@ -412,6 +415,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
       showError(`Delete failed: ${err.response?.data?.detail || err.message}`);
     } finally {
       setCampaignActionLoading(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -626,7 +630,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
 
               <button
                 type="button"
-                onClick={handleDeleteCampaign}
+                onClick={() => setConfirmDelete(true)}
                 disabled={
                   campaignActionLoading ||
                   selectedCampaign.state === 'RUNNING' ||
@@ -652,6 +656,17 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete campaign?"
+        message={`"${selectedCampaign?.name ?? ''}" and its rules will be permanently removed. This cannot be undone.`}
+        confirmLabel="Delete campaign"
+        destructive
+        busy={campaignActionLoading}
+        onConfirm={handleDeleteCampaign}
+        onCancel={() => setConfirmDelete(false)}
+      />
 
       <ReadinessBanner
         missing={[...(connectedSourcesCount === 0 ? (['connection'] as const) : []), ...(resumes.length === 0 ? (['resume'] as const) : [])]}

@@ -451,3 +451,14 @@ Local branch `claude/phase0-quick-fixes` (not pushed). See `redesig.md` §28 for
 | IMP-022 | **Partly done** — route/nav/section/readiness tests; no e2e/axe |
 | IMP-007, 012, 015, 018, 019, 021 | **Not started** |
 | IMP-030…034, 040…042, 050…055 | **Not started** (need decisions or are optional) |
+
+### Appendix C — update (second pass, local, not pushed)
+
+| ID | Status now |
+|---|---|
+| IMP-007 | **Done** — `useActiveRun` + `usePolling` (tests: idle/active cadence, hidden tab, WS refresh) |
+| IMP-013 | **Done** where applicable (Jobs › Discover, Jobs › AI matches, Campaigns) |
+| IMP-015 | **Withdrawn** — apply paths already share one backend command; `source` is provenance. The real defect (AI Matches skipped readiness checks) is fixed |
+| IMP-016 | **Mostly done** — duplicate view toggle and dead `LiveConsoleDrawer` removed; start-path consolidation waits on Q-04 |
+| IMP-020 | **Started** — Button, StatusChip, Modal/Drawer, ConfirmDialog built and tested; page migration pending |
+| IMP-014 | **Not done** — navigation-level merge only (see `redesig.md` §28.1) |
