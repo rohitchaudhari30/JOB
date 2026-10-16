@@ -31,6 +31,9 @@ describe('URL Navigation & Route Resolution', () => {
     expect(resolveTab('/applications')).toBe('crm');
     expect(resolveTab('/crm')).toBe('crm');
     expect(resolveTab('/analytics')).toBe('analytics');
+    // Backend dashboard alerts emit /settings (Reconnect Session)
+    expect(resolveTab('/settings')).toBe('connections');
+    expect(resolveTab('settings')).toBe('connections');
     expect(resolveTab('/discovery')).toBe('discovery');
     expect(resolveTab('/jobs')).toBe('discovery');
     expect(resolveTab('/matches')).toBe('matches');

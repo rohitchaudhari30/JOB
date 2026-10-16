@@ -30,10 +30,13 @@ interface SidebarProps {
   onTabChange: (tab: NavTab) => void;
   user?: User | null;
   stats?: {
-    totalMatches?: number;
-    activeApplications?: number;
     isLiveRunning?: boolean;
+    /** Real automation state; undefined/IDLE means nothing is running. */
+    runStatus?: string | null;
   };
+  /** Mobile/tablet drawer state (<1024px). Ignored on desktop. */
+  open?: boolean;
+  onClose?: () => void;
 }
 
 interface NavSection {
@@ -42,12 +45,17 @@ interface NavSection {
     id: NavTab;
     label: string;
     icon: React.ReactNode;
-    badge?: string | number;
     isLive?: boolean;
   }[];
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, stats }) => {
+const RUN_LABELS: Record<string, { label: string; dot: string; pulse: boolean }> = {
+  RUNNING: { label: 'Run in progress', dot: 'bg-emerald-500', pulse: true },
+  PAUSED: { label: 'Run paused', dot: 'bg-amber-500', pulse: false },
+};
+
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, stats, open = false, onClose }) => {
+  const runState = (stats?.runStatus && RUN_LABELS[stats.runStatus]) || (stats?.isLiveRunning ? RUN_LABELS.RUNNING : null);
   const sections: NavSection[] = [
     {
       items: [
@@ -86,13 +94,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
           id: 'matches',
           label: 'AI Matches',
           icon: <Sparkles className="w-4 h-4" />,
-          badge: stats?.totalMatches,
         },
         {
           id: 'crm',
           label: 'Applications',
           icon: <KanbanSquare className="w-4 h-4" />,
-          badge: stats?.activeApplications,
         },
         {
           id: 'analytics',
@@ -119,7 +125,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
   ];
 
   return (
-    <aside className="w-68 border-r border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-4 flex flex-col justify-between select-none transition-colors duration-200 shrink-0">
+    <>
+    {open && (
+      <div className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" aria-hidden="true" onClick={onClose} />
+    )}
+    <aside
+      id="primary-navigation"
+      aria-label="Primary"
+      className={`${open ? 'fixed inset-y-0 left-0 z-40 flex overflow-y-auto' : 'hidden'} lg:static lg:z-auto lg:flex w-64 border-r border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-4 flex flex-col justify-between select-none transition-colors duration-200 shrink-0`}>
       <div className="space-y-5">
         {sections.map((section, idx) => (
           <div key={idx} className="space-y-1">
@@ -137,10 +150,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
                   <a
                     key={item.id}
                     href={targetPath}
-                    role="button"
+                    aria-current={isActive ? 'page' : undefined}
                     onClick={(e) => {
                       e.preventDefault();
                       onTabChange(item.id);
+                      onClose?.();
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer border ${
                       isActive
@@ -163,17 +177,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
                         </span>
                       )}
 
-                      {item.badge !== undefined && !item.isLive && Number(item.badge) > 0 && (
-                        <span
-                          className={`px-2 py-0.5 text-[10px] font-bold rounded-full whitespace-nowrap shrink-0 ${
-                            isActive
-                              ? 'bg-indigo-200/80 text-indigo-800 dark:bg-indigo-900/80 dark:text-indigo-200'
-                              : 'bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700/50'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
                     </div>
                   </a>
                 );
@@ -195,13 +198,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
                 {user?.full_name || 'Candidate Account'}
               </div>
               <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate flex items-center space-x-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Autopilot Active</span>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${runState ? runState.dot : 'bg-slate-400'} ${runState?.pulse ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+                  aria-hidden="true"
+                ></span>
+                <span>{runState ? runState.label : 'No active run'}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
     </aside>
+    </>
   );
 };

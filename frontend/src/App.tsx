@@ -27,6 +27,7 @@ export const App: React.FC = () => {
   const { showSuccess, showError } = useToast();
   const [activeTab, setActiveTab] = useState<NavTab>(() => getTabFromLocation());
   const [user, setUser] = useState<User | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
   const [activeRun, setActiveRun] = useState<AutomationRunStatus | null>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -305,6 +306,8 @@ export const App: React.FC = () => {
         onNavigate={handleTabChange}
         activeRun={activeRun}
         onOpenLiveConsole={() => handleTabChange('live_console')}
+        onMenuClick={() => setNavOpen((v) => !v)}
+        navOpen={navOpen}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -314,7 +317,10 @@ export const App: React.FC = () => {
           user={user}
           stats={{
             isLiveRunning: activeRun?.status === 'RUNNING',
+            runStatus: activeRun?.status ?? null,
           }}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
         />
 
         <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8 w-full">

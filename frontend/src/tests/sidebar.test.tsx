@@ -23,4 +23,27 @@ describe('Sidebar Component', () => {
 
     expect(onTabChange).toHaveBeenCalledWith('direct_apply');
   });
+
+  it('does not claim an active run when nothing is running', () => {
+    render(<Sidebar activeTab="dashboard" onTabChange={vi.fn()} />);
+    expect(screen.queryByText('Autopilot Active')).toBeNull();
+    expect(screen.getByText('No active run')).toBeDefined();
+  });
+
+  it('reflects real run state', () => {
+    const { rerender } = render(
+      <Sidebar activeTab="dashboard" onTabChange={vi.fn()} stats={{ runStatus: 'RUNNING', isLiveRunning: true }} />
+    );
+    expect(screen.getByText('Run in progress')).toBeDefined();
+    rerender(<Sidebar activeTab="dashboard" onTabChange={vi.fn()} stats={{ runStatus: 'PAUSED' }} />);
+    expect(screen.getByText('Run paused')).toBeDefined();
+  });
+
+  it('marks the active item with aria-current and closes the drawer on navigation', () => {
+    const onClose = vi.fn();
+    render(<Sidebar activeTab="crm" onTabChange={vi.fn()} open onClose={onClose} />);
+    expect(screen.getByText('Applications').closest('a')?.getAttribute('aria-current')).toBe('page');
+    fireEvent.click(screen.getByText('Analytics'));
+    expect(onClose).toHaveBeenCalled();
+  });
 });

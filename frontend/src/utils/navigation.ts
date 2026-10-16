@@ -38,6 +38,7 @@ export const PATH_TO_TAB: Record<string, NavTab> = {
   '/profile': 'profile',
   '/candidate-profile': 'profile',
   '/connections': 'connections',
+  '/settings': 'connections',
   '/platform-connections': 'connections',
   '/schedules': 'schedules',
 };
@@ -106,6 +107,7 @@ export function resolveTab(input: NavTab | string | null | undefined): NavTab {
       return 'profile';
     case 'connections':
     case 'platform-connections':
+    case 'settings':
       return 'connections';
     case 'schedules':
     case 'schedule':
