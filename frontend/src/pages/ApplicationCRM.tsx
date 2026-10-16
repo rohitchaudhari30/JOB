@@ -27,6 +27,8 @@ import { Pagination } from '../components/ui/Pagination';
 import { ScreenshotModal } from './applications/ScreenshotModal';
 import { RationaleModal } from './applications/RationaleModal';
 import { ReconciliationModal } from './applications/ReconciliationModal';
+import { ApplicationDrawer, ApplicationDrawerView } from './applications/ApplicationDrawer';
+import { useQueryParam } from '../hooks/useQueryParam';
 
 import {
   DerivedStatus,
@@ -47,8 +49,9 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
   const [applications, setApplications] = useState<Application[]>([]);
   const [matchScores, setMatchScores] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [selectedFilter, setSelectedFilter] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  // Filters live in the URL (?status=&q=) so views survive reload/back/share.
+  const [selectedFilter, setSelectedFilter] = useQueryParam('status', 'All');
+  const [searchQuery, setSearchQuery] = useQueryParam('q', '');
   const [showFilterPanel, setShowFilterPanel] = useState<boolean>(false);
 
   // Secondary Filter Bar Inputs (Image 1)
@@ -70,6 +73,27 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
   const [selectedScreenshotApp, setSelectedScreenshotApp] = useState<{ id: string; path: string } | null>(null);
   const [screenshotImageUrl, setScreenshotImageUrl] = useState<string | null>(null);
   const [screenshotLoading, setScreenshotLoading] = useState<boolean>(false);
+  // Deep link: /applications/:id opens the detail drawer.
+  const idFromPath = () => {
+    const m = window.location.pathname.match(/^\/applications\/([^/]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
+  };
+  const [drawerAppId, setDrawerAppId] = useState<string | null>(idFromPath);
+  useEffect(() => {
+    const onPop = () => setDrawerAppId(idFromPath());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const openDrawer = (id: string) => {
+    window.history.pushState({ tab: 'crm' }, '', `/applications/${encodeURIComponent(id)}`);
+    setDrawerAppId(id);
+  };
+  const closeDrawer = () => {
+    if (window.location.pathname.startsWith('/applications/')) {
+      window.history.pushState({ tab: 'crm' }, '', '/applications');
+    }
+    setDrawerAppId(null);
+  };
   const [selectedAppForRationale, setSelectedAppForRationale] = useState<Application | null>(null);
   const [selectedAppForReconciliation, setSelectedAppForReconciliation] = useState<Application | null>(null);
   const [reconcileNotes, setReconcileNotes] = useState<string>('');
@@ -1047,9 +1071,14 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
                         <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors group">
                           {/* Position (Job title + Company & portal subtitle) */}
                           <td className="py-3.5 px-4 align-top max-w-[280px]">
-                            <div className="font-semibold text-xs text-slate-900 dark:text-white leading-tight">
+                            <button
+                              type="button"
+                              onClick={() => openDrawer(app.id)}
+                              className="font-semibold text-xs text-slate-900 dark:text-white leading-tight text-left hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline cursor-pointer"
+                              aria-label={`Open details for ${jobTitle} at ${companyName}`}
+                            >
                               {jobTitle}
-                            </div>
+                            </button>
                             <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center space-x-1">
                               <span className="font-medium text-slate-600 dark:text-slate-300">{companyName}</span>
                               <span className="text-slate-400">•</span>
@@ -1369,6 +1398,41 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
           </>
         )}
       </div>
+
+      {(() => {
+        const dApp = drawerAppId ? applications.find((a) => a.id === drawerAppId) || null : null;
+        if (!dApp) return null;
+        const st = getDerivedStatus(dApp);
+        const companyRaw = dApp.company || dApp.job?.company;
+        const view: ApplicationDrawerView = {
+          title: dApp.job_title || dApp.job?.title || 'Role',
+          company: companyRaw && !isUuidString(companyRaw) ? companyRaw : 'Company',
+          platform: resolvePlatformName(dApp),
+          statusLabel: st.label,
+          matchScore: dApp.match_score ?? matchScores.get(dApp.job_id),
+          applyUrl: dApp.apply_url || dApp.job?.apply_url,
+          needsVerification: st.label === 'Needs Verification',
+        };
+        return (
+          <ApplicationDrawer
+            app={dApp}
+            view={view}
+            onClose={closeDrawer}
+            onRationale={(a) => {
+              closeDrawer();
+              setSelectedAppForRationale(a);
+            }}
+            onScreenshot={(a) => {
+              closeDrawer();
+              if (a.screenshot_file_path) void openScreenshotPreview(a.id, a.screenshot_file_path);
+            }}
+            onReconcile={(a) => {
+              closeDrawer();
+              setSelectedAppForReconciliation(a);
+            }}
+          />
+        );
+      })()}
 
       {selectedScreenshotApp && (
         <ScreenshotModal

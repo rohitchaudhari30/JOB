@@ -12,7 +12,7 @@ import { api, setAuthToken } from './services/api';
 import { wsClient } from './services/ws';
 import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
-import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES } from './utils/navigation';
+import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES, needsCanonicalRedirect } from './utils/navigation';
 
 // Pages load on demand so the first screen downloads less code (FE-03).
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
@@ -52,7 +52,7 @@ export const App: React.FC = () => {
     if (typeof window !== 'undefined') {
       const currentPath = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
       const targetPath = TAB_TO_PATH[activeTab] || '/home';
-      if (currentPath === '/' || currentPath === '' || currentPath !== targetPath) {
+      if (needsCanonicalRedirect(currentPath, targetPath)) {
         window.history.replaceState({ tab: activeTab }, '', targetPath);
       }
       if (typeof document !== 'undefined') {
@@ -281,6 +281,8 @@ export const App: React.FC = () => {
           window.history.replaceState({ tab: canonicalTab }, '', targetPath);
         } else {
           window.history.pushState({ tab: canonicalTab }, '', targetPath);
+          // Let in-page URL state (drawers, filters) resync to the new location.
+          window.dispatchEvent(new PopStateEvent('popstate'));
         }
       }
       if (typeof document !== 'undefined') {

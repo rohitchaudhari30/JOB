@@ -234,3 +234,13 @@ export function getPathForTab(tab: NavTab | string): string {
   const resolved = resolveTab(tab);
   return TAB_TO_PATH[resolved] || '/home';
 }
+
+/**
+ * True when the browser URL should be rewritten to the tab's canonical path.
+ * Nested record paths under the canonical path (e.g. /applications/abc) are
+ * already canonical and must be kept.
+ */
+export function needsCanonicalRedirect(currentPath: string, canonicalPath: string): boolean {
+  const cur = currentPath.toLowerCase().replace(/\/+$/, '') || '/';
+  return !(cur === canonicalPath || cur.startsWith(canonicalPath + '/'));
+}
