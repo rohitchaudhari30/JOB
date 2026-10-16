@@ -85,6 +85,7 @@ describe('Analytics (Strategic Decision Workspace)', () => {
   };
 
   beforeEach(() => {
+    window.history.replaceState({}, '', '/insights');
     vi.clearAllMocks();
     (api.getFunnelOverview as any).mockResolvedValue(mockFunnel);
     (api.getResumePerformance as any).mockResolvedValue(mockResumes);
@@ -152,6 +153,7 @@ describe('Analytics (Strategic Decision Workspace)', () => {
       </ToastProvider>
     );
 
+    fireEvent.click(await screen.findByRole('tab', { name: 'Resumes' }));
     await waitFor(() => {
       expect(screen.getByText('Resume Performance Comparison')).toBeDefined();
       expect(screen.getByText('Highest Observed Interview Rate')).toBeDefined();
@@ -173,6 +175,7 @@ describe('Analytics (Strategic Decision Workspace)', () => {
       </ToastProvider>
     );
 
+    fireEvent.click(await screen.findByRole('tab', { name: 'Scoring weights' }));
     await waitFor(() => {
       expect(screen.getByText('AI Matching Strategy & Optimization')).toBeDefined();
       expect(screen.getByText('Configure Matching Strategy')).toBeDefined();
@@ -202,5 +205,18 @@ describe('Analytics (Strategic Decision Workspace)', () => {
       expect(screen.getByText('From:')).toBeDefined();
       expect(screen.getByText('To:')).toBeDefined();
     });
+  });
+
+  it('shows one insight section at a time and keeps the choice in the URL', async () => {
+    render(
+      <ToastProvider>
+        <Analytics />
+      </ToastProvider>
+    );
+    expect((await screen.findByRole('tab', { name: 'Overview' })).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByText('Resume Performance Comparison')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Campaigns' }));
+    expect(screen.getByRole('tab', { name: 'Campaigns' }).getAttribute('aria-selected')).toBe('true');
+    expect(window.location.search).toContain('view=campaigns');
   });
 });
