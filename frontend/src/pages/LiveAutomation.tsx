@@ -13,7 +13,6 @@ import {
   Lock,
   Layers,
   Maximize2,
-  Minimize2,
   Columns,
   Expand,
   Shrink,
@@ -556,21 +555,6 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
 
               {/* Viewport Sizing & Presentation Action Controls */}
               <div className="flex items-center space-x-1 pl-2 border-l border-slate-200 dark:border-slate-800">
-                {/* 1-Click Expand / Restore Toggle Button */}
-                <button
-                  type="button"
-                  onClick={() => setViewMode(viewMode === 'expanded' ? 'split' : 'expanded')}
-                  title={viewMode === 'expanded' ? 'Restore Split View (Side by Side)' : 'Expand Viewport to Full Width'}
-                  className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
-                  aria-label={viewMode === 'expanded' ? 'Restore Split View' : 'Expand Viewport'}
-                >
-                  {viewMode === 'expanded' ? (
-                    <Minimize2 className="w-3.5 h-3.5 text-slate-700 dark:text-slate-200" />
-                  ) : (
-                    <Maximize2 className="w-3.5 h-3.5 text-slate-700 dark:text-slate-200" />
-                  )}
-                </button>
-
                 {/* Native Fullscreen Mode Button */}
                 <button
                   type="button"

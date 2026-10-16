@@ -36,6 +36,7 @@ import { NewCampaignModal } from './campaigns/NewCampaignModal';
 import { CandidateProfile, Resume, PlatformConnectionInfo, Campaign, CampaignPacingStatus, CampaignActivityLog } from '../types';
 import { useToast } from '../context/ToastContext';
 import { usePolling } from '../hooks/usePolling';
+import { ReadinessBanner } from '../components/ReadinessBanner';
 
 interface DirectApplyProps {
   onNavigate: (tab: any) => void;
@@ -651,6 +652,12 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
           )}
         </div>
       </div>
+
+      <ReadinessBanner
+        missing={[...(connectedSourcesCount === 0 ? (['connection'] as const) : []), ...(resumes.length === 0 ? (['resume'] as const) : [])]}
+        platformLabel="A job platform"
+        onNavigate={(tab) => onNavigate(tab)}
+      />
 
       {/* P1: Operational Cockpit - Current Automation Status & Next Action */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm p-5 md:p-6 relative overflow-hidden transition-all">
