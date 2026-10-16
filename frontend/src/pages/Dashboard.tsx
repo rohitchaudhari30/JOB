@@ -143,7 +143,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <AlertOctagon className="w-4 h-4 text-rose-500" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">
               Immediate Action Required ({overview.needs_attention.length})
             </h2>
           </div>

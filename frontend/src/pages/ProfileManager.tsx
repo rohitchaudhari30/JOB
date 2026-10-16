@@ -556,7 +556,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
                   <span className="text-xs text-slate-400 font-medium">Yrs</span>
                 </div>
                 <div className="flex items-center space-x-1.5">
-                  <select
+                  <select aria-label="Additional months of experience"
                     value={expMonths}
                     onChange={(e) => {
                       const mos = parseInt(e.target.value) || 0;
@@ -938,7 +938,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                 Work Authorization Status
               </label>
-              <select
+              <select aria-label="Work authorization status"
                 value={profile.work_authorization || WORK_AUTH_OPTIONS[0]}
                 onChange={(e) => setProfile({ ...profile, work_authorization: e.target.value })}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
@@ -956,7 +956,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                 Preferred Work Mode
               </label>
-              <select
+              <select aria-label="Preferred work mode"
                 value={profile.remote_preference || 'any'}
                 onChange={(e) => setProfile({ ...profile, remote_preference: e.target.value })}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"

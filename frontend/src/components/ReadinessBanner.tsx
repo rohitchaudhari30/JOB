@@ -43,7 +43,7 @@ export const ReadinessBanner: React.FC<ReadinessBannerProps> = ({ missing, platf
       <div className="flex items-start gap-3 min-w-0">
         <AlertTriangle className="w-5 h-5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
         <div className="min-w-0">
-          <h4 className="text-sm font-bold text-slate-900 dark:text-white">Finish setup to apply</h4>
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Finish setup to apply</h2>
           <ul className="text-xs text-slate-700 dark:text-slate-300 mt-1 space-y-0.5">
             {missing.map((gap) => (
               <li key={gap}>{COPY[gap].text(platformLabel)}</li>
@@ -57,7 +57,7 @@ export const ReadinessBanner: React.FC<ReadinessBannerProps> = ({ missing, platf
             key={gap}
             type="button"
             onClick={() => onNavigate(COPY[gap].target)}
-            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold transition-colors cursor-pointer"
           >
             {COPY[gap].action(platformLabel)}
           </button>

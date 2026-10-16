@@ -207,7 +207,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           {/* Platform Filter Dropdown */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs text-xs font-semibold text-slate-700 dark:text-slate-300">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <select
+            <select aria-label="Platform"
               value={selectedPlatform}
               onChange={(e) => setSelectedPlatform(e.target.value)}
               className="bg-transparent outline-none cursor-pointer text-xs font-semibold"

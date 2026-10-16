@@ -180,7 +180,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
     if (score >= 75) return 'text-emerald-600 dark:text-emerald-400 border-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 dark:border-emerald-800/40';
     if (score >= 60) return 'text-indigo-600 dark:text-indigo-400 border-indigo-200 bg-indigo-50 dark:bg-indigo-950/40 dark:border-indigo-800/40';
     if (score >= 45) return 'text-amber-600 dark:text-amber-400 border-amber-200 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800/40';
-    return 'text-rose-600 dark:text-rose-400 border-rose-200 bg-rose-50 dark:bg-rose-950/40 dark:border-rose-800/40';
+    return 'text-rose-700 dark:text-rose-400 border-rose-200 bg-rose-50 dark:bg-rose-950/40 dark:border-rose-800/40';
   };
 
   return (
@@ -319,7 +319,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
               <Sliders className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
               <span className="text-xs text-slate-700 dark:text-slate-300 font-semibold">Min Score:</span>
               <input
-                type="range"
+                type="range" aria-label="Minimum match score"
                 min="0"
                 max="90"
                 step="5"
@@ -331,7 +331,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
             </div>
 
             {/* Decision Filter */}
-            <select
+            <select aria-label="Filter by AI decision"
               value={decisionFilter}
               onChange={(e) => setDecisionFilter(e.target.value)}
               className="px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
@@ -346,7 +346,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
             {/* Sort Filter */}
             <div className="flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700">
               <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-              <select
+              <select aria-label="Sort matches"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="bg-transparent border-none text-xs font-semibold text-slate-800 dark:text-white focus:ring-0 outline-none cursor-pointer"
@@ -510,7 +510,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
                             <Check className="w-3 h-3 mr-0.5" /> Pass
                           </span>
                         ) : (
-                          <span className="text-rose-600 dark:text-rose-400 inline-flex items-center">
+                          <span className="text-rose-700 dark:text-rose-400 inline-flex items-center">
                             <X className="w-3 h-3 mr-0.5" /> Fail
                           </span>
                         )}
@@ -562,8 +562,8 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
                     )}
                     {m.blocking_reasons && m.blocking_reasons.length > 0 && (
                       <div className="pt-1 space-y-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Caution / Disqualifiers:</span>
-                        <ul className="text-[11px] text-rose-600 dark:text-rose-400 list-disc list-inside space-y-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">Caution / Disqualifiers:</span>
+                        <ul className="text-[11px] text-rose-700 dark:text-rose-400 list-disc list-inside space-y-0.5">
                           {m.blocking_reasons.map((br, i) => (
                             <li key={i}>{br}</li>
                           ))}

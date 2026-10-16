@@ -539,7 +539,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
         {/* Campaign Dropdown & Actions */}
         <div className="flex flex-wrap items-center gap-2">
           {campaigns.length > 0 && (
-            <select
+            <select aria-label="Select campaign"
               value={selectedCampaign?.id || ''}
               onChange={(e) => {
                 const found = campaigns.find((c) => c.id === e.target.value);
@@ -572,7 +572,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                     type="button"
                     onClick={handlePauseCampaignExecution}
                     disabled={campaignActionLoading}
-                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
                   >
                     <Pause className="w-3.5 h-3.5 fill-current" />
                     <span>Pause</span>
@@ -582,7 +582,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                     type="button"
                     onClick={handleStopCampaignExecution}
                     disabled={campaignActionLoading}
-                    className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
+                    className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-rose-700 dark:text-rose-400 flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
                     title="Stop Execution"
                   
  aria-label="Stop Execution"
@@ -607,7 +607,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
                     type="button"
                     onClick={handleStopCampaignExecution}
                     disabled={campaignActionLoading}
-                    className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
+                    className="px-3.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold text-rose-700 dark:text-rose-400 flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
                     title="Stop Execution"
                   
  aria-label="Stop Execution"
@@ -1093,7 +1093,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
               <Clock className="w-3.5 h-3.5 text-indigo-500" />
               <span>Job Freshness Filter</span>
             </label>
-            <select
+            <select aria-label="Job freshness filter"
               value={freshnessHours}
               onChange={(e) => setFreshnessHours(Number(e.target.value))}
               className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
@@ -1121,7 +1121,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
               </span>
             </div>
             <input
-              type="range"
+              type="range" aria-label="Minimum match score for auto-apply"
               min="50"
               max="95"
               step="5"
@@ -1187,7 +1187,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
               Max Applications This Run
             </label>
             <input
-              type="number"
+              type="number" aria-label="Maximum applications per run"
               min="1"
               max="50"
               value={maxApplications}
@@ -1200,7 +1200,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Attach Resume Version
             </label>
-            <select
+            <select aria-label="Resume to attach"
               value={selectedResumeId}
               onChange={(e) => setSelectedResumeId(e.target.value)}
               className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-hidden"

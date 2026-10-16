@@ -732,7 +732,7 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
             <div
               className={`w-6 h-6 rounded-lg flex items-center justify-center ${
                 stats.issuesCount > 0
-                  ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+                  ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
               }`}
             >
@@ -1220,7 +1220,7 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
                                 </button>
                                 <button
                                   onClick={() => setExpandedReasonId(isExpanded ? null : app.id)}
-                                  className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
+                                  className="text-xs font-semibold text-rose-700 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
                                 >
                                   <span>Reason</span>
                                   {isExpanded ? (

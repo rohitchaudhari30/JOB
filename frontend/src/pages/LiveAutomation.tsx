@@ -401,7 +401,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
               ) : (
                 <button
                   onClick={handlePause}
-                  className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
+                  className="px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
                 >
                   <Pause className="w-4 h-4" />
                   <span>Pause</span>

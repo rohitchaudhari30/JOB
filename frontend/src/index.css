@@ -203,3 +203,35 @@
   animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Contrast override (kept outside @layer so it follows the generated utilities):
+   Tailwind slate-400 text is 2.56:1 on white. Light surfaces get a >=4.5:1 grey;
+   dark mode keeps the original value. */
+.text-slate-400 {
+  color: #5b6b81;
+}
+.dark .text-slate-400 {
+  color: #94a3b8;
+}
+.text-emerald-600 {
+  color: #047857;
+}
+.dark .text-emerald-600 {
+  color: #059669;
+}
+
+/* More light-surface contrast fixes (dark: variants keep their own, higher-specificity colours). */
+.text-slate-500 {
+  color: #556277;
+}
+.dark .text-slate-500 {
+  color: #94a3b8;
+}
+.text-amber-600 {
+  color: #b45309;
+}
+.text-orange-600 {
+  color: #c2410c;
+}
+.bg-orange-600 {
+  background-color: #c2410c;
+}

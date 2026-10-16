@@ -700,7 +700,7 @@ export const LiveTelemetryPanel: React.FC<LiveTelemetryPanelProps> = ({
                     <button
                       type="button"
                       onClick={onOpenOtpModal}
-                      className="w-full py-1.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                      className="w-full py-1.5 px-3 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                     >
                       Enter OTP / Resume Automation
                     </button>
