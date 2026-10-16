@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Search,
@@ -53,6 +53,22 @@ const RUN_LABELS: Record<string, { label: string; dot: string; pulse: boolean }>
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, stats, open = false, onClose }) => {
   const runState = (stats?.runStatus && RUN_LABELS[stats.runStatus]) || (stats?.isLiveRunning ? RUN_LABELS.RUNNING : null);
   const activeGroup = getGroupForTab(activeTab);
+  const asideRef = useRef<HTMLElement>(null);
+
+  // Drawer behaviour (<1024px): Esc closes, focus moves into the nav and returns to the opener.
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    asideRef.current?.querySelector<HTMLElement>('a[href]')?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      opener?.focus?.();
+    };
+  }, [open, onClose]);
 
   return (
     <>
@@ -60,6 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
       <div className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden" aria-hidden="true" onClick={onClose} />
     )}
     <aside
+      ref={asideRef}
       id="primary-navigation"
       aria-label="Primary"
       className={`${open ? 'fixed inset-y-0 left-0 z-40 flex overflow-y-auto' : 'hidden'} lg:static lg:z-auto lg:flex w-64 border-r border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-4 flex flex-col justify-between select-none transition-colors duration-200 shrink-0`}>

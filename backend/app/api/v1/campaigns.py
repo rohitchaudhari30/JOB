@@ -295,8 +295,9 @@ async def delete_campaign(
     campaign_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     campaign_repo=Depends(get_campaign_repository),
+    execution_repo=Depends(get_campaign_execution_repository),
 ):
-    use_case = DeleteCampaignUseCase(campaign_repo)
+    use_case = DeleteCampaignUseCase(campaign_repo, execution_repo)
     success = await use_case.execute(campaign_id=campaign_id, user_id=current_user.id)
     if not success:
         raise HTTPException(status_code=404, detail="Campaign not found.")

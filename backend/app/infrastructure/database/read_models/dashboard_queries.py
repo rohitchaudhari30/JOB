@@ -224,7 +224,7 @@ class DashboardService:
                         title=f"Session Expired: {comp_text}",
                         description="Portal authentication expired. Please re-authenticate.",
                         action_label="Reconnect Session",
-                        action_url="/settings",
+                        action_url="/settings/connections",
                         severity="HIGH",
                     )
                 )
@@ -242,7 +242,7 @@ class DashboardService:
                         title=f"{conn.platform.capitalize()} Disconnected",
                         description=f"Session state for {conn.platform.capitalize()} is disconnected or expired.",
                         action_label="Reconnect",
-                        action_url="/settings",
+                        action_url="/settings/connections",
                         severity="HIGH",
                     )
                 )
@@ -300,7 +300,7 @@ class DashboardService:
                 title="Job Platform Connected",
                 is_ready=active_conn_count > 0,
                 action_label="Connect Portal" if active_conn_count == 0 else "Completed",
-                action_url="/settings",
+                action_url="/settings/connections",
             )
         )
 

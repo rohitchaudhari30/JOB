@@ -25,6 +25,13 @@ class DuplicateEntityException(PlatformException):
         )
 
 
+class ConflictException(PlatformException):
+    """The request conflicts with the current state of the resource (HTTP 409)."""
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(message=message, status_code=409, details=details)
+
+
 class AuthenticationException(PlatformException):
     def __init__(self, message: str = "Invalid authentication credentials."):
         super().__init__(message=message, status_code=401)

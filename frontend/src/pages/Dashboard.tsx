@@ -165,7 +165,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                   </p>
                 </div>
                 <button
-                  onClick={() => onNavigate(item.action_url.replace('/', ''))}
+                  onClick={() => onNavigate(item.action_url)}
                   className="shrink-0 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <span>{item.action_label}</span>
@@ -348,7 +348,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                   </span>
                 ) : (
                   <button
-                    onClick={() => onNavigate(item.action_url.replace('/', ''))}
+                    onClick={() => onNavigate(item.action_url)}
                     className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 underline cursor-pointer"
                   >
                     {item.action_label}

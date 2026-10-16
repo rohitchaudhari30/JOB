@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 import uuid
 
 from app.application.campaigns.safety_evaluator import SafetyPolicyEvaluator
-from app.core.exceptions import EntityNotFoundException, ValidationException
+from app.core.exceptions import ConflictException, EntityNotFoundException, ValidationException
 from app.domain.connections.entities import ConnectionStatus
 from app.domain.campaigns.entities import (
     Campaign,
@@ -132,10 +132,31 @@ class ListCampaignsUseCase:
 
 
 class DeleteCampaignUseCase:
-    def __init__(self, campaign_repo: CampaignRepository):
+    """Deletes a campaign. A campaign that is running/paused or has an active
+    execution must be stopped first (the UI also enforces this, but the server
+    is the authority)."""
+
+    def __init__(
+        self,
+        campaign_repo: CampaignRepository,
+        execution_repo: Optional[CampaignExecutionRepository] = None,
+    ):
         self._repo = campaign_repo
+        self._execution_repo = execution_repo
 
     async def execute(self, campaign_id: str, user_id: str) -> bool:
+        campaign = await self._repo.get_by_id(campaign_id)
+        if campaign is None or campaign.user_id != user_id:
+            return False
+        if getattr(campaign.state, 'value', campaign.state) in (
+            CampaignStateEnum.RUNNING.value,
+            CampaignStateEnum.PAUSED.value,
+        ):
+            raise ConflictException("Stop the campaign before deleting it.")
+        if self._execution_repo is not None:
+            active = await self._execution_repo.get_active_by_campaign(campaign_id)
+            if active is not None:
+                raise ConflictException("Stop the campaign's active execution before deleting it.")
         return await self._repo.delete(campaign_id=campaign_id, user_id=user_id)
 
 
