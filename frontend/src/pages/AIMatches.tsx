@@ -23,13 +23,16 @@ import {
 import { api } from '../services/api';
 import { MatchResult } from '../types';
 import { useToast } from '../context/ToastContext';
+import { useApplyReadiness } from '../hooks/useApplyReadiness';
+import { ReadinessBanner } from '../components/ReadinessBanner';
 
 interface AIMatchesProps {
   onNavigate?: (tab: any) => void;
 }
 
 export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
-  const { showSuccess, showError } = useToast();
+  const { showSuccess, showError, showWarning } = useToast();
+  const readiness = useApplyReadiness();
   const [allMatches, setAllMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEvaluatingAll, setIsEvaluatingAll] = useState(false);
@@ -70,6 +73,17 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   };
 
   const handleApplySingle = async (jobId: string) => {
+    // Same pre-flight guard as Jobs › Discover (shared readiness hook).
+    if (readiness.missing.includes('connection')) {
+      showWarning('Connect a job platform in Settings before applying.');
+      onNavigate?.('connections');
+      return;
+    }
+    if (readiness.missing.includes('resume')) {
+      showWarning('Upload a resume in Settings › Profile before applying.');
+      onNavigate?.('profile');
+      return;
+    }
     try {
       setApplyingJobId(jobId);
       await api.createApplication(jobId, undefined, undefined, 'AI_MATCHES', false);
@@ -171,6 +185,12 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      <ReadinessBanner
+        missing={readiness.missing}
+        platformLabel="A job platform"
+        onNavigate={(tab) => onNavigate?.(tab)}
+      />
+
       {/* Hero Header */}
       <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-br from-white via-indigo-50/20 to-white dark:from-slate-900/90 dark:via-indigo-950/20 dark:to-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
