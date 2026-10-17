@@ -2,7 +2,6 @@
   "components/Navbar.tsx": 430,
   "pages/AIMatches.tsx": 653,
   "pages/ApplicationCRM.tsx": 713,
-  "pages/Dashboard.tsx": 566,
   "pages/DirectApply.tsx": 660,
   "pages/JobDiscovery.tsx": 638,
   "pages/PlatformConnections.tsx": 498,
