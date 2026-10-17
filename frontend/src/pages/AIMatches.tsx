@@ -22,8 +22,10 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { MatchResult } from '../types';
-import { useToast } from '../context/ToastContext';
-import { useApplyReadiness } from '../hooks/useApplyReadiness';
+import { useJobActions } from '../hooks/useJobActions';
+import { useRecordRoute } from '../hooks/useRecordRoute';
+import { getMatchScore } from '../utils/matchScores';
+import { JobDetailDrawer, matchToDetailModel } from './jobs/JobDetailDrawer';
 import { ReadinessBanner } from '../components/ReadinessBanner';
 
 interface AIMatchesProps {
@@ -31,16 +33,15 @@ interface AIMatchesProps {
 }
 
 export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
-  const { showSuccess, showError, showWarning } = useToast();
-  const readiness = useApplyReadiness();
+  const actions = useJobActions({ onNavigate });
+  const readiness = actions.readiness;
+  const record = useRecordRoute('/jobs/matches', 'matches');
   const [allMatches, setAllMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isEvaluatingAll, setIsEvaluatingAll] = useState(false);
   const [minScoreFilter, setMinScoreFilter] = useState<number>(0);
   const [decisionFilter, setDecisionFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('score_desc');
-  const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
 
   useEffect(() => {
     loadAllMatches();
@@ -60,43 +61,26 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   };
 
   const handleEvaluateAll = async () => {
-    try {
-      setIsEvaluatingAll(true);
-      const results = await api.evaluateAllMatches(50);
-      showSuccess(`Evaluated ${results.length} discovered jobs with 5-stage AI cascade!`);
-      await loadAllMatches();
-    } catch (e: any) {
-      showError(`AI Evaluation failed: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setIsEvaluatingAll(false);
-    }
+    const results = await actions.evaluateAll(50);
+    if (results) await loadAllMatches();
+  };
+
+  const handleEvaluateOne = async (jobId: string) => {
+    const res = await actions.evaluateJob(jobId);
+    if (res) await loadAllMatches();
   };
 
   const handleApplySingle = async (jobId: string) => {
-    // Same pre-flight guard as Jobs › Discover (shared readiness hook).
-    if (readiness.missing.includes('connection')) {
-      showWarning('Connect a job platform in Settings before applying.');
-      onNavigate?.('connections');
-      return;
-    }
-    if (readiness.missing.includes('resume')) {
-      showWarning('Upload a resume in Settings › Profile before applying.');
-      onNavigate?.('profile');
-      return;
-    }
-    try {
-      setApplyingJobId(jobId);
-      await api.createApplication(jobId, undefined, undefined, 'AI_MATCHES', false);
-      showSuccess('Opportunity approved and queued for Campaign execution!');
-      if (onNavigate) {
-        setTimeout(() => onNavigate('applications'), 600);
-      }
-    } catch (e: any) {
-      showError(`Queueing failed: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setApplyingJobId(null);
+    const result = await actions.queueJobs([jobId], 'AI_MATCHES');
+    if (result && result.queued_count > 0 && onNavigate) {
+      setTimeout(() => onNavigate('applications'), 600);
     }
   };
+
+  const isEvaluatingAll = actions.isEvaluatingAll;
+  const applyingJobId = [...actions.queueingIds][0] ?? null;
+
+  const drawerModel = matchToDetailModel(record.id ? allMatches.find((m) => m.job_id === record.id) : undefined);
 
   // Client-side instant filter and sort for butter-smooth responsiveness
   const filteredAndSortedMatches = useMemo(() => {
@@ -104,7 +88,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
 
     // Filter by min score
     if (minScoreFilter > 0) {
-      result = result.filter((m) => m.overall_score >= minScoreFilter);
+      result = result.filter((m) => getMatchScore(m) >= minScoreFilter);
     }
 
     // Filter by decision
@@ -126,8 +110,8 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
 
     // Sort
     result.sort((a, b) => {
-      if (sortBy === 'score_desc') return b.overall_score - a.overall_score;
-      if (sortBy === 'score_asc') return a.overall_score - b.overall_score;
+      if (sortBy === 'score_desc') return getMatchScore(b) - getMatchScore(a);
+      if (sortBy === 'score_asc') return getMatchScore(a) - getMatchScore(b);
       if (sortBy === 'skills') return (b.skill_match_score || 0) - (a.skill_match_score || 0);
       if (sortBy === 'semantic') return (b.semantic_score || 0) - (a.semantic_score || 0);
       return 0;
@@ -141,8 +125,8 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
     const total = allMatches.length;
     const autoApply = allMatches.filter((m) => m.decision === 'AUTO_APPLY').length;
     const review = allMatches.filter((m) => m.decision === 'REQUIRE_APPROVAL').length;
-    const strong = allMatches.filter((m) => m.overall_score >= 60).length;
-    const avg = total > 0 ? Math.round(allMatches.reduce((acc, m) => acc + m.overall_score, 0) / total) : 0;
+    const strong = allMatches.filter((m) => getMatchScore(m) >= 60).length;
+    const avg = total > 0 ? Math.round(allMatches.reduce((acc, m) => acc + getMatchScore(m), 0) / total) : 0;
     return { total, autoApply, review, strong, avg };
   }, [allMatches]);
 
@@ -438,7 +422,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {filteredAndSortedMatches.map((m) => {
             const decisionInfo = getDecisionBadge(m.decision);
-            const scoreClass = getScoreColor(m.overall_score);
+            const scoreClass = getScoreColor(getMatchScore(m));
 
             return (
               <div
@@ -460,7 +444,14 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
 
                       {/* Job Title */}
                       <h2 className="text-base font-bold text-slate-900 dark:text-white truncate pt-1" title={m.job_title || ''}>
+                        <button
+                          type="button"
+                          onClick={() => record.open(m.job_id)}
+                          className="text-left hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline cursor-pointer"
+                          aria-label={`Open details for ${m.job_title || 'position'}`}
+                        >
                         {m.job_title || 'Discovered Position'}
+                        </button>
                       </h2>
 
                       {/* Company & Location & Freshness */}
@@ -489,7 +480,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
                       <div
                         className={`px-3.5 py-1.5 rounded-2xl border text-xl font-black font-mono shadow-xs ${scoreClass}`}
                       >
-                        {(m.match_score ?? m.overall_score).toFixed(0)}%
+                        {getMatchScore(m).toFixed(0)}%
                       </div>
                       <span className="text-[10px] text-slate-400 font-semibold block mt-1">Match Score</span>
                       {m.recommendation_score !== undefined && m.recommendation_score !== null && (
@@ -647,6 +638,15 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
           })}
         </div>
       )}
+
+      <JobDetailDrawer
+        model={drawerModel}
+        onClose={record.close}
+        onEvaluate={handleEvaluateOne}
+        onQueue={(id) => void handleApplySingle(id)}
+        evaluating={actions.evaluatingIds.has(record.id ?? '')}
+        queueing={actions.queueingIds.has(record.id ?? '')}
+      />
     </div>
   );
 };

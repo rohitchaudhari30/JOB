@@ -1,4 +1,7 @@
 import { ReadinessBanner } from '../components/ReadinessBanner';
+import { useJobActions } from '../hooks/useJobActions';
+import { useRecordRoute } from '../hooks/useRecordRoute';
+import { JobDetailDrawer, jobToDetailModel } from './jobs/JobDetailDrawer';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Search,
@@ -40,6 +43,9 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   onNavigate,
 }) => {
   const { showSuccess, showError, showWarning } = useToast();
+  const actions = useJobActions({ onNavigate });
+  const evaluatingJobIds = actions.evaluatingIds;
+  const record = useRecordRoute('/jobs', 'discovery', ['matches']);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,7 +72,6 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   const [connections, setConnections] = useState<any[]>([]);
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [matchesMap, setMatchesMap] = useState<Map<string, MatchResult>>(new Map());
-  const [evaluatingJobIds, setEvaluatingJobIds] = useState<Set<string>>(new Set());
   const [filterMinFit, setFilterMinFit] = useState(false);
   const [appliedTodayCount, setAppliedTodayCount] = useState(0);
 
@@ -129,21 +134,11 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   };
 
   const handleEvaluateSingle = async (jobId: string) => {
-    try {
-      setEvaluatingJobIds((prev) => new Set(prev).add(jobId));
-      const res = await api.evaluateMatch(jobId);
+    const res = await actions.evaluateJob(jobId);
+    if (res) {
       setMatchesMap((prev) => {
         const next = new Map(prev);
         next.set(jobId, res);
-        return next;
-      });
-      showSuccess(`Fit calculated: ${Math.round(res.overall_score)}% match`, 'AI Evaluation Complete');
-    } catch (e: any) {
-      showError(`Match evaluation failed: ${e.message}`);
-    } finally {
-      setEvaluatingJobIds((prev) => {
-        const next = new Set(prev);
-        next.delete(jobId);
         return next;
       });
     }
@@ -394,30 +389,13 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     try {
       setIsStartingQueue(true);
       setLiveQueueJobIds(new Set(targetJobs.map((j) => j.id)));
-      if (targetJobs.length > 0) {
-        setLiveApplyingJobId(targetJobs[0].id);
-      }
+      setLiveApplyingJobId(targetJobs[0].id);
 
-      const queueResult = await api.batchQueueApplications({
-        job_ids: targetJobs.map((j) => j.id),
-        source: 'JOB_DISCOVERY',
-        auto_execute: false,
-      });
-
-      if (queueResult.queued_count > 0) {
-        showSuccess(
-          `Successfully queued ${queueResult.queued_count} opportunities for Campaign execution! (${queueResult.skipped_count} skipped/duplicates)`,
-          'Added to Application Pipeline'
-        );
-      } else {
-        showWarning('Selected jobs were already applied or duplicate.');
-      }
-      setSelectedJobIds(new Set());
-      onRefreshStatus();
-
-      // Transition to Review Queue or Applications CRM
-      if (onNavigate) {
-        onNavigate('applications');
+      const queued = await actions.queueJobs(targetJobs.map((j) => j.id), 'JOB_DISCOVERY');
+      if (queued) {
+        setSelectedJobIds(new Set());
+        onRefreshStatus();
+        onNavigate?.('applications');
       }
     } catch (e: any) {
       showError(`Failed to queue applications: ${e.response?.data?.detail || e.message}`);
@@ -492,6 +470,11 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   };
 
   const selectedCount = selectedJobIds.size;
+
+  const drawerModel = useMemo(
+    () => jobToDetailModel(record.id ? jobs.find((x) => x.id === record.id) : undefined, matchesMap),
+    [record.id, jobs, matchesMap]
+  );
 
   return (
     <div className="space-y-6 animate-fadeIn pb-24">
@@ -976,7 +959,15 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
                       </div>
                     </div>
 
-                    <h3 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-1">{job.title}</h3>
+                    <h3 className="font-bold text-sm line-clamp-1">
+                      <button
+                        type="button"
+                        onClick={() => record.open(job.id)}
+                        className="text-left text-slate-900 dark:text-white hover:text-brand-600 focus-visible:underline"
+                      >
+                        {job.title}
+                      </button>
+                    </h3>
 
                     <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                       <div className="flex items-center space-x-1.5">
@@ -1178,6 +1169,14 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
         </div>
       )}
 
+      <JobDetailDrawer
+        model={drawerModel}
+        onClose={record.close}
+        onEvaluate={(id) => void handleEvaluateSingle(id)}
+        onQueue={(id) => handleLaunchQueue(jobs.filter((x) => x.id === id))}
+        evaluating={evaluatingJobIds.has(drawerModel?.jobId ?? '')}
+        queueing={actions.queueingIds.has(drawerModel?.jobId ?? '')}
+      />
     </div>
   );
 };

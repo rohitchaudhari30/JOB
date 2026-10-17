@@ -543,6 +543,14 @@ Tests: 96 frontend tests pass (44 at the start of the redesign); `tsc` clean; pr
 | Dead client methods (IMP-008) | **Done** | 12 unused methods removed (kept in git history). Orphan *backend* endpoints are untouched |
 | Alert links | **Done** | Backend now emits `/settings/connections`; `/settings` resolves to Profile (consistent with the sidebar) |
 | Deps / image | **Done** | `pypdf==5.9.0`, `python-docx==1.2.0`, frontend image `node:22-alpine` (image build itself not run) |
-| Jobs component merge (IMP-014) | **Not done** | Deliberately; see §28.1 |
+| Jobs component merge (IMP-014) | **Partly done** | See §28.3: shared actions, drawer, deep links; the two list views stay separate |
 | Migrating old pages/modals to the new UI kit and tokens (IMP-020) | **Not done** | Only ConfirmDialog (campaign delete), Drawer (Applications) and the global contrast overrides |
 | Schedules launching runs, token storage, matches pagination, Account tab | **Not done** | Need your decisions (Q-02, Q-03, Q-08, auth design) |
+
+### 28.3 Phase 3 — Jobs workspace (partial merge)
+
+Done: one `useJobActions` hook (evaluate, evaluate-all, queue) used by both Discover and AI matches. Queueing always goes through `POST /applications/batch-queue` with `auto_execute=false` behind the readiness guard. One `JobDetailDrawer` (match score and decision, "why this score", matched/missing skills, separate "Recommendation priority" only when present). Deep links `/jobs/:id` and `/jobs/matches/:id` via `useRecordRoute`. `utils/matchScores.ts` reads `match_score` (falling back to the deprecated `overall_score`) and never mixes in `recommendation_score`.
+
+Not done, deliberately: the two list views stay separate components. Discover is server-paginated jobs plus a match map; AI matches is a client-side list of match results. Forcing one component needs a backend change (a combined, paginated jobs+matches query), which is a decision for you (Q-03).
+
+Verification: tsc clean; 114 vitest tests pass (9 new in `jobs_merge.test.tsx`); size ratchet ok; browser smoke 38/38. **NOT VERIFIED in a browser:** the new Jobs drawer itself (the smoke script has no check for it), and the Applications drawer still only finds records in the loaded list.

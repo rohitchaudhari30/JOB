@@ -7,12 +7,12 @@ import { ReadinessGap } from '../components/ReadinessBanner';
  * platform and at least one resume. Shared by every place that queues jobs so
  * the guard (and its wording) is identical everywhere (redesign §7).
  */
-export function useApplyReadiness(): {
+export function useApplyReadiness(enabled = true): {
   loading: boolean;
   missing: ReadinessGap[];
   refresh: () => Promise<void>;
 } {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [anyConnected, setAnyConnected] = useState(true);
   const [hasResume, setHasResume] = useState(true);
 
@@ -31,8 +31,8 @@ export function useApplyReadiness(): {
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (enabled) void refresh();
+  }, [refresh, enabled]);
 
   const missing: ReadinessGap[] = loading
     ? []

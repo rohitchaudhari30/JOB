@@ -444,7 +444,7 @@ Local branch `claude/phase0-quick-fixes` (not pushed). See `redesig.md` §28 for
 | IMP-010 | **Partly done** — routes + redirect table + tests; record-level deep links and URL-bound filters pending |
 | IMP-011 | **Partly done** — 6-item nav + section tabs; top-bar run chip already existed (Navbar pill) |
 | IMP-013 | **Partly done** — component built, used in Jobs › Discover only |
-| IMP-014 | **Partly done** — navigation-level merge only |
+| IMP-014 | **Partly done** — shared actions hook, job drawer, `/jobs/:id` deep links, score util (see redesig.md §28.3). List views still two components |
 | IMP-016 | **Partly done** — Dashboard controls removed; Live Console view-mode reduction and start-path consolidation pending |
 | IMP-017 | **Done** — `/schedules` is a deep link to Campaigns › Safety & schedule |
 | IMP-020 | **Started** — tokens only |
@@ -474,7 +474,7 @@ Local branch `claude/phase0-quick-fixes` (not pushed). See `redesig.md` §28 for
 | IMP-018 | **Done** (drawer, deep link, URL filters). One-primary-action-per-state row redesign not done |
 | IMP-019 | **Done** (tabs). Empty-state polish not done |
 | IMP-021 | **Ratchet done**; page splitting itself still open |
-| IMP-022 | **Partly done** — 105 vitest tests + optional Chromium/axe smoke (`frontend/e2e/smoke.py`, not in CI) |
+| IMP-022 | **Partly done** — 114 vitest tests + optional Chromium/axe smoke (`frontend/e2e/smoke.py`, not in CI) |
 | IMP-050 | **Done** (pypdf/python-docx pinned) |
 | IMP-055 | **Done** (frontend image Node 22; not built here) |
 | Still open | IMP-014, 020 (migration), 030–034, 040–042, 051–054 |
