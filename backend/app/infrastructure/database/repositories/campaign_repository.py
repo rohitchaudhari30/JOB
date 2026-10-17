@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 import logging
 from typing import List, Optional
 from sqlalchemy import desc, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -418,7 +419,17 @@ class SqlAlchemyCampaignExecutionRepository(CampaignExecutionRepository):
             started_at=now,
         )
         self._session.add(new_exec)
-        await self._session.commit()
+        try:
+            await self._session.commit()
+        except IntegrityError:
+            # Lost a race: another request created the active execution between our check and insert
+            # (the database refuses a second one, IMP-052). Return the winner instead of failing.
+            await self._session.rollback()
+            res = await self._session.execute(stmt)
+            winner = res.scalars().first()
+            if winner is None:
+                raise
+            return self._to_domain(winner), False
         return self._to_domain(new_exec), True
 
     async def record_heartbeat(

@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, Info, RotateCcw, X } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Info, RotateCcw, X } from 'lucide-react';
+import { Modal } from '../../components/ui/Modal';
 import { Application } from '../../types';
 import { resolvePlatformName } from '../../utils/applicationHelpers';
 
@@ -28,31 +29,9 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
     const externalUrl = app.apply_url || app.job?.apply_url;
 
     return (
-      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
-          {/* Header */}
-          <div className="flex items-start justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Submission Outcome Verification
-                </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Prevent accidental duplicate submission by verifying portal status
-                </p>
-              </div>
-            </div>
-            <button aria-label="Close"
-              onClick={() => onClose()}
-              disabled={busy}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+    <Modal open onClose={onClose} title="Submission outcome verification" widthClass="max-w-xl" dismissible={!busy}>
+      <div className="space-y-5">
+        <p className="text-xs text-slate-600 dark:text-slate-400">Prevent accidental duplicate submission by verifying the portal status first.</p>
 
           {/* Target Job Info Card */}
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60 space-y-2">
@@ -195,6 +174,6 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
+    </Modal>
     );
 };

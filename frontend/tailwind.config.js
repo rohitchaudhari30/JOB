@@ -8,6 +8,14 @@ export default {
   theme: {
     extend: {
       colors: {
+        surface: { DEFAULT: 'var(--surface)', muted: 'var(--surface-muted)' },
+        line: 'var(--border)',
+        content: { DEFAULT: 'var(--text)', muted: 'var(--text-muted)' },
+        accent: 'var(--accent)',
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        danger: 'var(--danger)',
+        info: 'var(--info)',
         brand: {
           50: '#eef2ff',
           100: '#e0e7ff',

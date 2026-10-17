@@ -14,9 +14,11 @@ import {
   Briefcase,
   X,
   ChevronRight,
+  Menu,
 } from 'lucide-react';
 import { User, AutomationRunStatus } from '../types';
 import { ThemeToggle } from './ThemeToggle';
+import { BRAND_NAME, BRAND_SUFFIX } from '../utils/brand';
 
 interface NavbarProps {
   user: User | null;
@@ -24,6 +26,8 @@ interface NavbarProps {
   onNavigate?: (tab: any) => void;
   activeRun?: AutomationRunStatus | null;
   onOpenLiveConsole?: () => void;
+  onMenuClick?: () => void;
+  navOpen?: boolean;
 }
 
 interface NotificationItem {
@@ -45,6 +49,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigate,
   activeRun = null,
   onOpenLiveConsole,
+  onMenuClick,
+  navOpen = false,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -148,12 +154,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="h-16 border-b border-slate-200/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-40 transition-colors duration-200 shadow-xs">
       <div className="flex items-center space-x-3">
+        {onMenuClick && (
+          <button
+            type="button"
+            onClick={onMenuClick}
+            aria-label={navOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={navOpen}
+            aria-controls="primary-navigation"
+            className="lg:hidden p-2 -ml-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <Menu className="w-5 h-5" aria-hidden="true" />
+          </button>
+        )}
         <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-600/20 ring-1 ring-white/20">
           <Bot className="w-5 h-5 text-white" />
         </div>
         <div className="flex items-center space-x-2">
           <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white">
-            ApplyFlow<span className="text-indigo-600 dark:text-indigo-400">.ai</span>
+            {BRAND_NAME}<span className="text-indigo-600 dark:text-indigo-400">{BRAND_SUFFIX}</span>
           </span>
         </div>
       </div>

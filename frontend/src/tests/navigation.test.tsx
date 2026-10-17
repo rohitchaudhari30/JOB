@@ -12,16 +12,16 @@ describe('URL Navigation & Route Resolution', () => {
   });
 
   it('maps all canonical tabs to distinct, proper URL paths', () => {
-    expect(TAB_TO_PATH.dashboard).toBe('/dashboard');
-    expect(TAB_TO_PATH.live_console).toBe('/live-console');
+    expect(TAB_TO_PATH.dashboard).toBe('/home');
+    expect(TAB_TO_PATH.live_console).toBe('/automation/live');
     expect(TAB_TO_PATH.crm).toBe('/applications');
-    expect(TAB_TO_PATH.analytics).toBe('/analytics');
-    expect(TAB_TO_PATH.discovery).toBe('/discovery');
-    expect(TAB_TO_PATH.matches).toBe('/matches');
-    expect(TAB_TO_PATH.direct_apply).toBe('/auto-apply');
-    expect(TAB_TO_PATH.profile).toBe('/profile');
-    expect(TAB_TO_PATH.connections).toBe('/connections');
-    expect(TAB_TO_PATH.schedules).toBe('/schedules');
+    expect(TAB_TO_PATH.analytics).toBe('/insights');
+    expect(TAB_TO_PATH.discovery).toBe('/jobs');
+    expect(TAB_TO_PATH.matches).toBe('/jobs/matches');
+    expect(TAB_TO_PATH.direct_apply).toBe('/automation/campaigns');
+    expect(TAB_TO_PATH.profile).toBe('/settings/profile');
+    expect(TAB_TO_PATH.connections).toBe('/settings/connections');
+    expect(TAB_TO_PATH.schedules).toBe('/automation/campaigns/safety');
   });
 
   it('resolves URL pathnames to the correct NavTab', () => {
@@ -31,6 +31,10 @@ describe('URL Navigation & Route Resolution', () => {
     expect(resolveTab('/applications')).toBe('crm');
     expect(resolveTab('/crm')).toBe('crm');
     expect(resolveTab('/analytics')).toBe('analytics');
+    // Backend dashboard alerts emit /settings/connections (Reconnect)
+    expect(resolveTab('/settings/connections')).toBe('connections');
+    expect(resolveTab('/settings')).toBe('profile');
+    expect(resolveTab('settings')).toBe('profile');
     expect(resolveTab('/discovery')).toBe('discovery');
     expect(resolveTab('/jobs')).toBe('discovery');
     expect(resolveTab('/matches')).toBe('matches');
@@ -69,11 +73,11 @@ describe('URL Navigation & Route Resolution', () => {
   });
 
   it('returns canonical pathname for any tab ID', () => {
-    expect(getPathForTab('live_console')).toBe('/live-console');
+    expect(getPathForTab('live_console')).toBe('/automation/live');
     expect(getPathForTab('crm')).toBe('/applications');
     expect(getPathForTab('applications')).toBe('/applications');
-    expect(getPathForTab('analytics')).toBe('/analytics');
-    expect(getPathForTab('dashboard')).toBe('/dashboard');
+    expect(getPathForTab('analytics')).toBe('/insights');
+    expect(getPathForTab('dashboard')).toBe('/home');
   });
 
   it('supports browser back and forward navigation history', () => {

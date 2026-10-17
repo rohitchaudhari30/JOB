@@ -401,6 +401,42 @@ def _alembic_config():
     return cfg
 
 
+def _ensure_one_active_execution_index(connection) -> None:
+    """IMP-052 for legacy databases (they are stamped at head, so migration 0005 never runs for them).
+
+    Creates the one-active-execution-per-campaign index unless it exists. If the data already breaks
+    the rule it logs the campaign ids and leaves everything alone: deciding which execution to end
+    is a person's call, and the application-level check keeps working either way.
+    """
+    from sqlalchemy import inspect, text
+
+    from app.infrastructure.database.models.models import ACTIVE_EXECUTION_WHERE
+
+    name = "uq_campaign_one_active_execution"
+    inspector = inspect(connection)
+    if "campaign_executions" not in inspector.get_table_names():
+        return
+    if name in {i["name"] for i in inspector.get_indexes("campaign_executions")}:
+        return
+    dupes = connection.execute(
+        text(
+            "SELECT campaign_id FROM campaign_executions "
+            f"WHERE {ACTIVE_EXECUTION_WHERE} GROUP BY campaign_id HAVING COUNT(*) > 1"
+        )
+    ).fetchall()
+    if dupes:
+        logger.warning(
+            "Skipping %s: campaigns with more than one active execution: %s. "
+            "End the extra executions, then restart to create it.",
+            name,
+            [row[0] for row in dupes],
+        )
+        return
+    connection.execute(
+        text(f"CREATE UNIQUE INDEX {name} ON campaign_executions (campaign_id) WHERE {ACTIVE_EXECUTION_WHERE}")
+    )
+
+
 def _alembic_run(connection, action: str) -> None:
     from alembic import command
 
@@ -434,6 +470,7 @@ async def run_migrations() -> None:
         async with engine.connect() as conn:
             await conn.run_sync(Base.metadata.create_all)
             await conn.run_sync(_add_missing_columns)
+            await conn.run_sync(_ensure_one_active_execution_index)
             await conn.run_sync(_alembic_run, "stamp")
             await conn.commit()
     else:

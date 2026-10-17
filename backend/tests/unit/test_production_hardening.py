@@ -598,7 +598,7 @@ async def test_pause_campaign_execution_idempotent_when_already_paused():
     )
     execution_repo.get_active_by_campaign = AsyncMock(return_value=paused_exec)
     execution_repo.save = AsyncMock(return_value=paused_exec)
-    campaign_repo.get_by_id = AsyncMock(return_value=None)
+    campaign_repo.get_by_id = AsyncMock(return_value=MagicMock(user_id="user-1"))
     log_repo.log = AsyncMock()
 
     use_case = PauseCampaignExecutionUseCase(campaign_repo, execution_repo, log_repo)
@@ -626,7 +626,7 @@ async def test_resume_campaign_execution_idempotent_when_already_running():
     )
     execution_repo.get_active_by_campaign = AsyncMock(return_value=running_exec)
     execution_repo.save = AsyncMock(return_value=running_exec)
-    campaign_repo.get_by_id = AsyncMock(return_value=None)
+    campaign_repo.get_by_id = AsyncMock(return_value=MagicMock(user_id="user-1"))
     log_repo.log = AsyncMock()
 
     use_case = ResumeCampaignExecutionUseCase(campaign_repo, execution_repo, log_repo)
@@ -683,3 +683,25 @@ def test_state_machine_allows_paused_limit_to_paused_user():
     ) is True
 
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["PauseCampaignExecutionUseCase", "ResumeCampaignExecutionUseCase"])
+async def test_pause_resume_refuse_another_users_campaign(name):
+    """IMP-054: a campaign owned by someone else looks like it does not exist, and nothing is touched."""
+    from app.application.campaigns import use_cases
+    from app.core.exceptions import EntityNotFoundException
+
+    campaign_repo = MagicMock()
+    execution_repo = MagicMock()
+    log_repo = MagicMock()
+    campaign_repo.get_by_id = AsyncMock(return_value=MagicMock(user_id="owner"))
+    execution_repo.get_active_by_campaign = AsyncMock()
+    execution_repo.save = AsyncMock()
+
+    use_case = getattr(use_cases, name)(campaign_repo, execution_repo, log_repo)
+    with pytest.raises(EntityNotFoundException):
+        await use_case.execute("camp-1", "intruder")
+
+    execution_repo.get_active_by_campaign.assert_not_called()
+    execution_repo.save.assert_not_called()

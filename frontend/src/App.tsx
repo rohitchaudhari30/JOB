@@ -2,14 +2,18 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Navbar } from './components/Navbar';
 import { Sidebar, NavTab } from './components/Sidebar';
+import { useActiveRun } from './hooks/useActiveRun';
+import { SectionTabs } from './components/SectionTabs';
+import { confirmLeave } from './utils/unsavedGuard';
+import { BRAND_NAME, BRAND_SUFFIX } from './utils/brand';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
+import { User } from './types';
 import { api, setAuthToken } from './services/api';
 import { wsClient } from './services/ws';
-import { AutomationRunStatus, User } from './types';
 import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
-import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES } from './utils/navigation';
+import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES, needsCanonicalRedirect } from './utils/navigation';
 
 // Pages load on demand so the first screen downloads less code (FE-03).
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
@@ -27,7 +31,8 @@ export const App: React.FC = () => {
   const { showSuccess, showError } = useToast();
   const [activeTab, setActiveTab] = useState<NavTab>(() => getTabFromLocation());
   const [user, setUser] = useState<User | null>(null);
-  const [activeRun, setActiveRun] = useState<AutomationRunStatus | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
+  const { activeRun, refresh: loadActiveRun } = useActiveRun(user !== null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authFullName, setAuthFullName] = useState('');
@@ -40,19 +45,19 @@ export const App: React.FC = () => {
       const tab = getTabFromLocation();
       setActiveTab(tab);
       if (typeof document !== 'undefined') {
-        document.title = TAB_TITLES[tab] || 'AutoApply.ai';
+        document.title = TAB_TITLES[tab] || BRAND_NAME;
       }
     };
 
-    // Ensure URL in browser matches activeTab on initial mount (e.g. normalize '/' to '/dashboard')
+    // Ensure URL in browser matches activeTab on initial mount (e.g. normalize '/' to '/home')
     if (typeof window !== 'undefined') {
       const currentPath = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
-      const targetPath = TAB_TO_PATH[activeTab] || '/dashboard';
-      if (currentPath === '/' || currentPath === '' || currentPath !== targetPath) {
+      const targetPath = TAB_TO_PATH[activeTab] || '/home';
+      if (needsCanonicalRedirect(currentPath, targetPath)) {
         window.history.replaceState({ tab: activeTab }, '', targetPath);
       }
       if (typeof document !== 'undefined') {
-        document.title = TAB_TITLES[activeTab] || 'AutoApply.ai';
+        document.title = TAB_TITLES[activeTab] || BRAND_NAME;
       }
     }
 
@@ -78,10 +83,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (user) {
       wsClient.connect();
-      loadActiveRun();
-      const interval = setInterval(loadActiveRun, 5000);
       return () => {
-        clearInterval(interval);
         wsClient.disconnect();
       };
     }
@@ -95,15 +97,6 @@ export const App: React.FC = () => {
       console.warn('Session expired or invalid token');
       setAuthToken(null);
       setUser(null);
-    }
-  };
-
-  const loadActiveRun = async () => {
-    try {
-      const run = await api.getActiveRun();
-      setActiveRun(run);
-    } catch (e) {
-      // Ignored if unauthenticated or network error
     }
   };
 
@@ -187,7 +180,7 @@ export const App: React.FC = () => {
               <Bot className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight pt-1">
-              ApplyFlow<span className="text-indigo-600 dark:text-indigo-400">.AI</span>
+              {BRAND_NAME}<span className="text-indigo-600 dark:text-indigo-400">{BRAND_SUFFIX}</span>
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               Autonomous Multi-Platform Job Application Engine
@@ -280,7 +273,9 @@ export const App: React.FC = () => {
 
   const handleTabChange = (target: NavTab | string, replace = false) => {
     const canonicalTab = resolveTab(target);
-    const targetPath = TAB_TO_PATH[canonicalTab] || '/dashboard';
+    // Pages with unsaved edits (Profile) get a chance to cancel the move; redirects (replace) never prompt.
+    if (!replace && canonicalTab !== activeTab && !confirmLeave()) return;
+    const targetPath = TAB_TO_PATH[canonicalTab] || '/home';
     setActiveTab(canonicalTab);
 
     if (typeof window !== 'undefined') {
@@ -289,10 +284,12 @@ export const App: React.FC = () => {
           window.history.replaceState({ tab: canonicalTab }, '', targetPath);
         } else {
           window.history.pushState({ tab: canonicalTab }, '', targetPath);
+          // Let in-page URL state (drawers, filters) resync to the new location.
+          window.dispatchEvent(new PopStateEvent('popstate'));
         }
       }
       if (typeof document !== 'undefined') {
-        document.title = TAB_TITLES[canonicalTab] || 'AutoApply.ai';
+        document.title = TAB_TITLES[canonicalTab] || BRAND_NAME;
       }
     }
   };
@@ -305,6 +302,8 @@ export const App: React.FC = () => {
         onNavigate={handleTabChange}
         activeRun={activeRun}
         onOpenLiveConsole={() => handleTabChange('live_console')}
+        onMenuClick={() => setNavOpen((v) => !v)}
+        navOpen={navOpen}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -314,10 +313,14 @@ export const App: React.FC = () => {
           user={user}
           stats={{
             isLiveRunning: activeRun?.status === 'RUNNING',
+            runStatus: activeRun?.status ?? null,
           }}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
         />
 
         <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8 w-full">
+          <SectionTabs activeTab={activeTab} onTabChange={handleTabChange} />
           <ErrorBoundary resetKey={activeTab}>
           <Suspense fallback={<div className="p-8 text-sm text-slate-500" role="status">Loading…</div>}>
           {activeTab === 'dashboard' && (

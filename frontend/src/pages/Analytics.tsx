@@ -29,6 +29,7 @@ import {
   WeightTuningRecommendation,
 } from '../types';
 import { useToast } from '../context/ToastContext';
+import { useQueryParam } from '../hooks/useQueryParam';
 
 interface AnalyticsProps {
   onNavigate?: (tab: any) => void;
@@ -36,8 +37,20 @@ interface AnalyticsProps {
 
 type DateRangePreset = 'TODAY' | '7D' | '30D' | '90D' | 'CUSTOM' | 'ALL_TIME';
 
+const INSIGHT_TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'sources', label: 'Sources' },
+  { id: 'resumes', label: 'Resumes' },
+  { id: 'campaigns', label: 'Campaigns' },
+  { id: 'skills', label: 'Skills' },
+  { id: 'scoring', label: 'Scoring weights' },
+] as const;
+type InsightView = (typeof INSIGHT_TABS)[number]['id'];
+
 export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
   const { showError } = useToast();
+  const [viewParam, setView] = useQueryParam('view', 'overview');
+  const view: InsightView = (INSIGHT_TABS.some((t) => t.id === viewParam) ? viewParam : 'overview') as InsightView;
 
   const [datePreset, setDatePreset] = useState<DateRangePreset>('30D');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -194,7 +207,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           {/* Platform Filter Dropdown */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs text-xs font-semibold text-slate-700 dark:text-slate-300">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <select
+            <select aria-label="Platform"
               value={selectedPlatform}
               onChange={(e) => setSelectedPlatform(e.target.value)}
               className="bg-transparent outline-none cursor-pointer text-xs font-semibold"
@@ -246,6 +259,31 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
         </div>
       )}
 
+      {/* Insights sections (URL: ?view=) */}
+      <div role="tablist" aria-label="Insight sections" className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
+        {INSIGHT_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            id={`insight-tab-${t.id}`}
+            aria-selected={view === t.id}
+            aria-controls="insight-panel"
+            onClick={() => setView(t.id)}
+            className={`whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px cursor-pointer transition-colors ${
+              view === t.id
+                ? 'border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-300'
+                : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div id="insight-panel" role="tabpanel" aria-labelledby={`insight-tab-${view}`} className="space-y-6">
+      {view === 'overview' && (
+      <>
       {/* 2. Executive KPI Cards: Separate Response, Interview, and Offer Rates */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Confirmed Submissions */}
@@ -375,9 +413,14 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           )}
         </div>
       </div>
+      </>
+      )}
 
-      {/* 4. Side-by-Side: Resume Performance Comparison & Platform Performance Matrix */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* 4. Resumes / Sources */}
+      {(view === 'resumes' || view === 'sources') && (
+      <div className="grid grid-cols-1 gap-6">
+      {view === 'resumes' && (
+      <>
         {/* Section 4A: Resume Performance Comparison (Strict Observational Terminology) */}
         <div className="p-6 rounded-2xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
@@ -441,7 +484,11 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
             )}
           </div>
         </div>
+      </>
+      )}
 
+      {view === 'sources' && (
+      <>
         {/* Section 4B: Platform Performance Matrix (Unified Funnel Contract) */}
         <div className="p-6 rounded-2xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
@@ -497,8 +544,14 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
             )}
           </div>
         </div>
-      </div>
+      </>
+      )}
 
+      </div>
+      )}
+
+      {view === 'campaigns' && (
+      <>
       {/* 5. Campaign Performance Attribution (First-Class Matrix) */}
       <div className="p-6 rounded-2xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
@@ -560,7 +613,11 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           <EmptyState>No active campaigns executed within this time window.</EmptyState>
         )}
       </div>
+      </>
+      )}
 
+      {view === 'skills' && (
+      <>
       {/* 6. Market Skill Demand & Candidate Gap Analysis */}
       <div className="p-6 rounded-2xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
@@ -606,7 +663,11 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           )}
         </div>
       </div>
+      </>
+      )}
 
+      {view === 'scoring' && (
+      <>
       {/* 7. AI Matching Strategy & Optimization (STRICTLY READ-ONLY) */}
       <div className="p-6 rounded-2xl bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -723,6 +784,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </div>
+      </div>
+      </>
+      )}
+
       </div>
     </div>
   );

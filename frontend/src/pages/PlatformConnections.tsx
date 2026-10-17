@@ -16,6 +16,7 @@ import {
   Loader2,
   ArrowRight,
 } from 'lucide-react';
+import { Modal } from '../components/ui/Modal';
 import { api } from '../services/api';
 import { PlatformConnectionInfo } from '../types';
 
@@ -337,7 +338,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
                     {getPlatformIcon(conn.platform)}
                     <div>
                       <div className="flex items-center space-x-1.5">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">{conn.display_name}</h3>
+                        <h2 className="text-sm font-bold text-slate-900 dark:text-white">{conn.display_name}</h2>
                       </div>
                       <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                         {isPortal ? 'Job Portal' : 'Direct ATS'}
@@ -473,33 +474,24 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
         })}
       </div>
 
-      {/* Interactive Login Modal */}
-      {activeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto border border-indigo-100 dark:border-indigo-500/20">
-              <KeyRound className="w-6 h-6 animate-pulse" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-base font-black text-slate-900 dark:text-white">
-                Connecting to {activeModal.name}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                A secure browser window has opened on your screen. Please enter your credentials and solve any 2FA/OTP directly on the portal.
-              </p>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50 text-[11px] text-slate-600 dark:text-slate-400 flex items-center space-x-2">
-              <Loader2 className="w-4 h-4 animate-spin text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span>Awaiting login completion in browser window...</span>
-            </div>
-
-            <p className="text-[10px] text-slate-400">
-              Once you log in, the browser window will close automatically and your session will be encrypted.
-            </p>
+      {/* Interactive Login Modal: waits for the portal login, so it is not dismissible */}
+      <Modal open={Boolean(activeModal)} onClose={() => {}} title={`Connecting to ${activeModal?.name ?? ''}`} widthClass="max-w-md" dismissible={false}>
+        <div className="space-y-4 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto border border-indigo-100 dark:border-indigo-500/20">
+            <KeyRound className="w-6 h-6 animate-pulse" aria-hidden="true" />
           </div>
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            A secure browser window has opened on your screen. Please enter your credentials and solve any 2FA/OTP directly on the portal.
+          </p>
+          <div role="status" className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/50 text-[11px] text-slate-600 dark:text-slate-400 flex items-center space-x-2">
+            <Loader2 className="w-4 h-4 animate-spin text-indigo-600 dark:text-indigo-400 shrink-0" aria-hidden="true" />
+            <span>Awaiting login completion in browser window...</span>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            Once you log in, the browser window will close automatically and your session will be encrypted.
+          </p>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

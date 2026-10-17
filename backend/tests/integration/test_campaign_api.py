@@ -105,3 +105,32 @@ async def test_campaign_api_lifecycle(client: AsyncClient):
     # 11. Delete Campaign
     del_resp = await client.delete(f"/api/v1/campaigns/{campaign_id}", headers=headers)
     assert del_resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_running_campaign_is_rejected_until_stopped(client: AsyncClient):
+    user = {"email": "delete.guard@example.com", "password": "Password123!", "full_name": "Delete Guard"}
+    assert (await client.post("/api/v1/auth/register", json=user)).status_code == 201
+    login = await client.post("/api/v1/auth/login", json={"email": user["email"], "password": user["password"]})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    created = await client.post(
+        "/api/v1/campaigns",
+        json={"name": "Guarded", "rule": {"auto_apply_threshold": 80.0, "review_threshold": 60.0}},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    campaign_id = created.json()["id"]
+
+    start = await client.post(f"/api/v1/campaigns/{campaign_id}/start", headers=headers)
+    assert start.status_code == 202
+
+    blocked = await client.delete(f"/api/v1/campaigns/{campaign_id}", headers=headers)
+    assert blocked.status_code == 409
+    assert (await client.get(f"/api/v1/campaigns/{campaign_id}", headers=headers)).status_code == 200
+
+    assert (await client.post(f"/api/v1/campaigns/{campaign_id}/stop", headers=headers)).status_code == 200
+    assert (await client.delete(f"/api/v1/campaigns/{campaign_id}", headers=headers)).status_code == 204
+
+    # unknown / other user's id still 404
+    assert (await client.delete(f"/api/v1/campaigns/{campaign_id}", headers=headers)).status_code == 404

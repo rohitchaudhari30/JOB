@@ -3,7 +3,6 @@ import {
   Pause,
   RotateCcw,
   Square,
-  KeyRound,
   Terminal,
   Activity,
   Compass,
@@ -13,13 +12,14 @@ import {
   Lock,
   Layers,
   Maximize2,
-  Minimize2,
   Columns,
   Expand,
   Shrink,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import { Modal } from '../components/ui/Modal';
+import { Button } from '../components/ui/Button';
 import { api } from '../services/api';
 import { wsClient } from '../services/ws';
 import { AutomationRunStatus, TimelineEvent } from '../types';
@@ -402,7 +402,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
               ) : (
                 <button
                   onClick={handlePause}
-                  className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
+                  className="px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
                 >
                   <Pause className="w-4 h-4" />
                   <span>Pause</span>
@@ -556,21 +556,6 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
 
               {/* Viewport Sizing & Presentation Action Controls */}
               <div className="flex items-center space-x-1 pl-2 border-l border-slate-200 dark:border-slate-800">
-                {/* 1-Click Expand / Restore Toggle Button */}
-                <button
-                  type="button"
-                  onClick={() => setViewMode(viewMode === 'expanded' ? 'split' : 'expanded')}
-                  title={viewMode === 'expanded' ? 'Restore Split View (Side by Side)' : 'Expand Viewport to Full Width'}
-                  className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
-                  aria-label={viewMode === 'expanded' ? 'Restore Split View' : 'Expand Viewport'}
-                >
-                  {viewMode === 'expanded' ? (
-                    <Minimize2 className="w-3.5 h-3.5 text-slate-700 dark:text-slate-200" />
-                  ) : (
-                    <Maximize2 className="w-3.5 h-3.5 text-slate-700 dark:text-slate-200" />
-                  )}
-                </button>
-
                 {/* Native Fullscreen Mode Button */}
                 <button
                   type="button"
@@ -681,53 +666,43 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
       </div>
 
       {/* Challenge / OTP Modal (Human In The Loop) */}
-      {otpModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-white border border-indigo-200 dark:bg-slate-900 dark:border-indigo-500/40 p-6 shadow-2xl space-y-5 animate-scaleUp">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                <KeyRound className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Verification Challenge Detected</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Portal requires OTP verification or CAPTCHA confirmation.</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
-              The automation engine has safely paused. Please enter the OTP code sent to your registered phone/email or solve the challenge on your portal.
-            </p>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Enter OTP Code / Verification Token
-              </label>
-              <input
-                type="text"
-                value={otpValue}
-                onChange={(e) => setOtpValue(e.target.value)}
-                placeholder="e.g. 123456"
-                className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 dark:bg-slate-950 dark:border-slate-700 dark:text-white font-mono text-center tracking-widest text-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
-            </div>
-
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <button
-                onClick={() => setOtpModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
-              >
-                Dismiss
-              </button>
-              <button
-                onClick={handleResume}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/30 transition-transform active:scale-95"
-              >
-                Submit Code &amp; Resume Auto-Apply
-              </button>
-            </div>
+      <Modal
+        open={otpModalOpen}
+        onClose={() => setOtpModalOpen(false)}
+        title="Verification challenge detected"
+        widthClass="max-w-md"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setOtpModalOpen(false)}>
+              Dismiss
+            </Button>
+            <Button variant="primary" onClick={handleResume}>
+              Submit code &amp; resume auto-apply
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+            The portal needs an OTP or CAPTCHA confirmation. The automation engine has safely paused. Enter the code sent to
+            your registered phone/email, or solve the challenge on the portal.
+          </p>
+          <div>
+            <label htmlFor="otp-code" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              OTP code / verification token
+            </label>
+            <input
+              id="otp-code"
+              data-autofocus
+              type="text"
+              value={otpValue}
+              onChange={(e) => setOtpValue(e.target.value)}
+              placeholder="e.g. 123456"
+              className="w-full px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 dark:bg-slate-950 dark:border-slate-700 dark:text-white font-mono text-center tracking-widest text-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

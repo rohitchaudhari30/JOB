@@ -6,9 +6,7 @@ import {
   CandidateProfile,
   Job,
   MatchResult,
-  PaginatedApplicationsResponse,
   Resume,
-  ScheduleJobConfig,
   User,
   FunnelOverview,
   ResumePerformanceMetric,
@@ -251,30 +249,6 @@ export const api = {
     const res = await apiClient.post('/jobs/matches/evaluate-all', null, { params: { limit } });
     return res.data;
   },
-  enqueueMatchingBatch: async (limit?: number): Promise<{ status: string; enqueued_count: number; message: string }> => {
-    const res = await apiClient.post('/jobs/matches/batch-enqueue', null, { params: { limit } });
-    return res.data;
-  },
-  getPendingMatchingTasksCount: async (): Promise<{ pending_tasks: number }> => {
-    const res = await apiClient.get('/jobs/matches/tasks/count');
-    return res.data;
-  },
-  updateMatchingWeights: async (weights: {
-    skills_weight: number;
-    semantic_weight: number;
-    experience_weight: number;
-    role_title_weight?: number;
-    location_weight?: number;
-    auto_apply_threshold?: number;
-    approval_threshold?: number;
-  }): Promise<{ status: string; message: string; weights: any }> => {
-    const res = await apiClient.post('/jobs/matches/weights', weights);
-    return res.data;
-  },
-  getMatchingWeights: async (): Promise<{ weights: any }> => {
-    const res = await apiClient.get('/jobs/matches/weights');
-    return res.data;
-  },
 
   // Applications
   listApplications: async (state?: string, skip?: number, limit: number = 1000): Promise<Application[]> => {
@@ -283,21 +257,6 @@ export const api = {
       return res.data.items;
     }
     return Array.isArray(res.data) ? res.data : [];
-  },
-  listApplicationsPaginated: async (
-    params?: { state?: string; page?: number; page_size?: number; skip?: number; limit?: number }
-  ): Promise<PaginatedApplicationsResponse> => {
-    const res = await apiClient.get('/applications', { params });
-    if (Array.isArray(res.data)) {
-      return {
-        items: res.data,
-        total: res.data.length,
-        page: 1,
-        page_size: res.data.length,
-        total_pages: 1,
-      };
-    }
-    return res.data;
   },
   getApplicationScreenshot: async (appId: string): Promise<Blob> => {
     const res = await apiClient.get(`/applications/${appId}/screenshot`, {
@@ -378,14 +337,6 @@ export const api = {
     const res = await apiClient.get('/automation/active');
     return res.data;
   },
-  getRunStatus: async (runId: string): Promise<AutomationRunStatus> => {
-    const res = await apiClient.get(`/automation/runs/${runId}`);
-    return res.data;
-  },
-  createWsTicket: async (): Promise<{ ticket: string; expires_in: number }> => {
-    const res = await apiClient.post('/ws/ticket');
-    return res.data;
-  },
   // The server returns events in pages (oldest first); keep asking until a page is not full.
   getRunEvents: async (runId: string, afterSeq?: number): Promise<TimelineEvent[]> => {
     const pageSize = 1000;
@@ -418,17 +369,6 @@ export const api = {
   stopRun: async (runId: string, reason?: string): Promise<AutomationRunStatus> => {
     const res = await apiClient.post(`/automation/runs/${runId}/stop`, { reason });
     return res.data;
-  },
-  listSchedules: async (): Promise<ScheduleJobConfig[]> => {
-    const res = await apiClient.get('/automation/schedules');
-    return res.data;
-  },
-  createSchedule: async (payload: any): Promise<ScheduleJobConfig> => {
-    const res = await apiClient.post('/automation/schedules', payload);
-    return res.data;
-  },
-  deleteSchedule: async (scheduleId: string): Promise<void> => {
-    await apiClient.delete(`/automation/schedules/${scheduleId}`);
   },
 
   // Advanced Strategic Analytics & Decision Support
@@ -501,10 +441,6 @@ export const api = {
     const res = await apiClient.get('/campaigns');
     return res.data;
   },
-  getCampaign: async (id: string): Promise<Campaign> => {
-    const res = await apiClient.get(`/campaigns/${id}`);
-    return res.data;
-  },
   createCampaign: async (payload: any): Promise<Campaign> => {
     const res = await apiClient.post('/campaigns', payload);
     return res.data;
@@ -519,10 +455,6 @@ export const api = {
   // Starts the campaign and its automation run together on the server (AUT-15).
   launchCampaign: async (id: string, overrides: Record<string, any> = {}): Promise<{ run_id: string; execution: CampaignExecution; status: string }> => {
     const res = await apiClient.post(`/campaigns/${id}/launch`, overrides);
-    return res.data;
-  },
-  startCampaign: async (id: string): Promise<CampaignExecution> => {
-    const res = await apiClient.post(`/campaigns/${id}/start`);
     return res.data;
   },
   pauseCampaign: async (id: string): Promise<CampaignExecution> => {

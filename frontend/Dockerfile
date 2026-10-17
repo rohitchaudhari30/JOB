@@ -1,5 +1,5 @@
-# Multi-stage production Dockerfile for AutoApply.ai Frontend
-FROM node:20-alpine AS builder
+# Multi-stage production Dockerfile for AutoApply Frontend
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 

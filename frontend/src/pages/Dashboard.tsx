@@ -2,8 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   LayoutDashboard,
   Play,
-  Pause,
-  Square,
   Tv,
   ArrowUpRight,
   ShieldCheck,
@@ -17,17 +15,16 @@ import {
   ChevronRight,
   Check,
   Activity,
-  Send,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { EmptyState } from '../components/ui/EmptyState';
 import {
   DashboardOverview,
-  DashboardTopMatch,
   AutomationRunStatus,
   Application,
 } from '../types';
 import { useToast } from '../context/ToastContext';
+import { usePolling } from '../hooks/usePolling';
 
 interface DashboardProps {
   onNavigate: (tab: any) => void;
@@ -35,15 +32,13 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: propActiveRun }) => {
-  const { showSuccess, showError, showInfo } = useToast();
+  const { showError } = useToast();
 
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [recentApplications, setRecentApplications] = useState<Application[]>([]);
   const [connections, setConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [applyingJobId, setApplyingJobId] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
 
   const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
 
@@ -77,71 +72,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(() => {
-      loadData(true);
-    }, 15000); // Polling every 15s for operational status
-    return () => clearInterval(interval);
   }, [loadData]);
 
-  // Operational Controls
-  const handlePauseActiveRun = async () => {
-    const runId = overview?.active_run.run_id || propActiveRun?.run_id;
-    if (!runId) return;
-    try {
-      setActionLoading(true);
-      await api.pauseRun(runId);
-      showInfo('Automation session paused safely.');
-      await loadData(true);
-    } catch (e: any) {
-      showError(`Failed to pause session: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleResumeActiveRun = async () => {
-    const runId = overview?.active_run.run_id || propActiveRun?.run_id;
-    if (!runId) return;
-    try {
-      setActionLoading(true);
-      await api.resumeRun(runId);
-      showSuccess('Automation session resumed.');
-      await loadData(true);
-    } catch (e: any) {
-      showError(`Failed to resume session: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleStopActiveRun = async () => {
-    const runId = overview?.active_run.run_id || propActiveRun?.run_id;
-    if (!runId) return;
-    if (!window.confirm('Are you sure you want to stop the active automation run?')) return;
-    try {
-      setActionLoading(true);
-      await api.stopRun(runId, 'Stopped from dashboard');
-      showInfo('Automation session stopped.');
-      await loadData(true);
-    } catch (e: any) {
-      showError(`Failed to stop session: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleQuickApply = async (match: DashboardTopMatch) => {
-    try {
-      setApplyingJobId(match.job_id);
-      await api.createApplication(match.job_id, undefined, undefined, 'DASHBOARD', false);
-      showSuccess(`Queued application for ${match.title} at ${match.company}!`);
-      await loadData(true);
-    } catch (e: any) {
-      showError(`Application request failed: ${e.response?.data?.detail || e.message}`);
-    } finally {
-      setApplyingJobId(null);
-    }
-  };
+  // Operational status refresh every 15 s, paused while the tab is hidden.
+  usePolling(() => void loadData(true), 15000);
 
   const effectiveRunning =
     overview?.active_run.is_running || propActiveRun?.status === 'RUNNING';
@@ -209,7 +143,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <AlertOctagon className="w-4 h-4 text-rose-500" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">
               Immediate Action Required ({overview.needs_attention.length})
             </h2>
           </div>
@@ -231,7 +165,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                   </p>
                 </div>
                 <button
-                  onClick={() => onNavigate(item.action_url.replace('/', ''))}
+                  onClick={() => onNavigate(item.action_url)}
                   className="shrink-0 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <span>{item.action_label}</span>
@@ -302,58 +236,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
 
             {/* Active Run Controls */}
             <div className="flex items-center gap-2 self-start sm:self-auto">
-              {effectiveRunning ? (
-                <>
-                  <button
-                    onClick={handlePauseActiveRun}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:hover:bg-amber-900/60 dark:text-amber-300 font-bold text-xs border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Pause className="w-3.5 h-3.5" />
-                    <span>Pause</span>
-                  </button>
-                  <button
-                    onClick={handleStopActiveRun}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Square className="w-3.5 h-3.5" />
-                    <span>Stop</span>
-                  </button>
-                  <button
-                    onClick={() => onNavigate('live_console')}
-                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Tv className="w-3.5 h-3.5" />
-                    <span>Live Console</span>
-                  </button>
-                </>
-              ) : effectiveStatus.startsWith('PAUSED') ? (
-                <>
-                  <button
-                    onClick={handleResumeActiveRun}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Resume</span>
-                  </button>
-                  <button
-                    onClick={handleStopActiveRun}
-                    disabled={actionLoading}
-                    className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <Square className="w-3.5 h-3.5" />
-                    <span>Stop</span>
-                  </button>
-                  <button
-                    onClick={() => onNavigate('live_console')}
-                    className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Tv className="w-3.5 h-3.5" />
-                    <span>Inspect</span>
-                  </button>
-                </>
+              {effectiveRunning || effectiveStatus.startsWith('PAUSED') ? (
+                <button
+                  onClick={() => onNavigate('live_console')}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Tv className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Open live run</span>
+                </button>
               ) : (
                 <button
                   onClick={() => onNavigate('direct_apply')}
@@ -458,7 +348,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                   </span>
                 ) : (
                   <button
-                    onClick={() => onNavigate(item.action_url.replace('/', ''))}
+                    onClick={() => onNavigate(item.action_url)}
                     className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 underline cursor-pointer"
                   >
                     {item.action_label}
@@ -574,19 +464,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleQuickApply(match)}
-                      disabled={applyingJobId === match.job_id}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
-                    >
-                      <Send className="w-3 h-3" />
-                      <span>{applyingJobId === match.job_id ? 'Queuing...' : '1-Click Apply'}</span>
-                    </button>
-                    <button aria-label="Open"
                       onClick={() => onNavigate('matches')}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
-                      title="Inspect Match"
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
                     >
-                      <ArrowUpRight className="w-4 h-4" />
+                      <span>Review in Jobs</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -629,9 +511,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                 className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 first:pt-0 last:pb-0"
               >
                 <div className="space-y-0.5">
-                  <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
                     {app.job_title || `Application #${app.id.slice(-8)}`}
-                  </h4>
+                  </h3>
                   <p className="text-[11px] text-slate-500">
                     {app.company ? `${app.company} • ` : ''}Job ID: {app.job_id.slice(-10)} • Created: {new Date(app.created_at).toLocaleDateString()}
                   </p>

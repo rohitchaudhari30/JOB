@@ -55,6 +55,11 @@ jobs:
         run: |
           npm ci
 
+      - name: Component size ratchet
+        working-directory: frontend
+        run: |
+          npm run check:size
+
       - name: Run Vitest Unit Tests
         working-directory: frontend
         run: |

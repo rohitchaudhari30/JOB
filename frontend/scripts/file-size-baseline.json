@@ -1,0 +1,15 @@
+{
+  "components/LiveTelemetryPanel.tsx": 782,
+  "components/Navbar.tsx": 430,
+  "pages/AIMatches.tsx": 653,
+  "pages/Analytics.tsx": 795,
+  "pages/ApplicationCRM.tsx": 713,
+  "pages/Dashboard.tsx": 566,
+  "pages/DirectApply.tsx": 660,
+  "pages/JobDiscovery.tsx": 638,
+  "pages/LiveAutomation.tsx": 718,
+  "pages/PlatformConnections.tsx": 506,
+  "pages/ProfileManager.tsx": 488,
+  "services/api.ts": 492,
+  "types/index.ts": 517
+}

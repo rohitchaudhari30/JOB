@@ -16,6 +16,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -531,7 +532,7 @@ class CampaignSafetyPolicyModel(Base):
     operating_start_time = Column(String(8), default="09:00", nullable=False)
     operating_end_time = Column(String(8), default="18:00", nullable=False)
     max_concurrent_applications = Column(Integer, default=1, nullable=False)
-    timezone = Column(String(64), default="UTC", nullable=False)
+    timezone = Column(String(64), default="UTC", server_default="UTC", nullable=False)
 
     campaign = relationship("CampaignModel", back_populates="safety_policy")
 
@@ -548,6 +549,13 @@ class CampaignScheduleModel(Base):
     next_run_at = Column(DateTime(timezone=True), nullable=True)
 
     campaign = relationship("CampaignModel", back_populates="schedule")
+
+
+# Statuses that count as "active" (everything except COMPLETED / FAILED / ABORTED).
+ACTIVE_EXECUTION_WHERE = (
+    "status IN ('INITIALIZING','RUNNING','RECOVERY_PENDING','PAUSED_OTP','PAUSED_CAPTCHA',"
+    "'PAUSED_SESSION','PAUSED_LIMIT','PAUSED_USER')"
+)
 
 
 class CampaignExecutionModel(Base):
@@ -570,6 +578,17 @@ class CampaignExecutionModel(Base):
     submitted_count = Column(Integer, default=0, nullable=False)
     failed_count = Column(Integer, default=0, nullable=False)
     error_message = Column(Text, nullable=True)
+
+    # IMP-052: at most one non-terminal execution per campaign, enforced by the database.
+    __table_args__ = (
+        Index(
+            "uq_campaign_one_active_execution",
+            "campaign_id",
+            unique=True,
+            sqlite_where=text(ACTIVE_EXECUTION_WHERE),
+            postgresql_where=text(ACTIVE_EXECUTION_WHERE),
+        ),
+    )
 
     campaign = relationship("CampaignModel", back_populates="executions")
     job_items = relationship("CampaignJobItemModel", back_populates="execution", cascade="all, delete-orphan")
