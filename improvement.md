@@ -476,6 +476,8 @@ Local branch `claude/phase0-quick-fixes` (not pushed). See `redesig.md` §28 for
 | IMP-021 | **Ratchet done**; Applications split 1,471→712 lines (redesig.md §28.4). DirectApply split 1,277→~660 (§28.5). Discovery 1,182→~640 (§28.6). Profile 1,004→~480 (§28.7) |
 | IMP-022 | **Partly done** — 114 vitest tests + optional Chromium/axe smoke (`frontend/e2e/smoke.py`, not in CI) |
 | IMP-050 | **Done** (pypdf/python-docx pinned) |
+| IMP-051 | **Done** (model server_default + test) — redesig.md §28.11 |
+| IMP-052 | **Done for campaign executions** (partial unique index, race handled, skip-if-duplicates); `automation_runs` not guarded — §28.11 |
 | IMP-055 | **Done** (frontend image Node 22; not built here) |
 | IMP-020 | **Partly done** — all dialogs now use the shared Modal (redesig.md §28.8); buttons/chips/tokens on older pages still local |
 | Still open | IMP-014, 020 (migration), 030–034, 040–042, 051–054 |

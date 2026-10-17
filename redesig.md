@@ -582,3 +582,13 @@ Each Applications row now has one primary action plus at most one secondary: rev
 ### 28.10 Dark mode check
 
 Ran axe in dark mode (theme key `applyflow_theme=dark`) on all nine pages with the mocked API and looked at screenshots of Campaigns and Applications. Found and fixed one issue: `dark:text-slate-500` (3.75:1 on slate-900) is lifted to slate-400 (applies to the Applications KPI captions, Jobs and Connections). Result: 0 axe violations on all nine pages in dark mode, and 0 in light. Also fixed the "Connect A job platform" button label. Not covered: dark-mode states with real data, open dialogs/drawers, and hover/focus colours (axe does not judge those).
+
+### 28.11 Backend carry-overs: IMP-051 and IMP-052
+
+**IMP-051 (done):** the model now declares `server_default="UTC"` for `campaign_safety_policies.timezone`, matching migration 0003. A new test compares server defaults between the migrations and the models (the existing schema test ignores them); it fails if the model change is reverted.
+
+**IMP-052 (done for campaign executions):** migration `0005` adds a partial unique index so a campaign can have only one non-terminal execution; `acquire_or_get_active_execution` now catches the integrity error when it loses the insert race and returns the winner (`was_created=False`). Two decisions worth knowing:
+- If a database already holds two active executions for one campaign, the index is **skipped with a warning**, not forced and no execution is ended, because choosing which to end is a person's call. The app-level check still applies. This also covers databases created the old way: they are stamped at head and never run 0005, so the same skip-or-create step is applied on that path. (I found that gap only because a test I wrote first was vacuous; the final tests exercise both paths.)
+- `automation_runs` (one active run per user) is **not** guarded: the rule lives in memory and a crashed process can leave a RUNNING row behind, which a unique index would turn into a permanent block. That needs a startup-recovery decision first.
+
+Verified: 365 backend tests pass (9 new); mutation checks confirm the race test and the legacy-path test fail without their fixes. Not verified: Postgres (only SQLite is installed here; the partial-index SQL is standard but untested there), and behaviour on your real database. The full suite reports one more warning than before (3 vs 2); I did not trace it.
