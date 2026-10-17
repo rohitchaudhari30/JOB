@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, Camera, ChevronDown, ChevronUp, ExternalLink, Layers, RotateCcw, X } from 'lucide-react';
+import { AlertCircle, Camera, ChevronDown, ChevronUp, ExternalLink, RotateCcw, X } from 'lucide-react';
 import type { Application } from '../../types';
 import { isUuidString, resolvePlatformName } from '../../utils/applicationHelpers';
 import { getDerivedStatus, formatExperience, formatSalary, formatDateDisplay } from './applicationLogic';
@@ -140,16 +140,6 @@ export const ApplicationRow: React.FC<Props> = ({
               >
                 Dismiss
               </button>
-              {applyUrl && (
-                <a
-                  href={applyUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 flex items-center space-x-1"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
             </div>
           ) : statusObj.label === 'Needs Verification' ? (
             <div className="inline-flex items-center justify-end space-x-2">
@@ -163,6 +153,7 @@ export const ApplicationRow: React.FC<Props> = ({
               </button>
               <button
                 onClick={() => onToggleReason(app.id)}
+                aria-expanded={isExpanded}
                 className="text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
               >
                 <span>Reason</span>
@@ -171,13 +162,6 @@ export const ApplicationRow: React.FC<Props> = ({
                 ) : (
                   <ChevronDown className="w-3.5 h-3.5" />
                 )}
-              </button>
-              <button
-                onClick={() => onToggleReason(app.id)}
-                className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer transition-colors"
-                title="View execution audit & traces"
-              >
-                <Layers className="w-3.5 h-3.5" />
               </button>
             </div>
           ) : statusObj.label === 'Failed' || (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_')) ? (
@@ -192,6 +176,7 @@ export const ApplicationRow: React.FC<Props> = ({
               </button>
               <button
                 onClick={() => onToggleReason(app.id)}
+                aria-expanded={isExpanded}
                 className="text-xs font-semibold text-rose-700 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
               >
                 <span>Reason</span>
@@ -201,18 +186,12 @@ export const ApplicationRow: React.FC<Props> = ({
                   <ChevronDown className="w-3.5 h-3.5" />
                 )}
               </button>
-              <button
-                onClick={() => onToggleReason(app.id)}
-                className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer transition-colors"
-                title="View execution audit & traces"
-              >
-                <Layers className="w-3.5 h-3.5" />
-              </button>
             </div>
           ) : statusObj.label === 'Skipped' ? (
             <div className="inline-flex items-center justify-end space-x-2">
               <button
                 onClick={() => onToggleReason(app.id)}
+                aria-expanded={isExpanded}
                 className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
               >
                 <span>Reason</span>
@@ -221,13 +200,6 @@ export const ApplicationRow: React.FC<Props> = ({
                 ) : (
                   <ChevronDown className="w-3.5 h-3.5" />
                 )}
-              </button>
-              <button
-                onClick={() => onToggleReason(app.id)}
-                className="p-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer transition-colors"
-                title="View execution audit & traces"
-              >
-                <Layers className="w-3.5 h-3.5" />
               </button>
             </div>
           ) : applyUrl ? (

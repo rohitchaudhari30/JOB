@@ -384,9 +384,9 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
             <Brain className="w-10 h-10" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
               {allMatches.length === 0 ? 'No AI Evaluated Matches Yet' : 'No Matches Fit Current Filter'}
-            </h3>
+            </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
               {allMatches.length === 0
                 ? 'You have discovered jobs ready to be analyzed against your resume. Click below to run the 5-stage AI cascade evaluation.'

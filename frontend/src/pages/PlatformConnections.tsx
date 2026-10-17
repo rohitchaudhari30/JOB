@@ -338,7 +338,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
                     {getPlatformIcon(conn.platform)}
                     <div>
                       <div className="flex items-center space-x-1.5">
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">{conn.display_name}</h3>
+                        <h2 className="text-sm font-bold text-slate-900 dark:text-white">{conn.display_name}</h2>
                       </div>
                       <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                         {isPortal ? 'Job Portal' : 'Direct ATS'}

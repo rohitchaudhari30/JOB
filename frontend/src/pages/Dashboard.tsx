@@ -511,9 +511,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
                 className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 first:pt-0 last:pb-0"
               >
                 <div className="space-y-0.5">
-                  <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
                     {app.job_title || `Application #${app.id.slice(-8)}`}
-                  </h4>
+                  </h3>
                   <p className="text-[11px] text-slate-500">
                     {app.company ? `${app.company} • ` : ''}Job ID: {app.job_id.slice(-10)} • Created: {new Date(app.created_at).toLocaleDateString()}
                   </p>
