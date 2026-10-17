@@ -562,3 +562,7 @@ Verification: tsc clean; 114 vitest tests pass (9 new in `jobs_merge.test.tsx`);
 ### 28.5 DirectApply (Campaigns) split, ATS contrast fix
 
 `DirectApply.tsx` went from 1,277 to ~660 lines: `CampaignHeader`, `CampaignCockpit`, `CriteriaCard` and `freshness.ts` now live in `pages/campaigns/`. Props are passed flat (the form state stays in the page; moving it into a hook is a larger change I did not make). The four dimmed "ATS" captions failed contrast because the unselected source buttons used `opacity-60`; they now dim by colour instead, and axe reports 0 violations on `/automation/campaigns`. Verified: tsc, 120 vitest tests, size ratchet, browser smoke 38/38. The campaigns screen was not compared pixel-for-pixel with the old one; the new component files have no tests of their own (the smoke run renders them).
+
+### 28.6 Discovery split
+
+`JobDiscovery.tsx` went from 1,182 to ~640 lines. New in `pages/jobs/`: `JobCard`, `DiscoveryControls`, `DiscoveryToolbar`, `SelectionBar`, and `jobFreshness.ts`. Behaviour unchanged. Verified: tsc, 125 vitest tests (5 new: freshness labels, JobCard open/applied), size ratchet, browser smoke 38/38 (the smoke mock has no jobs, so a populated Discovery grid was not exercised in a real browser). Still above 400 lines: the page keeps the data loading, WS handling and queue logic.
