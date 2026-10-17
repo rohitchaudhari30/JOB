@@ -1,13 +1,10 @@
 {
-  "components/LiveTelemetryPanel.tsx": 316,
   "components/Navbar.tsx": 430,
   "pages/AIMatches.tsx": 653,
-  "pages/Analytics.tsx": 282,
   "pages/ApplicationCRM.tsx": 713,
   "pages/Dashboard.tsx": 566,
   "pages/DirectApply.tsx": 660,
   "pages/JobDiscovery.tsx": 638,
-  "pages/LiveAutomation.tsx": 709,
   "pages/PlatformConnections.tsx": 498,
   "pages/ProfileManager.tsx": 488,
   "services/api.ts": 492,
