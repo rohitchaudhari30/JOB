@@ -558,3 +558,7 @@ Verification: tsc clean; 114 vitest tests pass (9 new in `jobs_merge.test.tsx`);
 ### 28.4 Applications page split (IMP-021, first page)
 
 `ApplicationCRM.tsx` went from 1,471 to 712 lines. Status derivation, formatters, KPI stats and filter/sort are now pure functions in `pages/applications/applicationLogic.ts`; the KPI cards and the table row are `ApplicationKpis.tsx` and `ApplicationRow.tsx`. Behaviour is unchanged. It also reads scores through `getMatchScore`. Still above the 400-line limit (baseline lowered to 712): the filter bar and table header remain in the page. Verified: tsc, 120 vitest tests (6 new for the logic), size ratchet, browser smoke 38/38 with the same axe result as before. Not compared pixel-for-pixel with the old page.
+
+### 28.5 DirectApply (Campaigns) split, ATS contrast fix
+
+`DirectApply.tsx` went from 1,277 to ~660 lines: `CampaignHeader`, `CampaignCockpit`, `CriteriaCard` and `freshness.ts` now live in `pages/campaigns/`. Props are passed flat (the form state stays in the page; moving it into a hook is a larger change I did not make). The four dimmed "ATS" captions failed contrast because the unselected source buttons used `opacity-60`; they now dim by colour instead, and axe reports 0 violations on `/automation/campaigns`. Verified: tsc, 120 vitest tests, size ratchet, browser smoke 38/38. The campaigns screen was not compared pixel-for-pixel with the old one; the new component files have no tests of their own (the smoke run renders them).

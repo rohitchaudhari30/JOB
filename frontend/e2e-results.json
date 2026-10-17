@@ -287,13 +287,7 @@
    }
   ],
   "/applications": [],
-  "/automation/campaigns": [
-   {
-    "id": "color-contrast",
-    "impact": "serious",
-    "n": 4
-   }
-  ],
+  "/automation/campaigns": [],
   "/automation/live": [],
   "/insights": [],
   "/settings/profile": [],

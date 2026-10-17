@@ -473,7 +473,7 @@ Local branch `claude/phase0-quick-fixes` (not pushed). See `redesig.md` §28 for
 | IMP-012 | **Partly done** — 2 of 7 profile tabs extracted; no unsaved-changes guard |
 | IMP-018 | **Done** (drawer, deep link, URL filters). One-primary-action-per-state row redesign not done |
 | IMP-019 | **Done** (tabs). Empty-state polish not done |
-| IMP-021 | **Ratchet done**; Applications split 1,471→712 lines (redesig.md §28.4). DirectApply, Discovery, Profile still open |
+| IMP-021 | **Ratchet done**; Applications split 1,471→712 lines (redesig.md §28.4). DirectApply split 1,277→~660 (§28.5). Discovery, Profile still open |
 | IMP-022 | **Partly done** — 114 vitest tests + optional Chromium/axe smoke (`frontend/e2e/smoke.py`, not in CI) |
 | IMP-050 | **Done** (pypdf/python-docx pinned) |
 | IMP-055 | **Done** (frontend image Node 22; not built here) |
