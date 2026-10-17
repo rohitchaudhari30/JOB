@@ -102,6 +102,17 @@ with sync_playwright() as p:
         print(f"axe {path}: {len(res)} violations, {len(serious)} serious/critical", [(v['id'], v['n']) for v in serious])
     pg.context.close()
 
+    # ---- shared Modal in a real browser: New Campaign
+    pg = new_page(1280)
+    pg.goto(BASE + "/automation/campaigns"); pg.wait_for_timeout(900)
+    pg.get_by_role("button", name="New Campaign").first.click(); pg.wait_for_timeout(300)
+    dlg = pg.get_by_role("dialog")
+    check("modal: New Campaign opens as a dialog", dlg.is_visible())
+    check("modal: focus lands in the name field", pg.evaluate("document.activeElement && document.activeElement.id") == "new-campaign-name")
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+    check("modal: Esc closes it", dlg.count() == 0)
+    pg.context.close()
+
     # ---- unsaved-changes guard on Profile
     pg = new_page(1280)
     dialogs = []

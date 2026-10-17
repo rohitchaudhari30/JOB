@@ -1,21 +1,11 @@
-import React from "react";
-import {
-  Sparkles,
-  Clock,
-  Briefcase,
-  MapPin,
-  Sliders,
-  Play,
-  Zap,
-  Globe,
-  X,
-} from "lucide-react";
-import type { CandidateProfile, Resume } from "../../types";
-import type { SafetySettings } from "./safetySettings";
-import { FRESHNESS_OPTIONS } from "./freshness";
+import React from 'react';
+import { Sparkles, Clock, Briefcase, MapPin, Sliders, Play, Zap, Globe, X } from 'lucide-react';
+import type { CandidateProfile, Resume } from '../../types';
+import type { SafetySettings } from './safetySettings';
+import { FRESHNESS_OPTIONS } from './freshness';
 
 interface CriteriaCardProps {
-  applicationMode: "AUTO" | "APPROVAL";
+  applicationMode: 'AUTO' | 'APPROVAL';
   freshnessHours: number;
   handleAddLocation: () => void;
   handleAddRole: () => void;
@@ -32,8 +22,8 @@ interface CriteriaCardProps {
   safety: SafetySettings;
   selectedResumeId: string;
   selectedSources: string[];
-  setActiveCampaignTab: (t: "rules" | "safety" | "logs") => void;
-  setApplicationMode: (m: "AUTO" | "APPROVAL") => void;
+  setActiveCampaignTab: (t: 'rules' | 'safety' | 'logs') => void;
+  setApplicationMode: (m: 'AUTO' | 'APPROVAL') => void;
   setFreshnessHours: (n: number) => void;
   setMaxApplications: (n: number) => void;
   setMinMatchScore: (n: number) => void;
@@ -86,9 +76,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
             Run Execution Criteria
           </h2>
         </div>
-        <span className="text-[11px] text-slate-400">
-          Defaults auto-filled from your profile
-        </span>
+        <span className="text-[11px] text-slate-400">Defaults auto-filled from your profile</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -119,9 +107,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
                 type="text"
                 value={newRoleInput}
                 onChange={(e) => setNewRoleInput(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" && (e.preventDefault(), handleAddRole())
-                }
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddRole())}
                 placeholder="+ Add role..."
                 className="w-full bg-transparent text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden px-1"
               />
@@ -156,9 +142,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
                 type="text"
                 value={newLocationInput}
                 onChange={(e) => setNewLocationInput(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" && (e.preventDefault(), handleAddLocation())
-                }
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddLocation())}
                 placeholder="+ Add location..."
                 className="w-full bg-transparent text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-hidden px-1"
               />
@@ -174,12 +158,12 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {[
-              { id: "naukri", label: "Naukri.com", type: "Portal" },
-              { id: "linkedin", label: "LinkedIn", type: "Portal" },
-              { id: "greenhouse", label: "Greenhouse", type: "ATS" },
-              { id: "lever", label: "Lever ATS", type: "ATS" },
-              { id: "workday", label: "Workday", type: "ATS" },
-              { id: "ashby", label: "Ashby ATS", type: "ATS" },
+              { id: 'naukri', label: 'Naukri.com', type: 'Portal' },
+              { id: 'linkedin', label: 'LinkedIn', type: 'Portal' },
+              { id: 'greenhouse', label: 'Greenhouse', type: 'ATS' },
+              { id: 'lever', label: 'Lever ATS', type: 'ATS' },
+              { id: 'workday', label: 'Workday', type: 'ATS' },
+              { id: 'ashby', label: 'Ashby ATS', type: 'ATS' },
             ].map((src) => {
               const isSelected = selectedSources.includes(src.id);
               return (
@@ -189,13 +173,13 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
                   onClick={() => toggleSource(src.id)}
                   className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     isSelected
-                      ? "bg-indigo-50/70 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30"
-                      : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800"
+                      ? 'bg-indigo-50/70 border-indigo-200 dark:bg-indigo-500/10 dark:border-indigo-500/30'
+                      : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800'
                   }`}
                 >
                   <div>
                     <div
-                      className={`text-xs font-bold ${isSelected ? "text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-300"}`}
+                      className={`text-xs font-bold ${isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-300'}`}
                     >
                       {src.label}
                     </div>
@@ -204,11 +188,11 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
                   <div
                     className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] ${
                       isSelected
-                        ? "bg-indigo-600 border-indigo-600 text-white"
-                        : "border-slate-300 dark:border-slate-600"
+                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                        : 'border-slate-300 dark:border-slate-600'
                     }`}
                   >
-                    {isSelected && "✓"}
+                    {isSelected && '✓'}
                   </div>
                 </button>
               );
@@ -235,8 +219,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
             ))}
           </select>
           <p className="text-[10px] text-slate-400">
-            Only surfaces jobs posted within this timeframe to avoid stale or
-            expired openings.
+            Only surfaces jobs posted within this timeframe to avoid stale or expired openings.
           </p>
         </div>
 
@@ -277,11 +260,11 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => setApplicationMode("AUTO")}
+              onClick={() => setApplicationMode('AUTO')}
               className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                applicationMode === "AUTO"
-                  ? "bg-indigo-50 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/30"
-                  : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800"
+                applicationMode === 'AUTO'
+                  ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/30'
+                  : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800'
               }`}
             >
               <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
@@ -294,19 +277,18 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
 
             <button
               type="button"
-              onClick={() => setApplicationMode("APPROVAL")}
+              onClick={() => setApplicationMode('APPROVAL')}
               className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                applicationMode === "APPROVAL"
-                  ? "bg-indigo-50 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/30"
-                  : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800"
+                applicationMode === 'APPROVAL'
+                  ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/30'
+                  : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-800'
               }`}
             >
               <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
                 <span>🛡️ Require Approval</span>
               </div>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-                Finds and pre-fills applications, pausing for your 1-click
-                confirmation.
+                Finds and pre-fills applications, pausing for your 1-click confirmation.
               </p>
             </button>
           </div>
@@ -316,9 +298,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
       {/* Bottom Limit & Resume Options */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
         <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-            Max Applications This Run
-          </label>
+          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Max Applications This Run</label>
           <input
             type="number"
             aria-label="Maximum applications per run"
@@ -331,9 +311,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-            Attach Resume Version
-          </label>
+          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Attach Resume Version</label>
           <select
             aria-label="Resume to attach"
             value={selectedResumeId}
@@ -342,8 +320,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
           >
             {resumes.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.file_name} ({r.target_role || "General"}){" "}
-                {r.is_default ? "★ Default" : ""}
+                {r.file_name} ({r.target_role || 'General'}) {r.is_default ? '★ Default' : ''}
               </option>
             ))}
           </select>
@@ -353,14 +330,13 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
       {/* Big Action CTA */}
       <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800">
         <div className="text-xs text-slate-500 dark:text-slate-400">
-          Click <strong>START APPLY NOW</strong> to run immediately, or set up
-          24/7 background autopilot.
+          Click <strong>START APPLY NOW</strong> to run immediately, or set up 24/7 background autopilot.
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
           <button
             type="button"
-            onClick={() => setActiveCampaignTab("safety")}
+            onClick={() => setActiveCampaignTab('safety')}
             className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center space-x-2 transition-transform active:scale-95 cursor-pointer border border-slate-200 dark:border-slate-700"
           >
             <Clock className="w-4 h-4 text-indigo-500" />
@@ -373,7 +349,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
             className="w-full sm:w-auto px-8 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs shadow-xl shadow-indigo-600/25 flex items-center justify-center space-x-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
           >
             <Play className="w-4 h-4 fill-current" />
-            <span>{starting ? "Starting Run..." : "START APPLY NOW"}</span>
+            <span>{starting ? 'Starting Run...' : 'START APPLY NOW'}</span>
           </button>
         </div>
       </div>

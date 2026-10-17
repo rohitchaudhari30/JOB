@@ -1,19 +1,7 @@
-import React from "react";
-import {
-  ShieldCheck,
-  AlertTriangle,
-  Clock,
-  Briefcase,
-  Zap,
-  Globe,
-  BarChart3,
-} from "lucide-react";
-import type {
-  PlatformConnectionInfo,
-  Campaign,
-  CampaignPacingStatus,
-} from "../../types";
-import type { SafetySettings } from "./safetySettings";
+import React from 'react';
+import { ShieldCheck, AlertTriangle, Clock, Briefcase, Zap, Globe, BarChart3 } from 'lucide-react';
+import type { PlatformConnectionInfo, Campaign, CampaignPacingStatus } from '../../types';
+import type { SafetySettings } from './safetySettings';
 
 interface CampaignCockpitProps {
   connections: PlatformConnectionInfo[];
@@ -45,21 +33,19 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
               <span
                 className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
                   pacingStatus?.attention_required
-                    ? "bg-amber-400"
-                    : selectedCampaign?.state === "RUNNING" ||
-                        pacingStatus?.active_execution_status === "RUNNING"
-                      ? "bg-emerald-400"
-                      : "bg-slate-400"
+                    ? 'bg-amber-400'
+                    : selectedCampaign?.state === 'RUNNING' || pacingStatus?.active_execution_status === 'RUNNING'
+                      ? 'bg-emerald-400'
+                      : 'bg-slate-400'
                 }`}
               />
               <span
                 className={`relative inline-flex rounded-full h-3 w-3 ${
                   pacingStatus?.attention_required
-                    ? "bg-amber-500"
-                    : selectedCampaign?.state === "RUNNING" ||
-                        pacingStatus?.active_execution_status === "RUNNING"
-                      ? "bg-emerald-500"
-                      : "bg-slate-400"
+                    ? 'bg-amber-500'
+                    : selectedCampaign?.state === 'RUNNING' || pacingStatus?.active_execution_status === 'RUNNING'
+                      ? 'bg-emerald-500'
+                      : 'bg-slate-400'
                 }`}
               />
             </span>
@@ -69,31 +55,26 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
             <span
               className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                 pacingStatus?.attention_required
-                  ? "bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
-                  : selectedCampaign?.state === "RUNNING" ||
-                      pacingStatus?.active_execution_status === "RUNNING"
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
-                    : "bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                  ? 'bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                  : selectedCampaign?.state === 'RUNNING' || pacingStatus?.active_execution_status === 'RUNNING'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                    : 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
               }`}
             >
-              {pacingStatus?.active_execution_status ||
-                selectedCampaign?.state ||
-                "IDLE"}
+              {pacingStatus?.active_execution_status || selectedCampaign?.state || 'IDLE'}
             </span>
           </div>
 
           <div className="text-xs font-medium text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60">
-              Operating Window:{" "}
+              Operating Window:{' '}
               <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">
                 {safety.operatingStart} - {safety.operatingEnd}
               </strong>
             </span>
             <span className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/70 border border-slate-200/60 dark:border-slate-700/60">
-              Pacing Delay:{" "}
-              <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">
-                {safety.cooldownSecs}s
-              </strong>
+              Pacing Delay:{' '}
+              <strong className="text-slate-800 dark:text-slate-100 font-mono font-bold">{safety.cooldownSecs}s</strong>
             </span>
           </div>
         </div>
@@ -110,15 +91,13 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
               <div className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
                 {pacingStatus?.active_job_title ? (
                   <span>
-                    Applying to{" "}
+                    Applying to{' '}
                     <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">
                       {pacingStatus.active_job_title}
                     </span>
-                    {pacingStatus.active_job_company && (
-                      <span> at {pacingStatus.active_job_company}</span>
-                    )}
+                    {pacingStatus.active_job_company && <span> at {pacingStatus.active_job_company}</span>}
                   </span>
-                ) : pacingStatus?.active_execution_status === "RUNNING" ? (
+                ) : pacingStatus?.active_execution_status === 'RUNNING' ? (
                   <span className="text-emerald-600 dark:text-emerald-400">
                     Evaluating next qualified candidate in queue
                   </span>
@@ -132,7 +111,7 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
             <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px] font-mono text-slate-500 dark:text-slate-400">
               {pacingStatus?.active_execution_id
                 ? `Exec ID: ${pacingStatus.active_execution_id.slice(0, 8)}...`
-                : "No active execution lease"}
+                : 'No active execution lease'}
             </div>
           </div>
 
@@ -145,18 +124,13 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
               </div>
               <div className="flex items-baseline justify-between mb-2">
                 <span className="text-base font-black text-slate-900 dark:text-white">
-                  {pacingStatus?.today_count ?? 0}{" "}
+                  {pacingStatus?.today_count ?? 0}{' '}
                   <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
                     / {safety.dailyLimit} applications
                   </span>
                 </span>
                 <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 font-mono">
-                  {Math.round(
-                    ((pacingStatus?.today_count ?? 0) /
-                      (safety.dailyLimit || 1)) *
-                      100,
-                  )}
-                  %
+                  {Math.round(((pacingStatus?.today_count ?? 0) / (safety.dailyLimit || 1)) * 100)}%
                 </span>
               </div>
               {/* Progress bar */}
@@ -170,10 +144,10 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
               </div>
             </div>
             <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px] text-slate-500 dark:text-slate-400">
-              Hourly velocity:{" "}
+              Hourly velocity:{' '}
               <strong className="text-slate-800 dark:text-slate-200 font-bold">
                 {pacingStatus?.hourly_count ?? 0}/{safety.hourlyLimit}
-              </strong>{" "}
+              </strong>{' '}
               max
             </div>
           </div>
@@ -188,13 +162,12 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
               <div className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
                 {pacingStatus?.next_action_label ||
                   (pacingStatus?.can_apply_now
-                    ? "Ready for dispatch"
-                    : pacingStatus?.status_reason || "Holding cooldown")}
+                    ? 'Ready for dispatch'
+                    : pacingStatus?.status_reason || 'Holding cooldown')}
               </div>
             </div>
             <div className="mt-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px] text-slate-500 dark:text-slate-400 flex items-center space-x-1">
-              {pacingStatus?.cooldown_remaining_seconds &&
-              pacingStatus.cooldown_remaining_seconds > 0 ? (
+              {pacingStatus?.cooldown_remaining_seconds && pacingStatus.cooldown_remaining_seconds > 0 ? (
                 <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
                   Cooldown: {pacingStatus.cooldown_remaining_seconds}s remaining
@@ -211,8 +184,8 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
           <div
             className={`p-4 rounded-xl border flex flex-col justify-between transition-colors ${
               pacingStatus?.attention_required
-                ? "bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800"
-                : "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/60"
+                ? 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800'
+                : 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/80 dark:border-emerald-800/60'
             }`}
           >
             <div>
@@ -220,47 +193,42 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
                 {pacingStatus?.attention_required ? (
                   <>
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                    <span className="text-amber-800 dark:text-amber-300 font-bold">
-                      Action Needed
-                    </span>
+                    <span className="text-amber-800 dark:text-amber-300 font-bold">Action Needed</span>
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-emerald-800 dark:text-emerald-300 font-bold">
-                      Guardian Status
-                    </span>
+                    <span className="text-emerald-800 dark:text-emerald-300 font-bold">Guardian Status</span>
                   </>
                 )}
               </div>
               <div
                 className={`text-xs font-semibold line-clamp-2 ${
                   pacingStatus?.attention_required
-                    ? "text-amber-900 dark:text-amber-200"
-                    : "text-slate-700 dark:text-slate-200"
+                    ? 'text-amber-900 dark:text-amber-200'
+                    : 'text-slate-700 dark:text-slate-200'
                 }`}
               >
-                {pacingStatus?.attention_required ||
-                  "Zero blockers detected. Autopilot running in verified safe zone."}
+                {pacingStatus?.attention_required || 'Zero blockers detected. Autopilot running in verified safe zone.'}
               </div>
             </div>
 
             {pacingStatus?.attention_required ? (
               <div className="mt-3 pt-2 border-t border-amber-200/70 dark:border-amber-800/70 flex items-center space-x-2">
-                {pacingStatus.attention_required.includes("OTP") ||
-                pacingStatus.attention_required.includes("CAPTCHA") ? (
+                {pacingStatus.attention_required.includes('OTP') ||
+                pacingStatus.attention_required.includes('CAPTCHA') ? (
                   <button
                     type="button"
-                    onClick={() => onNavigate("live_console")}
+                    onClick={() => onNavigate('live_console')}
                     className="w-full px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
                   >
                     <Zap className="w-3.5 h-3.5 fill-current" />
                     <span>Open Live Console</span>
                   </button>
-                ) : pacingStatus.attention_required.includes("Session") ? (
+                ) : pacingStatus.attention_required.includes('Session') ? (
                   <button
                     type="button"
-                    onClick={() => onNavigate("connections")}
+                    onClick={() => onNavigate('connections')}
                     className="w-full px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
                   >
                     <Globe className="w-3.5 h-3.5" />
@@ -269,7 +237,7 @@ export const CampaignCockpit: React.FC<CampaignCockpitProps> = ({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onNavigate("live_console")}
+                    onClick={() => onNavigate('live_console')}
                     className="w-full px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
                   >
                     <Zap className="w-3.5 h-3.5 fill-current" />

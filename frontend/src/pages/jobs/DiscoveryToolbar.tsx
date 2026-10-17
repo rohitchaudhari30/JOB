@@ -1,6 +1,6 @@
-import React from "react";
-import { Search, Sparkles, ArrowUpDown, ShieldCheck } from "lucide-react";
-import type { Job } from "../../types";
+import React from 'react';
+import { Search, Sparkles, ArrowUpDown, ShieldCheck } from 'lucide-react';
+import type { Job } from '../../types';
 
 interface DiscoveryToolbarProps {
   appliedTodayCount: number;
@@ -33,15 +33,13 @@ export const DiscoveryToolbar: React.FC<DiscoveryToolbarProps> = ({
     <div className="p-4 rounded-2xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-xs">
       {/* Segmented Freshness Filter Chips + Anti-Ban & Top Fit */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
-          Freshness:
-        </span>
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">Freshness:</span>
         {[
-          { label: "🔥 Past 24 Hours", value: "24h" },
-          { label: "⚡ Last 1 Hour", value: "1h" },
-          { label: "📅 Past 3 Days", value: "3d" },
-          { label: "📅 Past 7 Days", value: "7d" },
-          { label: "🌐 All Time", value: "all" },
+          { label: '🔥 Past 24 Hours', value: '24h' },
+          { label: '⚡ Last 1 Hour', value: '1h' },
+          { label: '📅 Past 3 Days', value: '3d' },
+          { label: '📅 Past 7 Days', value: '7d' },
+          { label: '🌐 All Time', value: 'all' },
         ].map((chip) => {
           const isSelected = postedWithin === chip.value;
           return (
@@ -50,8 +48,8 @@ export const DiscoveryToolbar: React.FC<DiscoveryToolbarProps> = ({
               onClick={() => setPostedWithin(chip.value)}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 isSelected
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
               }`}
             >
               {chip.label}
@@ -66,14 +64,12 @@ export const DiscoveryToolbar: React.FC<DiscoveryToolbarProps> = ({
           onClick={() => setFilterMinFit((prev) => !prev)}
           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 border ${
             filterMinFit
-              ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-              : "bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
+              ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+              : 'bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700'
           }`}
           title="Show only jobs with >= 80% AI match score"
         >
-          <Sparkles
-            className={`w-3.5 h-3.5 ${filterMinFit ? "text-amber-300" : "text-amber-500"}`}
-          />
+          <Sparkles className={`w-3.5 h-3.5 ${filterMinFit ? 'text-amber-300' : 'text-amber-500'}`} />
           <span>Top Fit (&gt;80%)</span>
         </button>
 
@@ -81,8 +77,8 @@ export const DiscoveryToolbar: React.FC<DiscoveryToolbarProps> = ({
         <div
           className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1.5 border ${
             appliedTodayCount >= 20
-              ? "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800"
-              : "bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/80"
+              ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800'
+              : 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/80'
           }`}
           title="Safe daily cap: 20 applications/day prevents anti-bot spam detection and account throttling."
         >
@@ -121,7 +117,7 @@ export const DiscoveryToolbar: React.FC<DiscoveryToolbarProps> = ({
           />
           {searchQuery && (
             <button
-              onClick={() => setSearchQuery("")}
+              onClick={() => setSearchQuery('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
             >
               ✕

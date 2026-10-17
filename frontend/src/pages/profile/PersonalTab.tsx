@@ -1,21 +1,17 @@
-import React from "react";
-import { User, Briefcase, MapPin, Phone } from "lucide-react";
-import type { CandidateProfile } from "../../types";
+import React from 'react';
+import { User, Briefcase, MapPin, Phone } from 'lucide-react';
+import type { CandidateProfile } from '../../types';
 
 interface PersonalTabProps {
   profile: CandidateProfile;
   setProfile: (p: CandidateProfile) => void;
 }
 
-export const PersonalTab: React.FC<PersonalTabProps> = ({
-  profile,
-  setProfile,
-}) => {
+export const PersonalTab: React.FC<PersonalTabProps> = ({ profile, setProfile }) => {
   const totalExpMonths = profile.total_experience_months || 0;
   const expYears = Math.floor(totalExpMonths / 12);
   const expMonths = totalExpMonths % 12;
-  const experienceDisplay =
-    `${expYears}y ${expMonths > 0 ? `${expMonths}m` : ""}`.trim();
+  const experienceDisplay = `${expYears}y ${expMonths > 0 ? `${expMonths}m` : ''}`.trim();
   return (
     <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-5">
       <div className="flex items-center space-x-2 border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -25,8 +21,7 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({
             Personal &amp; Contact Credentials
           </h2>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Primary candidate identity used on job portal applications (Naukri,
-            LinkedIn, Greenhouse, Lever).
+            Primary candidate identity used on job portal applications (Naukri, LinkedIn, Greenhouse, Lever).
           </p>
         </div>
       </div>
@@ -40,10 +35,8 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({
             <Briefcase className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
-              value={profile.headline || ""}
-              onChange={(e) =>
-                setProfile({ ...profile, headline: e.target.value })
-              }
+              value={profile.headline || ''}
+              onChange={(e) => setProfile({ ...profile, headline: e.target.value })}
               placeholder="e.g. Senior Data Engineer / Full-Stack Architect"
               className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
             />
@@ -58,10 +51,8 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({
             <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
-              value={profile.phone || ""}
-              onChange={(e) =>
-                setProfile({ ...profile, phone: e.target.value })
-              }
+              value={profile.phone || ''}
+              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
               placeholder="+91 98765 43210"
               className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
             />
@@ -76,10 +67,8 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({
             <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
-              value={profile.location || ""}
-              onChange={(e) =>
-                setProfile({ ...profile, location: e.target.value })
-              }
+              value={profile.location || ''}
+              onChange={(e) => setProfile({ ...profile, location: e.target.value })}
               placeholder="e.g. Pune, Maharashtra, India"
               className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
             />
@@ -88,10 +77,8 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({
 
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            Total Experience:{" "}
-            <span className="text-indigo-600 dark:text-indigo-400 font-bold">
-              {experienceDisplay}
-            </span>
+            Total Experience:{' '}
+            <span className="text-indigo-600 dark:text-indigo-400 font-bold">{experienceDisplay}</span>
           </label>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex items-center space-x-1.5">
@@ -141,13 +128,11 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
             Professional Bio &amp; Summary
           </label>
-          <span className="text-[10px] text-slate-400">
-            Used by AI matching &amp; cover letters
-          </span>
+          <span className="text-[10px] text-slate-400">Used by AI matching &amp; cover letters</span>
         </div>
         <textarea
           rows={3}
-          value={profile.summary || ""}
+          value={profile.summary || ''}
           onChange={(e) => setProfile({ ...profile, summary: e.target.value })}
           placeholder="Experienced engineer specializing in Python, distributed pipelines, and cloud architecture..."
           className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"

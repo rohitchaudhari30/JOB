@@ -43,7 +43,7 @@ export const Modal: React.FC<ModalProps> = ({
     if (!open) return;
     returnFocusTo.current = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
+    const first = panel?.querySelector<HTMLElement>('[data-autofocus]') ?? panel?.querySelector<HTMLElement>(FOCUSABLE);
     (first || panel)?.focus();
 
     const onKeyDown = (e: KeyboardEvent) => {

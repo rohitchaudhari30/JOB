@@ -1,6 +1,6 @@
-import React from "react";
-import { Play, FileText } from "lucide-react";
-import type { Resume } from "../../types";
+import React from 'react';
+import { Play, FileText } from 'lucide-react';
+import type { Resume } from '../../types';
 
 interface SelectionBarProps {
   defaultResume: Resume | undefined;
@@ -29,17 +29,14 @@ export const SelectionBar: React.FC<SelectionBarProps> = ({
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
             </span>
             <span className="text-xs font-bold">
-              {selectedCount} Job{selectedCount > 1 ? "s" : ""} Queued
+              {selectedCount} Job{selectedCount > 1 ? 's' : ''} Queued
             </span>
           </div>
 
           {defaultResume && (
             <div className="hidden sm:flex items-center space-x-1.5 text-xs text-slate-300 bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700">
               <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span
-                className="truncate max-w-[130px] font-medium"
-                title={defaultResume.file_name}
-              >
+              <span className="truncate max-w-[130px] font-medium" title={defaultResume.file_name}>
                 {defaultResume.file_name}
               </span>
             </div>
@@ -60,11 +57,7 @@ export const SelectionBar: React.FC<SelectionBarProps> = ({
             className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-black text-xs shadow-lg shadow-indigo-600/30 flex items-center space-x-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
           >
             <Play className="w-3.5 h-3.5 fill-white" />
-            <span>
-              {isStartingQueue
-                ? "Launching Engine..."
-                : `🚀 Start Live Auto-Apply (${selectedCount})`}
-            </span>
+            <span>{isStartingQueue ? 'Launching Engine...' : `🚀 Start Live Auto-Apply (${selectedCount})`}</span>
           </button>
         </div>
       </div>

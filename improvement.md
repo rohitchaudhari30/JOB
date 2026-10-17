@@ -477,5 +477,6 @@ Local branch `claude/phase0-quick-fixes` (not pushed). See `redesig.md` §28 for
 | IMP-022 | **Partly done** — 114 vitest tests + optional Chromium/axe smoke (`frontend/e2e/smoke.py`, not in CI) |
 | IMP-050 | **Done** (pypdf/python-docx pinned) |
 | IMP-055 | **Done** (frontend image Node 22; not built here) |
+| IMP-020 | **Partly done** — all dialogs now use the shared Modal (redesig.md §28.8); buttons/chips/tokens on older pages still local |
 | Still open | IMP-014, 020 (migration), 030–034, 040–042, 051–054 |
 | Profile unsaved-changes guard | **Done** (in-app nav + tab close; browser Back not covered) — §28.7 |

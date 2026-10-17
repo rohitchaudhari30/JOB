@@ -1,15 +1,6 @@
-import React from "react";
-import {
-  Rocket,
-  Play,
-  Plus,
-  Pause,
-  Square,
-  RotateCcw,
-  Trash2,
-  Sliders,
-} from "lucide-react";
-import type { Campaign } from "../../types";
+import React from 'react';
+import { Rocket, Play, Plus, Pause, Square, RotateCcw, Trash2, Sliders } from 'lucide-react';
+import type { Campaign } from '../../types';
 
 interface CampaignHeaderProps {
   campaigns: Campaign[];
@@ -46,26 +37,24 @@ export const CampaignHeader: React.FC<CampaignHeaderProps> = ({
       </div>
       <div>
         <div className="flex items-center space-x-2.5">
-          <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-            Automation Campaigns
-          </h1>
+          <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Automation Campaigns</h1>
           {selectedCampaign && (
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider border shadow-2xs ${
-                selectedCampaign.state === "RUNNING"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800"
-                  : selectedCampaign.state === "PAUSED"
-                    ? "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800"
-                    : "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                selectedCampaign.state === 'RUNNING'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800'
+                  : selectedCampaign.state === 'PAUSED'
+                    ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800'
+                    : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  selectedCampaign.state === "RUNNING"
-                    ? "bg-emerald-500 animate-pulse"
-                    : selectedCampaign.state === "PAUSED"
-                      ? "bg-amber-500"
-                      : "bg-slate-400"
+                  selectedCampaign.state === 'RUNNING'
+                    ? 'bg-emerald-500 animate-pulse'
+                    : selectedCampaign.state === 'PAUSED'
+                      ? 'bg-amber-500'
+                      : 'bg-slate-400'
                 }`}
               />
               {selectedCampaign.state}
@@ -73,8 +62,7 @@ export const CampaignHeader: React.FC<CampaignHeaderProps> = ({
           )}
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-          Persistent autonomous campaigns, declarative rules &amp; account
-          safety pacing
+          Persistent autonomous campaigns, declarative rules &amp; account safety pacing
         </p>
       </div>
     </div>
@@ -84,7 +72,7 @@ export const CampaignHeader: React.FC<CampaignHeaderProps> = ({
       {campaigns.length > 0 && (
         <select
           aria-label="Select campaign"
-          value={selectedCampaign?.id || ""}
+          value={selectedCampaign?.id || ''}
           onChange={(e) => {
             const found = campaigns.find((c) => c.id === e.target.value);
             if (found) syncFormFromCampaign(found);
@@ -110,7 +98,7 @@ export const CampaignHeader: React.FC<CampaignHeaderProps> = ({
 
       {selectedCampaign && (
         <>
-          {selectedCampaign.state === "RUNNING" ? (
+          {selectedCampaign.state === 'RUNNING' ? (
             <>
               <button
                 type="button"
@@ -135,7 +123,7 @@ export const CampaignHeader: React.FC<CampaignHeaderProps> = ({
                 <span>Stop</span>
               </button>
             </>
-          ) : selectedCampaign.state === "PAUSED" ? (
+          ) : selectedCampaign.state === 'PAUSED' ? (
             <>
               <button
                 type="button"
@@ -176,9 +164,7 @@ export const CampaignHeader: React.FC<CampaignHeaderProps> = ({
             type="button"
             onClick={() => setConfirmDelete(true)}
             disabled={
-              campaignActionLoading ||
-              selectedCampaign.state === "RUNNING" ||
-              selectedCampaign.state === "PAUSED"
+              campaignActionLoading || selectedCampaign.state === 'RUNNING' || selectedCampaign.state === 'PAUSED'
             }
             aria-label="Delete campaign"
             title="Delete campaign (stop it first if it is running)"

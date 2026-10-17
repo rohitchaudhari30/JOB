@@ -1,5 +1,5 @@
-import React from "react";
-import { Compass, Sparkles } from "lucide-react";
+import React from 'react';
+import { Compass, Sparkles } from 'lucide-react';
 
 interface DiscoveryControlsProps {
   experience: number;
@@ -40,8 +40,7 @@ export const DiscoveryControls: React.FC<DiscoveryControlsProps> = ({
               Live Job Discovery Scout
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Automated real-time scanner across job portals and direct ATS
-              boards
+              Automated real-time scanner across job portals and direct ATS boards
             </p>
           </div>
         </div>
@@ -131,13 +130,11 @@ export const DiscoveryControls: React.FC<DiscoveryControlsProps> = ({
             disabled={isDiscovering}
             className="w-full h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Sparkles
-              className={`w-3.5 h-3.5 ${isDiscovering ? "animate-spin" : ""}`}
-            />
+            <Sparkles className={`w-3.5 h-3.5 ${isDiscovering ? 'animate-spin' : ''}`} />
             <span className="truncate">
               {isDiscovering
-                ? `Scanning ${platform === "linkedin" ? "LinkedIn" : platform === "naukri" ? "Naukri" : platform}...`
-                : "Find Fresh Jobs"}
+                ? `Scanning ${platform === 'linkedin' ? 'LinkedIn' : platform === 'naukri' ? 'Naukri' : platform}...`
+                : 'Find Fresh Jobs'}
             </span>
           </button>
         </div>

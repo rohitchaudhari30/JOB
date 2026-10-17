@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, Info, RotateCcw, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, RotateCcw } from 'lucide-react';
+import { Modal } from '../../components/ui/Modal';
 import { Application } from '../../types';
 import { DerivedStatus, isUuidString, resolvePlatformName } from '../../utils/applicationHelpers';
 
@@ -35,29 +36,9 @@ export const RationaleModal: React.FC<RationaleModalProps> = ({
       (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_'));
 
     return (
-      <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-        <div className="max-w-xl w-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  AI Qualification &amp; Decision Rationale
-                </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Why this position was qualified, held for review, or skipped
-                </p>
-              </div>
-            </div>
-            <button aria-label="Close"
-              onClick={() => onClose()}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+    <Modal open onClose={onClose} title="AI qualification &amp; decision rationale" widthClass="max-w-xl">
+      <div className="space-y-5">
+        <p className="text-xs text-slate-600 dark:text-slate-400">Why this position was qualified, held for review, or skipped.</p>
 
           {/* Job Summary Banner */}
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60 space-y-2">
@@ -187,6 +168,6 @@ export const RationaleModal: React.FC<RationaleModalProps> = ({
             )}
           </div>
         </div>
-      </div>
+    </Modal>
     );
 };
