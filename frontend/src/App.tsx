@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { useActiveRun } from './hooks/useActiveRun';
 import { SectionTabs } from './components/SectionTabs';
+import { confirmLeave } from './utils/unsavedGuard';
 import { BRAND_NAME, BRAND_SUFFIX } from './utils/brand';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
@@ -272,6 +273,8 @@ export const App: React.FC = () => {
 
   const handleTabChange = (target: NavTab | string, replace = false) => {
     const canonicalTab = resolveTab(target);
+    // Pages with unsaved edits (Profile) get a chance to cancel the move; redirects (replace) never prompt.
+    if (!replace && canonicalTab !== activeTab && !confirmLeave()) return;
     const targetPath = TAB_TO_PATH[canonicalTab] || '/home';
     setActiveTab(canonicalTab);
 

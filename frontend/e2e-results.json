@@ -61,6 +61,16 @@
    "detail": "http://localhost:4173/automation/campaigns/safety"
   },
   {
+   "name": "profile: no prompt when nothing was edited",
+   "ok": true,
+   "detail": "http://localhost:4173/home"
+  },
+  {
+   "name": "profile: prompts after an edit and stays when dismissed",
+   "ok": true,
+   "detail": "['You have unsaved changes. Leave this page and discard them?'] http://localhost:4173/settings/profile"
+  },
+  {
    "name": "375px no horizontal page scroll on /home",
    "ok": true,
    "detail": "scrollWidth=375 innerWidth=375"
@@ -229,6 +239,10 @@
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",

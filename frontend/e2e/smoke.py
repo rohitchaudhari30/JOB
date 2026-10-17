@@ -102,6 +102,20 @@ with sync_playwright() as p:
         print(f"axe {path}: {len(res)} violations, {len(serious)} serious/critical", [(v['id'], v['n']) for v in serious])
     pg.context.close()
 
+    # ---- unsaved-changes guard on Profile
+    pg = new_page(1280)
+    dialogs = []
+    pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    pg.goto(BASE + "/settings/profile"); pg.wait_for_timeout(900)
+    pg.get_by_role("link", name="Home").first.click(); pg.wait_for_timeout(300)
+    check("profile: no prompt when nothing was edited", not dialogs and pg.url.endswith("/home"), pg.url)
+    pg.goto(BASE + "/settings/profile"); pg.wait_for_timeout(900)
+    box = pg.locator("input[type=text], input[type=tel], textarea").first
+    box.fill("edited value"); pg.wait_for_timeout(200)
+    pg.get_by_role("link", name="Home").first.click(); pg.wait_for_timeout(300)
+    check("profile: prompts after an edit and stays when dismissed", len(dialogs) == 1 and pg.url.endswith("/settings/profile"), f"{dialogs} {pg.url}")
+    pg.context.close()
+
     # ---- mobile + tablet overflow and drawer
     for w in (375, 768):
         pg = new_page(w, 800)
