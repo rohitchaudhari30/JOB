@@ -506,7 +506,7 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
 
       <ReadinessBanner
         missing={[...(connectedSourcesCount === 0 ? (['connection'] as const) : []), ...(resumes.length === 0 ? (['resume'] as const) : [])]}
-        platformLabel="A job platform"
+        platformLabel="Your job platform"
         onNavigate={(tab) => onNavigate(tab)}
       />
 

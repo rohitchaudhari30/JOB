@@ -171,7 +171,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
     <div className="space-y-6 animate-fadeIn">
       <ReadinessBanner
         missing={readiness.missing}
-        platformLabel="A job platform"
+        platformLabel="Your job platform"
         onNavigate={(tab) => onNavigate?.(tab)}
       />
 

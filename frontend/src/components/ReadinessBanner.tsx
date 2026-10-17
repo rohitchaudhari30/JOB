@@ -14,7 +14,7 @@ interface ReadinessBannerProps {
 const COPY: Record<ReadinessGap, { text: (p: string) => string; action: (p: string) => string; target: 'connections' | 'profile' }> = {
   connection: {
     text: (p) => `${p} session is disconnected. Connect it so applications can be submitted.`,
-    action: (p) => `Connect ${p}`,
+    action: (p) => `Connect ${p.startsWith('Your ') ? 'platform' : p}`,
     target: 'connections',
   },
   resume: {

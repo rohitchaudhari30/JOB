@@ -578,3 +578,7 @@ Moved onto the shared `Modal`/`Button` (focus trap, Esc, focus restore, labelled
 ### 28.9 Applications row actions and heading order
 
 Each Applications row now has one primary action plus at most one secondary: review queue = Approve + Dismiss; needs verification = Verify Outcome + Reason; failed/paused = Retry + Reason; skipped = Reason. Removed: the Layers icon button (it did the same as Reason) and the unlabelled link icon in the review row (the posting link is in the row drawer). "Reason" now exposes `aria-expanded`. Heading order fixed on Home, AI matches (the readiness banner title is no longer a heading) and Connections. Result in the mocked browser run: axe reports 0 violations on all nine pages. Verified: 139 vitest tests (4 new for row actions), smoke 43/43. Caveat: axe ran against mocked, mostly empty data, so states with real rows, errors and long text are not covered; dark mode is still unchecked.
+
+### 28.10 Dark mode check
+
+Ran axe in dark mode (theme key `applyflow_theme=dark`) on all nine pages with the mocked API and looked at screenshots of Campaigns and Applications. Found and fixed one issue: `dark:text-slate-500` (3.75:1 on slate-900) is lifted to slate-400 (applies to the Applications KPI captions, Jobs and Connections). Result: 0 axe violations on all nine pages in dark mode, and 0 in light. Also fixed the "Connect A job platform" button label. Not covered: dark-mode states with real data, open dialogs/drawers, and hover/focus colours (axe does not judge those).

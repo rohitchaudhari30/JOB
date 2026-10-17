@@ -235,3 +235,9 @@
 .bg-orange-600 {
   background-color: #c2410c;
 }
+
+/* Dark mode: Tailwind's dark:text-slate-500 (#64748b) is 3.75:1 on slate-900. Lift it to slate-400. */
+.dark .dark\:text-slate-500.dark\:text-slate-500,
+.dark\:text-slate-500.dark\:text-slate-500:is(.dark *) {
+  color: #94a3b8;
+}
