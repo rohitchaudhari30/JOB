@@ -427,7 +427,7 @@ The full previous text is available in git history (`git show ed4ae9a:improvemen
 | IMP-051 | Align `campaign_safety_policies.timezone` server_default with model | one drift found | Confirmed, S |
 | IMP-052 | DB-level guard for "one active run/execution" | none exists; app-level only | Conditional, M (migration) |
 | IMP-053 | Verify concurrency on a non-SQLite engine before any move off SQLite | only SQLite driver installed | Conditional |
-| IMP-054 | Finish BOLA probe (id-based routes with a second user + anonymous) | probe written, final assertions unfinished; **NOT VERIFIED** | Verification, M |
+| IMP-054 | Finish BOLA probe (id-based routes with a second user + anonymous) | done: probe covers every id route with user B and anonymous; found and fixed a pause/resume ownership hole (redesig.md §28.12) | Verification, M |
 | IMP-055 | `frontend/Dockerfile` Node 22 | CI already on 22; Dockerfile unverified | Confirmed, S |
 
 These were observed in the earlier adversarial pass, which was paused when the redesign request arrived. Treat them as leads, not fully reproduced defects, except where marked Confirmed.

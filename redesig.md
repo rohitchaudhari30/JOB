@@ -592,3 +592,13 @@ Ran axe in dark mode (theme key `applyflow_theme=dark`) on all nine pages with t
 - `automation_runs` (one active run per user) is **not** guarded: the rule lives in memory and a crashed process can leave a RUNNING row behind, which a unique index would turn into a permanent block. That needs a startup-recovery decision first.
 
 Verified: 365 backend tests pass (9 new); mutation checks confirm the race test and the legacy-path test fail without their fixes. Not verified: Postgres (only SQLite is installed here; the partial-index SQL is standard but untested there), and behaviour on your real database. The full suite reports one more warning than before (3 vs 2); I did not trace it.
+
+### 28.12 IMP-054: access-control probe, and a real hole it found
+
+`backend/tests/integration/test_access_control_probe.py` walks the OpenAPI spec. For every route that takes an id it seeds fresh records for user A, snapshots A's data, sends the request as user B and as an anonymous caller, then checks that A's data is unchanged and nothing leaked. It also sends a control request as A, which must reach the handler. A control that gets 404 would mean the test proved nothing. The probe found two such controls and I fixed them by seeding a real screenshot file and a live automation session. Another test fails if a new id route is added without being classified. The probe cannot start a browser or reach a site: every Playwright entry point is blocked and the AI keys are blanked. A test proves the block works.
+
+**Vulnerability found and fixed.** Any signed-in user could pause or resume another user's campaign execution, and the response returned that execution's data. `PauseCampaignExecutionUseCase` and `ResumeCampaignExecutionUseCase` looked up the execution by campaign id only. Both now check ownership first and answer "not found" for a campaign the caller does not own. Regression tests: the probe, plus a unit test for each use case. An older unit test stubbed the campaign lookup as `None`; I changed the stub to an owned campaign.
+
+**Verified:** the full backend suite passes (371 tests). The probe's four problem lists (changed, leaked, vacuous, inconclusive) are all empty.
+
+**Not covered:** jobs catalog and `platform` routes are classified as not per-user records. WebSocket authentication was not probed. The application resume and retry controls are rejected by the state machine (422 and 400) rather than succeeding, so those controls are weak, though the handler is reached. Postgres and the real database are untested.

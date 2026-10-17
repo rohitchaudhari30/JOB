@@ -297,6 +297,11 @@ class PauseCampaignExecutionUseCase:
         self._log_repo = log_repo
 
     async def execute(self, campaign_id: str, user_id: str, reason: str = "User requested pause") -> CampaignExecution:
+        # Ownership first: another user's campaign must look like it does not exist (IMP-054).
+        owned = await self._campaign_repo.get_by_id(campaign_id)
+        if not owned or owned.user_id != user_id:
+            raise EntityNotFoundException("Campaign", campaign_id)
+
         execution = await self._execution_repo.get_active_by_campaign(campaign_id)
         if not execution:
             raise EntityNotFoundException("CampaignExecution", campaign_id)
@@ -343,6 +348,11 @@ class ResumeCampaignExecutionUseCase:
         self._log_repo = log_repo
 
     async def execute(self, campaign_id: str, user_id: str) -> CampaignExecution:
+        # Ownership first: another user's campaign must look like it does not exist (IMP-054).
+        owned = await self._campaign_repo.get_by_id(campaign_id)
+        if not owned or owned.user_id != user_id:
+            raise EntityNotFoundException("Campaign", campaign_id)
+
         execution = await self._execution_repo.get_active_by_campaign(campaign_id)
         if not execution:
             raise EntityNotFoundException("CampaignExecution", campaign_id)
