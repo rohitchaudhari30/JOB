@@ -102,7 +102,7 @@ async def upload_resume(
             os.remove(saved_path)
         max_mb = max_bytes // (1024 * 1024)
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=413,  # Content Too Large (the named constant differs between Starlette versions)
             detail=f"Resume file size exceeds maximum limit of {max_mb} MB.",
         )
 
