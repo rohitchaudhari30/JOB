@@ -71,6 +71,26 @@ class AutomationSchedulerWorker:
             except Exception as e:
                 logger.warning(f"Could not register lease_reclamation_sweeper: {e}")
 
+        if self._scheduler and not self._scheduler.get_job("campaign_schedule_ticker"):
+            async def _tick():
+                try:
+                    from app.workers.campaign_scheduler import run_due_campaign_schedules
+                    await run_due_campaign_schedules()
+                except Exception as e:
+                    logger.warning(f"Error during campaign schedule tick: {e}")
+
+            try:
+                self._scheduler.add_job(
+                    func=_tick,
+                    trigger=IntervalTrigger(seconds=60),
+                    id="campaign_schedule_ticker",
+                    replace_existing=True,
+                    max_instances=1,
+                    coalesce=True,
+                )
+            except Exception as e:
+                logger.warning(f"Could not register campaign_schedule_ticker: {e}")
+
         if self._scheduler and not self._scheduler.get_job("stale_submitting_sweeper"):
             async def _sweep_stale_submitting():
                 try:
