@@ -22,10 +22,10 @@ To scale to several processes later, in this order:
 4. Move from SQLite to Postgres.
 
 ## Decisions taken as defaults (change if you disagree)
-| SEC-08 tokens | Access token in browser memory only; refresh token in an HttpOnly, SameSite=Strict cookie scoped to `/api/v1/auth` (Secure outside dev). Rotated on every refresh, revoked on logout, foreign `Origin` refused. Needs the app and API on one origin (nginx proxy does this); a cross-origin deployment must also set `CORS_ORIGINS` and revisit SameSite. |
+- **Login tokens (SEC-08):** done. Access token in browser memory only; refresh token in an HttpOnly, SameSite=Strict cookie scoped to `/api/v1/auth` (Secure outside dev). Rotated on every refresh, revoked on logout, foreign `Origin` refused. Needs the app and API on one origin (nginx proxy does this); a cross-origin deployment must also set `CORS_ORIGINS` and revisit SameSite.
 - **Matching weights (DB-07):** stay in `saved_answers` under the intent `matching_weights`. A dedicated table is worth it only when weights get versioned.
 - **Browser stealth (COMP-01):** see `BROWSER_STEALTH_ENABLED` in `app/core/config.py`.
-- **Schedules:** saved and restored, but firing only logs. Starting unattended auto-apply runs is a product decision.
+- **Schedules (Q-02):** a firing schedule starts one run for its owner through the same orchestrator path as the Start button. Skipped if the user already has a live run. `auto_apply` is **off by default** (discover and match only; matches wait for approval); when the user turns it on the pipeline still applies REQUIRE_APPROVAL and the daily caps. `SCHEDULED_RUNS_ENABLED=false` is an operator kill switch. Misfires coalesce, no overlap. Like run recovery, this assumes one backend process.
 
 ## Duplicates: what each one is and who owns it
 | Item | Decision |

@@ -95,7 +95,7 @@ class CreateScheduleRequest(BaseModel):
     locations: Optional[List[str]] = None
     cron_expression: Optional[str] = None  # e.g., "0 9 * * 1-5"
     interval_minutes: Optional[int] = None  # e.g., 180
-    auto_apply: bool = True
+    auto_apply: bool = False  # opt-in: unattended submitting
     max_applications_per_run: int = 10
 
 
