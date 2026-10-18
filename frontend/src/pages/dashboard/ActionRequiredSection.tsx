@@ -34,7 +34,7 @@ export const ActionRequiredSection: React.FC<Props> = ({ overview, connections, 
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{item.description}</p>
               </div>
-              <button
+              <button type="button"
                 onClick={() => onNavigate(item.action_url)}
                 className="shrink-0 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1"
               >
@@ -54,7 +54,7 @@ export const ActionRequiredSection: React.FC<Props> = ({ overview, connections, 
             CAPTCHA, or authorization challenges.
           </span>
         </div>
-        <button
+        <button type="button"
           onClick={() => onNavigate('connections')}
           className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 hover:underline flex items-center gap-1 shrink-0 cursor-pointer"
         >

@@ -10,7 +10,7 @@ interface Props {
 export const CampaignTabBar: React.FC<Props> = ({ activeCampaignTab, setActiveCampaignTab, logCount }) => (
   <>
       <div className="flex border-b border-slate-200 dark:border-slate-800 space-x-6 text-xs font-bold">
-        <button
+        <button type="button"
           onClick={() => setActiveCampaignTab('rules')}
           className={`pb-2.5 transition-colors cursor-pointer flex items-center space-x-1.5 ${
             activeCampaignTab === 'rules'
@@ -22,7 +22,7 @@ export const CampaignTabBar: React.FC<Props> = ({ activeCampaignTab, setActiveCa
           <span>Targeting &amp; Declarative Rules</span>
         </button>
 
-        <button
+        <button type="button"
           onClick={() => setActiveCampaignTab('safety')}
           className={`pb-2.5 transition-colors cursor-pointer flex items-center space-x-1.5 ${
             activeCampaignTab === 'safety'
@@ -34,7 +34,7 @@ export const CampaignTabBar: React.FC<Props> = ({ activeCampaignTab, setActiveCa
           <span>Schedule &amp; Safety Policy</span>
         </button>
 
-        <button
+        <button type="button"
           onClick={() => setActiveCampaignTab('logs')}
           className={`pb-2.5 transition-colors cursor-pointer flex items-center space-x-1.5 ${
             activeCampaignTab === 'logs'

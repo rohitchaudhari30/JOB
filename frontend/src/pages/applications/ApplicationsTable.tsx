@@ -84,7 +84,7 @@ export const ApplicationsTable: React.FC<Props> = ({
         <p className="text-[11px] text-slate-400">
           Try switching the status filter to &quot;All&quot; or clearing your filter criteria.
         </p>
-        <button
+        <button type="button"
           onClick={() => {
             setSelectedFilter('All');
             setSearchQuery('');

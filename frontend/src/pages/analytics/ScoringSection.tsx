@@ -118,7 +118,7 @@ export const ScoringSection: React.FC<Props> = ({ weightTuning, aiStatus, onNavi
           </span>
         </div>
 
-        <button
+        <button type="button"
           onClick={() => onNavigate?.('matches')}
           className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
         >

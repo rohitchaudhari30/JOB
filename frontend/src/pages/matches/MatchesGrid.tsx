@@ -69,7 +69,7 @@ export const MatchesGrid: React.FC<Props> = ({
               <span>Run AI Matching</span>
             </Button>
           ) : (
-            <button
+            <button type="button"
               onClick={() => {
                 setMinScoreFilter(0);
                 setDecisionFilter('ALL');
@@ -301,7 +301,7 @@ export const MatchesGrid: React.FC<Props> = ({
                     </a>
                   )}
 
-                  <button
+                  <button type="button"
                     onClick={() => handleApplySingle(m.job_id)}
                     disabled={applyingJobId === m.job_id}
                     className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center space-x-1.5 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"

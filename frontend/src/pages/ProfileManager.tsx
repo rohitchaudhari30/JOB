@@ -198,7 +198,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
           const isActive = activeTab === tab.id;
 
           return (
-            <button
+            <button type="button"
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${

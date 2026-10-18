@@ -94,7 +94,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
                 className="inline-flex items-center px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-100 dark:border-indigo-500/20"
               >
                 {role}
-                <button
+                <button type="button"
                   aria-label="Close"
                   onClick={() => handleRemoveRole(role)}
                   className="ml-1.5 hover:text-indigo-900 dark:hover:text-white cursor-pointer"
@@ -129,7 +129,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
                 className="inline-flex items-center px-2.5 py-1 rounded-xl bg-slate-200/80 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold"
               >
                 {loc}
-                <button
+                <button type="button"
                   aria-label="Close"
                   onClick={() => handleRemoveLocation(loc)}
                   className="ml-1.5 hover:text-slate-900 dark:hover:text-white cursor-pointer"

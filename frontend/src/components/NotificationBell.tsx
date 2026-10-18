@@ -142,7 +142,7 @@ export const NotificationBell: React.FC<Props> = ({ open: notificationsOpen, onT
             </div>
 
             {unreadCount > 0 && (
-              <button
+              <button type="button"
                 onClick={markAllAsRead}
                 className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center space-x-1 transition-colors cursor-pointer"
               >
@@ -201,7 +201,7 @@ export const NotificationBell: React.FC<Props> = ({ open: notificationsOpen, onT
                     {!n.read && (
                       <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400 ring-2 ring-white dark:ring-slate-900"></span>
                     )}
-                    <button
+                    <button type="button"
                       aria-label="Close"
                       onClick={(e) => removeNotification(e, n.id)}
                       className="text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 cursor-pointer"
@@ -219,7 +219,7 @@ export const NotificationBell: React.FC<Props> = ({ open: notificationsOpen, onT
           {notifications.length > 0 && (
             <div className="p-2.5 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/40 flex items-center justify-between text-xs">
               <span className="text-[11px] text-slate-400 px-2">{notifications.length} alerts</span>
-              <button
+              <button type="button"
                 onClick={clearAllNotifications}
                 className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 flex items-center space-x-1 px-2 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
               >

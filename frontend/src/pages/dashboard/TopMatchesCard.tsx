@@ -22,7 +22,7 @@ export const TopMatchesCard: React.FC<Props> = ({ overview, onNavigate }) => (
             </p>
           </div>
         </div>
-        <button
+        <button type="button"
           onClick={() => onNavigate('matches')}
           className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
         >
@@ -57,7 +57,7 @@ export const TopMatchesCard: React.FC<Props> = ({ overview, onNavigate }) => (
                   {match.platform}
                 </span>
                 <div className="flex items-center gap-2">
-                  <button
+                  <button type="button"
                     onClick={() => onNavigate('matches')}
                     className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1"
                   >

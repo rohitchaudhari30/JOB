@@ -64,7 +64,7 @@ export const OperationalCommandCard: React.FC<Props> = ({
           {/* Active Run Controls */}
           <div className="flex items-center gap-2 self-start sm:self-auto">
             {effectiveRunning || effectiveStatus.startsWith('PAUSED') ? (
-              <button
+              <button type="button"
                 onClick={() => onNavigate('live_console')}
                 className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
               >
@@ -72,7 +72,7 @@ export const OperationalCommandCard: React.FC<Props> = ({
                 <span>Open live run</span>
               </button>
             ) : (
-              <button
+              <button type="button"
                 onClick={() => onNavigate('direct_apply')}
                 className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
               >

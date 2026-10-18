@@ -23,7 +23,7 @@ export const JobsPagination: React.FC<Props> = ({ page, pageSize, totalCount, se
           of <span className="font-bold text-slate-800 dark:text-slate-200">{totalCount}</span> opportunities
         </div>
         <div className="flex items-center space-x-2">
-          <button
+          <button type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
             className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors flex items-center space-x-1 cursor-pointer"
@@ -47,7 +47,7 @@ export const JobsPagination: React.FC<Props> = ({ page, pageSize, totalCount, se
               }
               const isCurrent = page === pageNum;
               return (
-                <button
+                <button type="button"
                   key={pageNum}
                   onClick={() => setPage(pageNum)}
                   className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
@@ -62,7 +62,7 @@ export const JobsPagination: React.FC<Props> = ({ page, pageSize, totalCount, se
             })}
           </div>
 
-          <button
+          <button type="button"
             onClick={() => setPage((p) => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
             disabled={page >= Math.ceil(totalCount / pageSize)}
             className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors flex items-center space-x-1 cursor-pointer"

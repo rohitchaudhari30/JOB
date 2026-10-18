@@ -140,7 +140,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
 
         <div className="flex items-center space-x-3">
           {connectedCount > 0 && onNavigate && (
-            <button
+            <button type="button"
               onClick={() => onNavigate('discovery')}
               className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
             >
@@ -149,7 +149,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
             </button>
           )}
 
-          <button
+          <button type="button"
             onClick={loadConnections}
             disabled={loading}
             className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-50"
@@ -178,7 +178,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
         {/* Category Tabs */}
         <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl w-full sm:w-auto">
-          <button
+          <button type="button"
             onClick={() => setFilterCategory('ALL')}
             className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               filterCategory === 'ALL'
@@ -188,7 +188,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
           >
             All ({connections.length})
           </button>
-          <button
+          <button type="button"
             onClick={() => setFilterCategory('PORTAL')}
             className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               filterCategory === 'PORTAL'
@@ -198,7 +198,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
           >
             Job Portals ({portalCount})
           </button>
-          <button
+          <button type="button"
             onClick={() => setFilterCategory('ATS')}
             className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               filterCategory === 'ATS'
@@ -208,7 +208,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
           >
             Company ATS ({atsCount})
           </button>
-          <button
+          <button type="button"
             onClick={() => setFilterCategory('CONNECTED')}
             className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               filterCategory === 'CONNECTED'

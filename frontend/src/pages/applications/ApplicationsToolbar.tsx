@@ -36,7 +36,7 @@ export const ApplicationsToolbar: React.FC<Props> = ({
           className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
         />
         {searchQuery && (
-          <button
+          <button type="button"
             aria-label="Close"
             onClick={() => setSearchQuery('')}
             className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
@@ -51,7 +51,7 @@ export const ApplicationsToolbar: React.FC<Props> = ({
         {filterChips.map((chip) => {
           const isActive = selectedFilter === chip.id;
           return (
-            <button
+            <button type="button"
               key={chip.id}
               onClick={() => setSelectedFilter(chip.id)}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
@@ -77,7 +77,7 @@ export const ApplicationsToolbar: React.FC<Props> = ({
       </div>
 
       {/* Right: Filters Toggle Button */}
-      <button
+      <button type="button"
         onClick={() => setShowFilterPanel(!showFilterPanel)}
         className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
           showFilterPanel || hasActiveSecondaryFilters

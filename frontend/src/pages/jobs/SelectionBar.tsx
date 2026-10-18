@@ -44,14 +44,14 @@ export const SelectionBar: React.FC<SelectionBarProps> = ({
 
           <div className="h-4 w-px bg-slate-700" />
 
-          <button
+          <button type="button"
             onClick={() => setSelectedJobIds(new Set())}
             className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             Clear
           </button>
 
-          <button
+          <button type="button"
             onClick={() => handleLaunchQueue()}
             disabled={isStartingQueue}
             className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-black text-xs shadow-lg shadow-indigo-600/30 flex items-center space-x-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"

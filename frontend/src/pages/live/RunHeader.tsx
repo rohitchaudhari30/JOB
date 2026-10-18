@@ -89,7 +89,7 @@ export const RunHeader: React.FC<Props> = ({
       {isRunning ? (
         <div className="flex items-center space-x-2">
           {isPaused ? (
-            <button
+            <button type="button"
               onClick={handleResume}
               className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
             >
@@ -97,7 +97,7 @@ export const RunHeader: React.FC<Props> = ({
               <span>Resume Run</span>
             </button>
           ) : (
-            <button
+            <button type="button"
               onClick={handlePause}
               className="px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
             >
@@ -106,7 +106,7 @@ export const RunHeader: React.FC<Props> = ({
             </button>
           )}
 
-          <button
+          <button type="button"
             onClick={handleStop}
             className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
           >
@@ -128,7 +128,7 @@ export const RunHeader: React.FC<Props> = ({
 
           {/* Option to navigate to Job Discovery to select specific jobs */}
           {onNavigate && (
-            <button
+            <button type="button"
               onClick={() => onNavigate('discovery')}
               className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 flex items-center space-x-2 transition-transform active:scale-95 cursor-pointer"
             >

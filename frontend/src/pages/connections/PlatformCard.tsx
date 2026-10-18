@@ -109,7 +109,7 @@ export const PlatformCard: React.FC<Props> = ({ conn, isBusy, onConnect, onVerif
       <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
         {isPortal ? (
           !isConnected ? (
-            <button
+            <button type="button"
               onClick={() => onConnect(conn.platform, conn.display_name)}
               disabled={isBusy}
               className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50"
@@ -128,7 +128,7 @@ export const PlatformCard: React.FC<Props> = ({ conn, isBusy, onConnect, onVerif
             </button>
           ) : (
             <div className="flex items-center space-x-2">
-              <button
+              <button type="button"
                 onClick={() => onVerify(conn.platform, conn.display_name)}
                 disabled={isBusy}
                 className="flex-1 py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-50"
@@ -136,14 +136,14 @@ export const PlatformCard: React.FC<Props> = ({ conn, isBusy, onConnect, onVerif
                 <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
                 <span>Verify</span>
               </button>
-              <button
+              <button type="button"
                 onClick={() => onConnect(conn.platform, conn.display_name)}
                 disabled={isBusy}
                 className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 <span>Reconnect</span>
               </button>
-              <button
+              <button type="button"
                 onClick={() => onDisconnect(conn.platform, conn.display_name)}
                 disabled={isBusy}
                 title="Disconnect and remove saved session"

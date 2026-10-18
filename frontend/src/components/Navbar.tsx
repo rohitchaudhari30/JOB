@@ -76,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="flex items-center space-x-2.5 sm:space-x-3">
         {/* Live Run Active Global Pill */}
         {activeRun && (activeRun.status === 'RUNNING' || activeRun.status === 'PAUSED') && (
-          <button
+          <button type="button"
             onClick={() => {
               if (onOpenLiveConsole) {
                 onOpenLiveConsole();

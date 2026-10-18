@@ -34,9 +34,15 @@ Original branch: `claude/autoapply-audit-reports` (merged earlier). The section 
 
 Tests at this point: frontend 146 vitest pass, tsc clean, build ok, browser smoke 63/63 with 0 uncaught page errors; backend 381 passed, 1 skipped (last full run, before the frontend-only changes).
 
+## Later fixes (same branch)
+- Campaign executions left active by a crash are now aborted at start-up (test added).
+- DUP-10: one module (`execution_sync.py`) copies run state onto the execution; 6 tests.
+- 89 raw buttons now have `type="button"` so none can submit a form by accident.
+- The 102 console errors in the smoke run are blocked Google-font requests in this sandbox, not app errors (the proxy log shows fonts.googleapis.com refused).
+
 ## Still open
-- Campaign executions left live by a crash are not recovered at start-up (only automation runs are).
-- DUP-01, 02, 07, 09, 10: ownership documented, code not consolidated.
+- DUP-01, 02, 07, 09: kept as separate scopes on purpose (see ARCHITECTURE.md); merging them would change behaviour.
+- About 80 raw buttons are tabs, filter pills and icon buttons that do not fit the four Button variants; converting them needs new variants first.
 
 - AUT-17 (needs your decision Q-02): schedules are saved and restored, but when one fires it only logs. Starting unattended auto-apply is your decision.
 - AI-03: weights unchanged on purpose. On the labelled set both the current weights (sum 1.10) and weights normalised to 1.0 rank perfectly (pairwise 1.0, correlation about 0.97). Normalising removes the 8% of jobs stuck at 100, but lowers every score by about 9%, so the 60/75/90 thresholds would have to be re-set. Run `python scripts/evaluate_matching.py` to repeat the comparison.

@@ -22,7 +22,7 @@ export const CampaignsSection: React.FC<Props> = ({ campaigns, onNavigate }) => 
             Explicit multi-stage telemetry showing which campaigns produce verified interviews.
           </p>
         </div>
-        <button
+        <button type="button"
           onClick={() => onNavigate?.('direct_apply')}
           className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center gap-1 cursor-pointer"
         >

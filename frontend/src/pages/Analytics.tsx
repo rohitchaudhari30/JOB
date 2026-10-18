@@ -177,7 +177,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
                 { id: 'ALL_TIME', label: 'All Time' },
               ] as { id: DateRangePreset; label: string }[]
             ).map((preset) => (
-              <button
+              <button type="button"
                 key={preset.id}
                 onClick={() => setDatePreset(preset.id)}
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -207,7 +207,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           </div>
 
           {/* Refresh Button */}
-          <button aria-label="Refresh"
+          <button type="button" aria-label="Refresh"
             onClick={() => fetchAnalyticsData(true)}
             disabled={refreshing || loading}
             title="Refresh Analytics Telemetry"

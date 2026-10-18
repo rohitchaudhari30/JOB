@@ -22,7 +22,7 @@ export const RecentActivityCard: React.FC<Props> = ({ recentApplications, onNavi
             </p>
           </div>
         </div>
-        <button
+        <button type="button"
           onClick={() => onNavigate('crm')}
           className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
         >
@@ -79,7 +79,7 @@ export const RecentActivityCard: React.FC<Props> = ({ recentApplications, onNavi
                   {app.outcome_status || 'NOT_SUBMITTED'}
                 </span>
 
-                <button
+                <button type="button"
                   aria-label="Open"
                   onClick={() => onNavigate('crm')}
                   className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"

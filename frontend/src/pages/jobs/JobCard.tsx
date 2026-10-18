@@ -166,7 +166,7 @@ export const JobCard: React.FC<JobCardProps> = ({
               }
 
               return (
-                <button
+                <button type="button"
                   onClick={() => onEvaluate(job.id)}
                   disabled={isEvaluating}
                   className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center space-x-1 transition-all cursor-pointer disabled:opacity-50"
@@ -209,7 +209,7 @@ export const JobCard: React.FC<JobCardProps> = ({
             )}
 
             {/* Dismiss / Delete Button */}
-            <button
+            <button type="button"
               aria-label="Delete"
               onClick={() => onDelete(job.id, job.title)}
               disabled={deleting}
@@ -274,7 +274,7 @@ export const JobCard: React.FC<JobCardProps> = ({
           </a>
 
           {isCurrentlyApplying ? (
-            <button
+            <button type="button"
               onClick={() => onNavigate && onNavigate('live_console')}
               className="px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center space-x-1.5 shadow-xs cursor-pointer transition-all animate-pulse active:scale-95"
               title="Automation actively interacting with browser for this job. Click to watch live stream."
@@ -283,7 +283,7 @@ export const JobCard: React.FC<JobCardProps> = ({
               <span>Watch Live ⚡</span>
             </button>
           ) : isSubmissionUncertain ? (
-            <button
+            <button type="button"
               onClick={() => onNavigate && onNavigate('applications')}
               className="px-3 py-1 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:hover:bg-orange-900/80 dark:text-orange-400 text-xs font-bold border border-orange-200 dark:border-orange-800 flex items-center space-x-1 transition-all cursor-pointer active:scale-95"
               title="Submission uncertain on portal. Click to verify in Application CRM."
@@ -292,7 +292,7 @@ export const JobCard: React.FC<JobCardProps> = ({
               <span>Verify (CRM)</span>
             </button>
           ) : isQueued ? (
-            <button
+            <button type="button"
               onClick={() => onNavigate && onNavigate('live_console')}
               className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 dark:text-indigo-300 text-xs font-semibold flex items-center space-x-1 cursor-pointer transition-all"
               title="Waiting in automation batch. Click to view mission control."
@@ -301,7 +301,7 @@ export const JobCard: React.FC<JobCardProps> = ({
               <span>Queued (View)</span>
             </button>
           ) : isApplied ? (
-            <button
+            <button type="button"
               onClick={() => onNavigate && onNavigate('applications')}
               className="px-3 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 dark:text-emerald-400 text-xs font-bold border border-emerald-200 dark:border-emerald-800 flex items-center space-x-1 transition-all cursor-pointer active:scale-95"
               title="View Application Details in CRM"
@@ -310,7 +310,7 @@ export const JobCard: React.FC<JobCardProps> = ({
               <span>Applied (CRM)</span>
             </button>
           ) : (
-            <button
+            <button type="button"
               onClick={() => onApply(job)}
               className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 dark:text-indigo-300 text-xs font-bold border border-indigo-200 dark:border-indigo-800 flex items-center space-x-1 transition-all cursor-pointer shadow-2xs active:scale-95"
             >

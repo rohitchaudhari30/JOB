@@ -43,7 +43,7 @@ export const DiscoveryToolbar: React.FC<DiscoveryToolbarProps> = ({
         ].map((chip) => {
           const isSelected = postedWithin === chip.value;
           return (
-            <button
+            <button type="button"
               key={chip.value}
               onClick={() => setPostedWithin(chip.value)}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -60,7 +60,7 @@ export const DiscoveryToolbar: React.FC<DiscoveryToolbarProps> = ({
         <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block" />
 
         {/* Top Fit Filter Toggle */}
-        <button
+        <button type="button"
           onClick={() => setFilterMinFit((prev) => !prev)}
           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 border ${
             filterMinFit
@@ -116,7 +116,7 @@ export const DiscoveryToolbar: React.FC<DiscoveryToolbarProps> = ({
             className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 dark:bg-slate-800 dark:border-slate-700 dark:text-white dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
           />
           {searchQuery && (
-            <button
+            <button type="button"
               onClick={() => setSearchQuery('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
             >

@@ -73,7 +73,7 @@ export const OperationalPulse: React.FC<Props> = ({ overview, connections, onNav
                   <Check className="w-3 h-3" /> Ready
                 </span>
               ) : (
-                <button
+                <button type="button"
                   onClick={() => onNavigate(item.action_url)}
                   className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 underline cursor-pointer"
                 >
@@ -86,7 +86,7 @@ export const OperationalPulse: React.FC<Props> = ({ overview, connections, onNav
 
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
           <span>Profile &amp; Resumes</span>
-          <button
+          <button type="button"
             onClick={() => onNavigate('profile')}
             className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
           >
@@ -122,7 +122,7 @@ export const OperationalPulse: React.FC<Props> = ({ overview, connections, onNav
 
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
           <span>Encrypted Session Tokens</span>
-          <button
+          <button type="button"
             onClick={() => onNavigate('connections')}
             className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
           >

@@ -31,7 +31,7 @@ export const ApplicationsHeader: React.FC<Props> = ({ loadData, loading, stats }
           <span>{stats.total}</span>
         </div>
 
-        <button
+        <button type="button"
           onClick={loadData}
           disabled={loading}
           className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer"

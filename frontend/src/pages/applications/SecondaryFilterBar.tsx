@@ -41,7 +41,7 @@ export const SecondaryFilterBar: React.FC<Props> = ({
             className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
           {companyFilter && (
-            <button
+            <button type="button"
               aria-label="Close"
               onClick={() => setCompanyFilter('')}
               className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
@@ -93,7 +93,7 @@ export const SecondaryFilterBar: React.FC<Props> = ({
 
         {/* Reset link if any secondary filter is set */}
         {hasActiveSecondaryFilters && (
-          <button
+          <button type="button"
             onClick={() => {
               setCompanyFilter('');
               setMinMatchFilter(0);
