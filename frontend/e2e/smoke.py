@@ -29,6 +29,13 @@ OVERVIEW = {"today_applied_count": 3, "effective_daily_limit": 25, "quota_remain
                        "action_label": "Reconnect", "action_url": "/settings/connections", "severity": "HIGH"}],
   "readiness": [{"key": "platform", "title": "Job Platform Connected", "is_ready": False, "action_label": "Connect Portal", "action_url": "/settings/connections"}],
   "top_matches": [{"job_id": "job1", "title": "Staff Engineer", "company": "Acme", "location": "Remote", "platform": "LinkedIn", "match_score": 94.5, "decision": "AUTO_APPLY"}]}
+JOB = {"id": "job1", "source_id": "s1", "source_type": "linkedin", "external_job_id": "x1", "title": "Staff Engineer", "company": "Acme",
+       "location": "Remote", "apply_url": "https://example.com/apply", "raw_description": "Build things.", "is_active": True,
+       "posted_at": "2026-10-15T10:00:00Z", "freshness_bucket": "LAST_7_DAYS"}
+MATCH = {"id": "m1", "user_id": "u1", "job_id": "job1", "match_score": 88, "overall_score": 88, "hard_filter_passed": True,
+         "skill_match_score": 80, "semantic_score": 70, "reasoning_summary": "Strong fit for the role.", "matched_skills": ["python"],
+         "missing_skills": ["go"], "decision": "REQUIRE_APPROVAL", "ai_provider_used": "test", "job": JOB, "job_title": "Staff Engineer",
+         "company": "Acme", "location": "Remote"}
 STATS = {"total": 1, "applied": 0, "paused": 0, "failed": 0, "approval_required": 0, "reconciliation_required": 1, "needs_attention": 1}
 
 def handler(route):
@@ -39,6 +46,10 @@ def handler(route):
     if path == "/auth/me": body = USER
     elif path == "/automation/active": body = {"status": "IDLE"}
     elif path == "/dashboard/overview": body = OVERVIEW
+    elif path == "/jobs/matches": body = [MATCH]
+    elif path == "/jobs": body = {"items": [JOB], "total": 1}
+    elif path == "/jobs/discover": body = {}
+    elif path == "/resumes": body = []
     elif path == "/applications": body = [APP]
     elif path == "/applications/stats": body = STATS
     elif path == "/applications/applied-map": body = {}
@@ -111,6 +122,54 @@ with sync_playwright() as p:
     check("modal: focus lands in the name field", pg.evaluate("document.activeElement && document.activeElement.id") == "new-campaign-name")
     pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
     check("modal: Esc closes it", dlg.count() == 0)
+    pg.context.close()
+
+    # ---- Jobs and Matches detail drawers (shared JobDetailDrawer)
+    pg = new_page(1280)
+    pg.goto(BASE + "/jobs/job1"); pg.wait_for_selector("role=dialog", timeout=10000)
+    dlg = pg.get_by_role("dialog")
+    check("jobs: deep link /jobs/job1 opens the drawer", dlg.count() == 1 and pg.url.endswith("/jobs/job1"), pg.url)
+    check("jobs: drawer shows the job title and company", dlg.get_by_text("Staff Engineer").count() >= 1 and dlg.get_by_text("Acme").count() >= 1)
+    pg.evaluate(AXE)
+    res = pg.evaluate("axe.run(document.querySelector('[role=dialog]'), {resultTypes:['violations']}).then(r => r.violations.map(v => v.id))")
+    check("jobs: drawer has no axe violations", res == [], res)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("jobs: Esc closes the drawer and returns to /jobs", pg.get_by_role("dialog").count() == 0 and pg.url.endswith("/jobs"), pg.url)
+    pg.goto(BASE + "/jobs/matches/job1"); pg.wait_for_selector("role=dialog", timeout=10000)
+    dlg = pg.get_by_role("dialog")
+    check("matches: deep link opens the drawer with the match summary", dlg.count() == 1 and dlg.get_by_text("Strong fit for the role.").count() >= 1, pg.url)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("matches: Esc closes the drawer", pg.get_by_role("dialog").count() == 0 and pg.url.endswith("/jobs/matches"), pg.url)
+    pg.context.close()
+
+    # ---- Applications: the reconciliation dialog opens from the row and closes with Esc
+    pg = new_page(1280)
+    pg.goto(BASE + "/applications"); pg.wait_for_selector("text=Staff Engineer", timeout=10000)
+    pg.get_by_role("button", name="Verify Outcome").first.click(); pg.wait_for_timeout(300)
+    dlg = pg.get_by_role("dialog")
+    check("applications: Verify Outcome opens a dialog", dlg.count() == 1 and dlg.is_visible())
+    pg.evaluate(AXE)
+    res = pg.evaluate("axe.run(document.querySelector('[role=dialog]'), {resultTypes:['violations']}).then(r => r.violations.map(v => v.id))")
+    check("applications: reconciliation dialog has no axe violations", res == [], res)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+    check("applications: Esc closes the reconciliation dialog", pg.get_by_role("dialog").count() == 0)
+    pg.context.close()
+
+    # ---- Insights: one section at a time, kept in the URL
+    pg = new_page(1280)
+    pg.goto(BASE + "/insights"); pg.wait_for_selector("role=tablist", timeout=10000)
+    tabs = pg.get_by_role("tab").all_inner_texts()
+    check("insights: six sections", len(tabs) == 6, tabs)
+    pg.get_by_role("tab", name="Sources").click(); pg.wait_for_timeout(300)
+    check("insights: choosing Sources updates the URL and selection", "view=sources" in pg.url and pg.get_by_role("tab", name="Sources").get_attribute("aria-selected") == "true", pg.url)
+    pg.goto(BASE + "/insights?view=scoring"); pg.wait_for_timeout(800)
+    check("insights: ?view=scoring opens that section", pg.get_by_role("tab", name="Scoring weights").get_attribute("aria-selected") == "true")
+    pg.context.close()
+
+    # ---- Platform connections: cards render with their action
+    pg = new_page(1280)
+    pg.goto(BASE + "/settings/connections"); pg.wait_for_timeout(900)
+    check("connections: a platform card renders with a Connect action", pg.get_by_text("LinkedIn").count() >= 1 and pg.get_by_role("button", name="Connect").count() >= 1)
     pg.context.close()
 
     # ---- unsaved-changes guard on Profile
