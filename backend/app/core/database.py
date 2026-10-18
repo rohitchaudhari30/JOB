@@ -493,7 +493,9 @@ async def init_db():
     from app.infrastructure.database.run_persistence import SqlRunPersistence
 
     try:
-        await SqlRunPersistence().recover_interrupted_runs()
+        recovery = SqlRunPersistence()
+        await recovery.recover_interrupted_runs()
+        await recovery.recover_interrupted_executions()
     except Exception as e:  # never stop the app from starting
         logger.warning("Could not clear interrupted runs at start-up: %s", e)
 

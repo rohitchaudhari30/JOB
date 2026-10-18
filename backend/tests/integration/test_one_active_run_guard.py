@@ -169,3 +169,29 @@ async def test_legacy_database_gets_the_run_index_and_duplicates_do_not_stop_sta
     await run_migrations()  # must not crash with duplicates present
     assert not await _index_present(empty_engine)
     await empty_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_startup_aborts_campaign_executions_a_crash_left_active(db_session: AsyncSession):
+    """Otherwise the one-active-execution index would block those campaigns from ever starting again."""
+    from app.infrastructure.database.models.models import CampaignExecutionModel as Exe
+
+    live = ["INITIALIZING", "RUNNING", "RECOVERY_PENDING", "PAUSED_OTP", "PAUSED_USER"]
+    db_session.add_all([Exe(id=f"e_{s}", campaign_id=f"c_{s}", user_id="u9", status=s) for s in live])
+    db_session.add_all([Exe(id=f"d_{s}", campaign_id=f"c_{s}_done", user_id="u9", status=s) for s in ("COMPLETED", "FAILED", "ABORTED")])
+    await db_session.commit()
+
+    assert await SqlRunPersistence().recover_interrupted_executions() == len(live)
+
+    db_session.expire_all()
+    rows = {r.id: r for r in (await db_session.execute(select(Exe))).scalars()}
+    for s in live:
+        assert rows[f"e_{s}"].status == "ABORTED"
+        assert "restarted" in rows[f"e_{s}"].error_message
+        assert rows[f"e_{s}"].completed_at is not None
+    assert rows["d_COMPLETED"].status == "COMPLETED" and rows["d_FAILED"].status == "FAILED"  # untouched
+    assert await SqlRunPersistence().recover_interrupted_executions() == 0  # idempotent
+
+    # the campaign can start again
+    db_session.add(Exe(id="again", campaign_id="c_RUNNING", user_id="u9", status="RUNNING"))
+    await db_session.commit()

@@ -10,14 +10,19 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, Optional
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import ConflictException
 
 from app.core import database
 from app.infrastructure.ai.gateway import MultiTierAIGateway
-from app.infrastructure.database.models.models import AutomationEventModel, AutomationRunModel
+from app.infrastructure.database.models.models import (
+    ACTIVE_EXECUTION_WHERE,
+    AutomationEventModel,
+    AutomationRunModel,
+    CampaignExecutionModel,
+)
 from app.infrastructure.database.repositories.application_repository import SqlAlchemyApplicationRepository
 from app.infrastructure.database.repositories.campaign_repository import (
     SqlAlchemyCampaignExecutionRepository,
@@ -120,6 +125,28 @@ class SqlRunPersistence:
             count = result.rowcount or 0
         if count:
             logger.warning("Ended %s automation run(s) left active by a previous server process.", count)
+        return count
+
+    async def recover_interrupted_executions(self) -> int:
+        """Aborts campaign executions a dead process left active (same single-process assumption as runs).
+
+        Without this, the one-active-execution-per-campaign index would block the campaign from ever
+        starting again after a crash.
+        """
+        async with database.AsyncSessionLocal() as db:
+            result = await db.execute(
+                update(CampaignExecutionModel)
+                .where(text(ACTIVE_EXECUTION_WHERE))
+                .values(
+                    status="ABORTED",
+                    error_message="Interrupted: the server restarted while this execution was active.",
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+            count = result.rowcount or 0
+        if count:
+            logger.warning("Aborted %s campaign execution(s) left active by a previous server process.", count)
         return count
 
     @asynccontextmanager
