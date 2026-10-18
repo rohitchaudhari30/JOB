@@ -61,6 +61,21 @@
    "detail": "http://localhost:4173/automation/campaigns/safety"
   },
   {
+   "name": "modal: New Campaign opens as a dialog",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "modal: focus lands in the name field",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "modal: Esc closes it",
+   "ok": true,
+   "detail": ""
+  },
+  {
    "name": "profile: no prompt when nothing was edited",
    "ok": true,
    "detail": "http://localhost:4173/home"
@@ -243,6 +258,8 @@
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -285,32 +302,14 @@
   "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response"
  ],
  "axe": {
-  "/home": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ],
+  "/home": [],
   "/jobs": [],
-  "/jobs/matches": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ],
+  "/jobs/matches": [],
   "/applications": [],
   "/automation/campaigns": [],
   "/automation/live": [],
   "/insights": [],
   "/settings/profile": [],
-  "/settings/connections": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ]
+  "/settings/connections": []
  }
 }

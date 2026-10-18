@@ -149,3 +149,7 @@ with sync_playwright() as p:
 json.dump(results, open(os.environ.get("RESULTS_PATH", "e2e-results.json"), "w"), indent=1)
 fails = [c for c in results["checks"] if not c["ok"]]
 print(f"\n{len(results['checks'])-len(fails)}/{len(results['checks'])} checks passed; console errors: {len(results['console_errors'])}")
+page_errors = [e for e in results["console_errors"] if "pageerror" in e]
+print(f"uncaught page errors: {len(page_errors)}")
+for e in sorted(set(page_errors))[:10]:
+    print("  ", e)
