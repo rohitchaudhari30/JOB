@@ -14,7 +14,7 @@ from app.application.applications.commands import ApplicationSource, QueueApplic
 from app.application.applications.use_cases import CreateApplicationUseCase, ExecuteApplicationUseCase
 from app.application.jobs.use_cases import DiscoverJobsUseCase
 from app.application.matching.use_cases import EvaluateJobMatchUseCase
-from app.core.exceptions import EntityNotFoundException, PlatformException
+from app.core.exceptions import ConflictException, EntityNotFoundException, PlatformException
 from app.domain.ai.contracts import AIGateway
 from app.domain.applications.entities import Application, WorkflowStateEnum
 from app.domain.applications.repositories import ApplicationRepository
@@ -257,6 +257,13 @@ class AutomationOrchestrator:
             return self._sessions.get(run_id)
         return None
 
+    async def get_live_run_id(self, user_id: str) -> Optional[str]:
+        """The id of the user's starting, running or paused run, from memory first and then the database."""
+        mem = self.get_active_user_run(user_id)
+        if mem and mem.status in (AutomationState.STARTING, AutomationState.RUNNING, AutomationState.PAUSED):
+            return mem.run_id
+        return await persistence.get_live_run_id(user_id)
+
     async def start_run(
         self,
         user_id: str,
@@ -312,6 +319,8 @@ class AutomationOrchestrator:
 
         try:
             await _persist_run_initial()
+        except ConflictException:
+            raise  # another live run exists: the caller answers 409, nothing was started
         except Exception as run_err:
             logger.error(f"Failed to persist initial AutomationRunModel [{run_id}]: {run_err}")
             raise RuntimeError(f"Cannot start automation run without persistent database record: {run_err}") from run_err

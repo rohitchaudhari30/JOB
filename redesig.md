@@ -602,3 +602,16 @@ Verified: 365 backend tests pass (9 new); mutation checks confirm the race test 
 **Verified:** the full backend suite passes (371 tests). The probe's four problem lists (changed, leaked, vacuous, inconclusive) are all empty.
 
 **Not covered:** jobs catalog and `platform` routes are classified as not per-user records. WebSocket authentication was not probed. The application resume and retry controls are rejected by the state machine (422 and 400) rather than succeeding, so those controls are weak, though the handler is reached. Postgres and the real database are untested.
+
+### 28.13 One live run per user (database guard) and start-up recovery
+
+Migration `0006` adds a partial unique index so a user can have only one run in `STARTING`, `RUNNING` or `PAUSED`. Two start requests arriving together used to both pass the in-memory check. Now the second one gets a 409.
+
+Behaviour changes you should know about:
+- **A paused run now blocks starting another.** The old check only looked at `RUNNING`, so a paused run was ignored and a second run silently replaced it in memory, leaving the first orphaned. The user must now resume or stop the paused run. Both start endpoints (`/automation/start` and campaign launch) check the database as well as memory.
+- **Runs left live by a crash are ended at start-up.** `init_db` marks `STARTING`/`RUNNING`/`PAUSED`/`STOPPING` runs as `FAILED` with "Interrupted: the server restarted while this run was active." Runs only live in one process's memory, so at start-up none can really be running. This assumes a single backend process. With several processes, one restarting would end the others' runs.
+- As with the campaign guard, if the data already holds two live runs for one user the index is skipped with a warning and nothing is changed. The legacy-database path does the same.
+
+Verified: 381 backend tests pass (10 new). Breaking each fix (endpoint check, start-up recovery, the index) made its test fail. Five older unit tests mocked the orchestrator and needed the new call added to their mocks.
+
+Not verified: Postgres. Not done: IMP-053's other half (non-SQLite concurrency review) is not started. Campaign executions left live by a crash are not recovered at start-up (only runs are).

@@ -401,39 +401,45 @@ def _alembic_config():
     return cfg
 
 
-def _ensure_one_active_execution_index(connection) -> None:
-    """IMP-052 for legacy databases (they are stamped at head, so migration 0005 never runs for them).
+def _ensure_partial_unique_index(connection, table: str, column: str, name: str, where: str, what: str) -> None:
+    """Creates a "one live row per <column>" index unless it exists (IMP-052).
 
-    Creates the one-active-execution-per-campaign index unless it exists. If the data already breaks
-    the rule it logs the campaign ids and leaves everything alone: deciding which execution to end
-    is a person's call, and the application-level check keeps working either way.
+    Legacy databases are stamped at head, so the migrations never run for them. If the data already
+    breaks the rule this logs the offending ids and leaves everything alone: deciding which row to
+    end is a person's call, and the application-level check keeps working either way.
     """
     from sqlalchemy import inspect, text
 
-    from app.infrastructure.database.models.models import ACTIVE_EXECUTION_WHERE
-
-    name = "uq_campaign_one_active_execution"
     inspector = inspect(connection)
-    if "campaign_executions" not in inspector.get_table_names():
+    if table not in inspector.get_table_names():
         return
-    if name in {i["name"] for i in inspector.get_indexes("campaign_executions")}:
+    if name in {i["name"] for i in inspector.get_indexes(table)}:
         return
     dupes = connection.execute(
-        text(
-            "SELECT campaign_id FROM campaign_executions "
-            f"WHERE {ACTIVE_EXECUTION_WHERE} GROUP BY campaign_id HAVING COUNT(*) > 1"
-        )
+        text(f"SELECT {column} FROM {table} WHERE {where} GROUP BY {column} HAVING COUNT(*) > 1")
     ).fetchall()
     if dupes:
         logger.warning(
-            "Skipping %s: campaigns with more than one active execution: %s. "
-            "End the extra executions, then restart to create it.",
+            "Skipping %s: %s with more than one live row: %s. End the extras, then restart to create it.",
             name,
+            what,
             [row[0] for row in dupes],
         )
         return
-    connection.execute(
-        text(f"CREATE UNIQUE INDEX {name} ON campaign_executions (campaign_id) WHERE {ACTIVE_EXECUTION_WHERE}")
+    connection.execute(text(f"CREATE UNIQUE INDEX {name} ON {table} ({column}) WHERE {where}"))
+
+
+def _ensure_one_active_execution_index(connection) -> None:
+    """IMP-052 for legacy databases: one live execution per campaign, one live run per user."""
+    from app.infrastructure.database.models.models import ACTIVE_EXECUTION_WHERE, ACTIVE_RUN_WHERE
+
+    _ensure_partial_unique_index(
+        connection, "campaign_executions", "campaign_id", "uq_campaign_one_active_execution",
+        ACTIVE_EXECUTION_WHERE, "campaigns",
+    )
+    _ensure_partial_unique_index(
+        connection, "automation_runs", "user_id", "uq_automation_run_one_active_per_user",
+        ACTIVE_RUN_WHERE, "users",
     )
 
 
@@ -483,6 +489,13 @@ async def init_db():
     """Migrates the database and (optionally, dev only) seeds a demo account."""
     await run_migrations()
     logger.info("Database schema is up to date.")
+
+    from app.infrastructure.database.run_persistence import SqlRunPersistence
+
+    try:
+        await SqlRunPersistence().recover_interrupted_runs()
+    except Exception as e:  # never stop the app from starting
+        logger.warning("Could not clear interrupted runs at start-up: %s", e)
 
     # Seed demo account only when explicitly enabled in a dev environment (SEC-02).
     if not (settings.SEED_DEMO_USER and settings.is_dev_environment):

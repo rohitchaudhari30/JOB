@@ -368,9 +368,9 @@ async def launch_campaign(
 
     req = req or LaunchCampaignRequest()
 
-    existing = orchestrator.get_active_user_run(current_user.id)
-    if existing and existing.status.value == "RUNNING":
-        raise HTTPException(status_code=409, detail=f"An active automation run [{existing.run_id}] is already in progress.")
+    live_run_id = await orchestrator.get_live_run_id(current_user.id)
+    if live_run_id:
+        raise HTTPException(status_code=409, detail=f"An active automation run [{live_run_id}] is already in progress.")
 
     campaign = await campaign_repo.get_by_id(campaign_id)
     if not campaign or campaign.user_id != current_user.id:

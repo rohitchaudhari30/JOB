@@ -28,6 +28,7 @@ async def test_start_run_request_resume_id_validation_success():
 
     mock_orchestrator = MagicMock()
     mock_orchestrator.get_active_user_run.return_value = None
+    mock_orchestrator.get_live_run_id = AsyncMock(return_value=None)
     mock_session = MagicMock(spec=AutomationSession)
     mock_session.run_id = "run_session_789"
     mock_session.user_id = "user_456"
@@ -86,6 +87,7 @@ async def test_start_run_request_resume_cross_tenant_rejection():
 
     mock_orchestrator = MagicMock()
     mock_orchestrator.get_active_user_run.return_value = None
+    mock_orchestrator.get_live_run_id = AsyncMock(return_value=None)
     mock_orchestrator.start_run = AsyncMock()
 
     with pytest.MonkeyPatch.context() as mp:
@@ -125,6 +127,7 @@ async def test_start_run_request_resume_not_found():
 
     mock_orchestrator = MagicMock()
     mock_orchestrator.get_active_user_run.return_value = None
+    mock_orchestrator.get_live_run_id = AsyncMock(return_value=None)
     mock_orchestrator.start_run = AsyncMock()
 
     with pytest.MonkeyPatch.context() as mp:

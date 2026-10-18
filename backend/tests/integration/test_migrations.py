@@ -40,7 +40,7 @@ async def test_fresh_database_gets_the_full_schema_from_migrations(empty_engine)
     await run_migrations()
     tables = await _tables(empty_engine)
     assert {"users", "applications", "jobs", "revoked_tokens", "alembic_version"} <= tables
-    assert await _version(empty_engine) == "0005"
+    assert await _version(empty_engine) == "0006"
     # The migrations and the SQLAlchemy models describe the same schema.
     assert await _schema_differences(empty_engine) == []
     await empty_engine.dispose()
@@ -50,7 +50,7 @@ async def test_fresh_database_gets_the_full_schema_from_migrations(empty_engine)
 async def test_running_migrations_twice_is_safe(empty_engine):
     await run_migrations()
     await run_migrations()
-    assert await _version(empty_engine) == "0005"
+    assert await _version(empty_engine) == "0006"
     await empty_engine.dispose()
 
 
@@ -67,7 +67,7 @@ async def test_legacy_database_is_adopted_without_losing_data(empty_engine):
 
     await run_migrations()
 
-    assert await _version(empty_engine) == "0005"
+    assert await _version(empty_engine) == "0006"
     async with empty_engine.connect() as conn:
         emails = (await conn.execute(text("SELECT email FROM users"))).scalars().all()
     assert emails == ["old@example.com"]
@@ -176,7 +176,7 @@ async def test_legacy_database_missing_new_columns_gets_them(empty_engine):
         policy_cols = {r[1] for r in (await conn.execute(text("PRAGMA table_info(campaign_safety_policies)"))).all()}
         app_cols = {r[1] for r in (await conn.execute(text("PRAGMA table_info(applications)"))).all()}
     assert "timezone" in policy_cols and "resume_label_snapshot" in app_cols
-    assert await _version(empty_engine) == "0005"
+    assert await _version(empty_engine) == "0006"
     await empty_engine.dispose()
 
 
@@ -236,7 +236,7 @@ async def test_migration_path_leaves_existing_duplicate_active_executions_alone(
         n = (await conn.execute(text("SELECT COUNT(*) FROM campaign_executions WHERE status='RUNNING'"))).scalar()
     assert n == 2  # data untouched
     assert not await _guard_index_present(empty_engine)  # skipped, not forced
-    assert await _version(empty_engine) == "0005"
+    assert await _version(empty_engine) == "0006"
     await empty_engine.dispose()
 
 
@@ -247,7 +247,7 @@ async def test_legacy_database_gets_the_guard_when_data_allows(empty_engine):
         await conn.execute(text(f"DROP INDEX {_GUARD}"))
     await run_migrations()  # legacy path: tables exist, no alembic_version
     assert await _guard_index_present(empty_engine)
-    assert await _version(empty_engine) == "0005"
+    assert await _version(empty_engine) == "0006"
     await empty_engine.dispose()
 
 

@@ -160,11 +160,11 @@ async def start_automation_run(
     campaign_repo=Depends(get_campaign_repository),
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)] = None,
 ):
-    existing_run = orchestrator.get_active_user_run(current_user.id)
-    if existing_run and existing_run.status == AutomationRunStatus.RUNNING:
+    live_run_id = await orchestrator.get_live_run_id(current_user.id)
+    if live_run_id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"An active automation run [{existing_run.run_id}] is already in progress.",
+            detail=f"An active automation run [{live_run_id}] is already in progress.",
         )
 
     # Determine effective resume: explicit request resume > campaign target resume
