@@ -39,7 +39,7 @@ To scale to several processes later, in this order:
 | DUP-07 profile write paths | `PUT /profile` now saves lists too; the granular endpoints remain for small edits. |
 | DUP-08 experience months | `total_experience_months` is entered by the user; it is not derived from the experience list. |
 | DUP-09 workflow vs outcome | `workflow_state` is set by the system; `outcome_status` by the user or platform events; `application_events` is the history of both. |
-| DUP-10 run vs execution | The run is the live view, the campaign execution is the stored owner of counters; they are synchronised when a run is paused, resumed or stopped. |
+| DUP-10 run vs execution | The run is the live view, the campaign execution is the stored owner of counters; they are synchronised only through `application/automation/execution_sync.py` (pause/resume/stop and the final sync). At start-up, executions and runs a dead process left active are ended (`recover_interrupted_*`). |
 | DUP-11 apply use case | One factory (`app/application/applications/factory.py`). |
 | DUP-12 repeated UI pieces | Helpers moved out of the applications page; further shared components are future work. |
 | DUP-13 encryptor alias | One name: `session_encryptor`. |

@@ -24,6 +24,7 @@ from app.domain.matching.entities import DecisionEnum, MatchResult, MatchRule
 from app.domain.matching.repositories import MatchResultRepository
 from app.domain.profile.repositories import CandidateProfileRepository, ResumeRepository
 from app.domain.auth.repositories import UserRepository
+from app.application.automation.execution_sync import FINISHED_EXECUTION_STATES, apply_final_state
 from app.domain.automation.state_machine import AutomationState, AutomationStateMachine
 
 logger = logging.getLogger("app.automation.orchestrator")
@@ -523,24 +524,13 @@ class AutomationOrchestrator:
                                     f"stale session lease_version [{session.lease_version}] < current [{exec_model.lease_version}]"
                                 )
                                 return
-                            if exec_model.status in ("COMPLETED", "FAILED", "ABORTED") and exec_model.worker_id != session.worker_id:
+                            if exec_model.status in FINISHED_EXECUTION_STATES and exec_model.worker_id != session.worker_id:
                                 logger.warning(
                                     f"Execution [{session.execution_id}] already finalized by another worker [{exec_model.worker_id}]."
                                 )
                                 return
 
-                            if session.status == AutomationState.COMPLETED:
-                                exec_model.status = "COMPLETED"
-                            elif session.status == AutomationState.FAILED:
-                                exec_model.status = "FAILED"
-                                exec_model.error_message = session.error_message
-                            elif session.status in (AutomationState.ABORTED, AutomationState.STOPPED):
-                                exec_model.status = "ABORTED"
-                            exec_model.completed_at = datetime.now(timezone.utc)
-                            exec_model.discovered_count = session.discovered_jobs_count
-                            exec_model.qualified_count = session.qualified_jobs_count
-                            exec_model.submitted_count = session.applications_submitted_count
-                            exec_model.failed_count = session.failed_applications_count
+                            apply_final_state(exec_model, session)
                             await repo.save(exec_model)
 
                     if execution_repo:

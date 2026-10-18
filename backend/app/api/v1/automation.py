@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("app.api.v1.automation")
+from app.application.automation.execution_sync import sync_control_state
+from app.domain.campaigns.state_machine import ExecutionStateEnum
 from app.api.deps import (
     get_ai_gateway,
     get_application_repository,
@@ -315,15 +317,7 @@ async def pause_run(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
     session.pause()
 
-    # Synchronize database CampaignExecution if linked
-    if session.execution_id:
-        try:
-            exec_model = await execution_repo.get_by_id(session.execution_id)
-            if exec_model:
-                exec_model.status = "PAUSED_USER"
-                await execution_repo.save(exec_model)
-        except Exception as e:
-            logger.warning(f"Failed to sync pause state to execution [{session.execution_id}]: {e}")
+    await sync_control_state(execution_repo, session.execution_id, ExecutionStateEnum.PAUSED_USER, "pause")
 
     return _to_run_response(session)
 
@@ -340,15 +334,7 @@ async def resume_run(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
     session.resume(user_input=req.user_input)
 
-    # Synchronize database CampaignExecution if linked
-    if session.execution_id:
-        try:
-            exec_model = await execution_repo.get_by_id(session.execution_id)
-            if exec_model:
-                exec_model.status = "RUNNING"
-                await execution_repo.save(exec_model)
-        except Exception as e:
-            logger.warning(f"Failed to sync resume state to execution [{session.execution_id}]: {e}")
+    await sync_control_state(execution_repo, session.execution_id, ExecutionStateEnum.RUNNING, "resume")
 
     return _to_run_response(session)
 
@@ -365,16 +351,7 @@ async def stop_run(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Run [{run_id}] not found.")
     session.abort(reason=req.reason or "Aborted by user")
 
-    # Synchronize database CampaignExecution if linked
-    if session.execution_id:
-        try:
-            exec_model = await execution_repo.get_by_id(session.execution_id)
-            if exec_model:
-                exec_model.status = "ABORTED"
-                exec_model.completed_at = datetime.now(timezone.utc)
-                await execution_repo.save(exec_model)
-        except Exception as e:
-            logger.warning(f"Failed to sync stop state to execution [{session.execution_id}]: {e}")
+    await sync_control_state(execution_repo, session.execution_id, ExecutionStateEnum.ABORTED, "stop")
 
     return _to_run_response(session)
 
