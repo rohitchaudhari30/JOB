@@ -11,6 +11,16 @@
    "detail": "['Home', 'Jobs', 'Applications', 'Automation', 'Insights', 'Settings']"
   },
   {
+   "name": "tokens are not kept in browser storage (SEC-08)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "signed-out visit (no refresh cookie) shows the login page",
+   "ok": true,
+   "detail": ""
+  },
+  {
    "name": "sidebar footer is honest when idle",
    "ok": true,
    "detail": ""

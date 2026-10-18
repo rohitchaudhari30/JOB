@@ -6,7 +6,7 @@ import { automationApi } from './endpoints/automation';
 import { analyticsApi } from './endpoints/analytics';
 import { campaignsApi } from './endpoints/campaigns';
 import { dashboardApi } from './endpoints/dashboard';
-export { apiClient, setAuthToken } from './http';
+export { apiClient, setAuthToken, restoreSession, getAccessToken } from './http';
 
 /** Every endpoint, grouped by area under ./endpoints. */
 export const api = {

@@ -9,26 +9,40 @@ export const apiClient = axios.create({
   },
 });
 
-// Set bearer and refresh tokens
-export const setAuthToken = (token: string | null, refreshToken?: string | null) => {
+// SEC-08: the access token lives in memory only. The long-lived refresh token is an HttpOnly cookie
+// that scripts cannot read; the browser sends it to /auth/refresh by itself.
+let accessToken: string | null = null;
+
+export const getAccessToken = (): string | null => accessToken;
+
+export const setAuthToken = (token: string | null) => {
+  accessToken = token;
   if (token) {
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    localStorage.setItem('auth_token', token);
-    if (refreshToken) {
-      localStorage.setItem('refresh_token', refreshToken);
-    }
   } else {
     delete apiClient.defaults.headers.common['Authorization'];
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('refresh_token');
   }
 };
 
-// Initialize token from storage
-const savedToken = localStorage.getItem('auth_token');
-if (savedToken) {
-  apiClient.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+// One-time clean-up of tokens that older versions kept in localStorage.
+try {
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('refresh_token');
+} catch {
+  /* storage unavailable: nothing to clean */
 }
+
+/** Start-up: ask the server for an access token using the refresh cookie. True when signed in. */
+export const restoreSession = async (): Promise<boolean> => {
+  try {
+    const res = await axios.post(`${API_BASE}/auth/refresh`);
+    setAuthToken(res.data.access_token);
+    return true;
+  } catch {
+    setAuthToken(null);
+    return false;
+  }
+};
 
 // Queue for handling concurrent requests during active refresh
 let isRefreshing = false;
@@ -61,13 +75,6 @@ apiClient.interceptors.response.use(
       !originalRequest.url?.includes('/auth/register') &&
       !originalRequest.url?.includes('/auth/refresh')
     ) {
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (!refreshToken) {
-        setAuthToken(null);
-        window.dispatchEvent(new Event('auth:expired'));
-        return Promise.reject(error);
-      }
-
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -83,11 +90,9 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshResponse = await axios.post(`${API_BASE}/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
-        const { access_token, refresh_token: newRefreshToken } = refreshResponse.data;
-        setAuthToken(access_token, newRefreshToken || refreshToken);
+        const refreshResponse = await axios.post(`${API_BASE}/auth/refresh`);
+        const { access_token } = refreshResponse.data;
+        setAuthToken(access_token);
         processQueue(null, access_token);
         originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
         return apiClient(originalRequest);

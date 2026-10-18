@@ -43,6 +43,8 @@ def handler(route):
     req = route.request
     path = req.url.split("/api/v1", 1)[1].split("?")[0]
     m = req.method
+    if path == "/auth/refresh" and m == "POST":
+        return route.fulfill(status=200, content_type="application/json", body=json.dumps({"id": "u1", "email": "a@b.c", "access_token": "mem-token"}))
     if path.endswith("/screenshot"):
         return route.fulfill(status=200, content_type="image/png", body=PNG)
     if path.endswith("/connect"):
@@ -75,7 +77,6 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     def new_page(w, h=900):
         ctx = b.new_context(viewport={"width": w, "height": h})
-        ctx.add_init_script("localStorage.setItem('auth_token','t'); localStorage.setItem('refresh_token','r');")
         ctx.route("**/api/v1/**", handler)
         pg = ctx.new_page()
         pg.on("console", lambda msg: results["console_errors"].append(f"{w}px {msg.type}: {msg.text[:160]}") if msg.type == "error" else None)
@@ -88,6 +89,12 @@ with sync_playwright() as p:
     check("legacy /dashboard redirects to /home", pg.url.endswith("/home"), pg.url)
     nav_items = pg.locator("nav[aria-label='Primary navigation'] a").all_inner_texts()
     check("sidebar has 6 items", len(nav_items) == 6, nav_items)
+    check("tokens are not kept in browser storage (SEC-08)", pg.evaluate("[...Object.keys(localStorage), ...Object.keys(sessionStorage)].filter(k => /token|auth/i.test(k)).length") == 0 and "mem-token" not in pg.content())
+    ctx2 = b.new_context(viewport={"width": 1280, "height": 900})
+    ctx2.route("**/api/v1/**", lambda r: r.fulfill(status=401, content_type="application/json", body='{"detail":"x"}'))
+    out = ctx2.new_page(); out.goto(BASE + "/home"); out.wait_for_selector("text=Sign In to Console", timeout=10000)
+    check("signed-out visit (no refresh cookie) shows the login page", out.get_by_text("Sign In to Console").count() >= 1)
+    ctx2.close()
     check("sidebar footer is honest when idle", pg.locator("text=No active run").count() >= 1 and pg.locator("text=Autopilot Active").count() == 0)
     check("no pause/stop controls on Dashboard", pg.get_by_role("button", name="Pause").count() == 0 and pg.get_by_role("button", name="Stop").count() == 0)
     pg.get_by_role("button", name="Reconnect").first.click(); pg.wait_for_timeout(500)

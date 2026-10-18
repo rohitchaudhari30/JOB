@@ -1,3 +1,4 @@
+import { getAccessToken } from './http';
 import { TimelineEvent } from '../types';
 
 export interface WebSocketMessage {
@@ -45,7 +46,7 @@ class WebSocketClient {
     let wsUrl = `${protocol}//${host}/ws`;
     try {
       // 1. Preferred: Ephemeral single-use ticket (prevents token leakage in query params)
-      const token = localStorage.getItem('auth_token');
+      const token = getAccessToken();
       if (token) {
         try {
           const resp = await fetch('/api/v1/ws/ticket', {

@@ -9,7 +9,6 @@ bad = 0
 with sync_playwright() as p:
     b = p.chromium.launch()
     ctx = b.new_context(viewport={"width": 1280, "height": 900})
-    ctx.add_init_script("localStorage.setItem('auth_token','t'); localStorage.setItem('refresh_token','r');")
     ctx.route("**/api/v1/**", handler)
     pg = ctx.new_page()
     for path in PAGES:

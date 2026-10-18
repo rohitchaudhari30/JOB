@@ -9,7 +9,7 @@ import { BRAND_NAME, BRAND_SUFFIX } from './utils/brand';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
 import { User } from './types';
-import { api, setAuthToken } from './services/api';
+import { api, setAuthToken, restoreSession } from './services/api';
 import { wsClient } from './services/ws';
 import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
@@ -39,6 +39,7 @@ export const App: React.FC = () => {
   const [authFullName, setAuthFullName] = useState('');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  const [booting, setBooting] = useState(true);
 
   // URL & Browser History Synchronization
   useEffect(() => {
@@ -67,11 +68,11 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      loadCurrentUser();
-    }
+    // Signed in already? The refresh cookie gives a fresh in-memory access token.
+    void (async () => {
+      if (await restoreSession()) await loadCurrentUser();
+      setBooting(false);
+    })();
 
     const handleAuthExpired = () => {
       setUser(null);
@@ -107,13 +108,13 @@ export const App: React.FC = () => {
     try {
       if (isRegisterMode) {
         const res = await api.register(authEmail, authPassword, authFullName);
-        setAuthToken(res.access_token, res.refresh_token);
+        setAuthToken(res.access_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Account created successfully!');
       } else {
         const res = await api.login(authEmail, authPassword);
-        setAuthToken(res.access_token, res.refresh_token);
+        setAuthToken(res.access_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Welcome back!');
@@ -131,7 +132,7 @@ export const App: React.FC = () => {
       // Try login first
       try {
         const res = await api.login('demo.engineer@example.com', 'SecurePassword123!');
-        setAuthToken(res.access_token, res.refresh_token);
+        setAuthToken(res.access_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Logged in as demo user!');
@@ -143,7 +144,7 @@ export const App: React.FC = () => {
           'SecurePassword123!',
           'Lead Automation Engineer'
         );
-        setAuthToken(regRes.access_token, regRes.refresh_token);
+        setAuthToken(regRes.access_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Demo user registered and logged in!');
@@ -162,6 +163,14 @@ export const App: React.FC = () => {
     wsClient.disconnect();
     showSuccess('Logged out successfully');
   };
+
+  if (booting) {
+    return (
+      <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-sm text-slate-500">
+        Loading…
+      </div>
+    );
+  }
 
   if (!user) {
     return (
