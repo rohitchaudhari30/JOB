@@ -121,6 +121,41 @@
    "detail": ""
   },
   {
+   "name": "rationale: Why? opens a dialog with its title",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "rationale: Esc closes it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "screenshot: opens a dialog with the image",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "screenshot: dialog has no axe violations",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "name": "screenshot: Esc closes it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "login dialog: opens while waiting for the portal login",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "login dialog: Esc does NOT close it (not dismissible)",
+   "ok": true,
+   "detail": ""
+  },
+  {
    "name": "insights: six sections",
    "ok": true,
    "detail": "['Overview', 'Sources', 'Resumes', 'Campaigns', 'Skills', 'Scoring weights']"
@@ -329,6 +364,11 @@
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",

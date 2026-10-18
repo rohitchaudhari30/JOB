@@ -21,7 +21,7 @@ AXE = open(os.environ["AXE_PATH"]).read()
 USER = {"id": "u1", "email": "demo@example.com", "full_name": "Demo User"}
 APP = {"id": "app1", "user_id": "u1", "job_id": "job1", "idempotency_key": "k", "workflow_state": "RECONCILIATION_REQUIRED",
        "outcome_status": "NOT_SUBMITTED", "created_at": "2026-10-01T10:00:00Z", "questions": [], "job_title": "Staff Engineer",
-       "company": "Acme", "platform": "linkedin", "match_score": 91}
+       "company": "Acme", "platform": "linkedin", "match_score": 91, "screenshot_file_path": "shots/app1.png"}
 OVERVIEW = {"today_applied_count": 3, "effective_daily_limit": 25, "quota_remaining": 22, "quota_percentage": 12.0,
   "active_run": {"is_running": False, "run_id": None, "campaign_id": None, "campaign_name": None, "status": "IDLE",
                  "current_job_title": None, "current_platform": None, "progress_percentage": 0.0},
@@ -29,6 +29,7 @@ OVERVIEW = {"today_applied_count": 3, "effective_daily_limit": 25, "quota_remain
                        "action_label": "Reconnect", "action_url": "/settings/connections", "severity": "HIGH"}],
   "readiness": [{"key": "platform", "title": "Job Platform Connected", "is_ready": False, "action_label": "Connect Portal", "action_url": "/settings/connections"}],
   "top_matches": [{"job_id": "job1", "title": "Staff Engineer", "company": "Acme", "location": "Remote", "platform": "LinkedIn", "match_score": 94.5, "decision": "AUTO_APPLY"}]}
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082")
 JOB = {"id": "job1", "source_id": "s1", "source_type": "linkedin", "external_job_id": "x1", "title": "Staff Engineer", "company": "Acme",
        "location": "Remote", "apply_url": "https://example.com/apply", "raw_description": "Build things.", "is_active": True,
        "posted_at": "2026-10-15T10:00:00Z", "freshness_bucket": "LAST_7_DAYS"}
@@ -42,6 +43,10 @@ def handler(route):
     req = route.request
     path = req.url.split("/api/v1", 1)[1].split("?")[0]
     m = req.method
+    if path.endswith("/screenshot"):
+        return route.fulfill(status=200, content_type="image/png", body=PNG)
+    if path.endswith("/connect"):
+        return  # never answered: keeps the "waiting for login" dialog open
     body = []
     if path == "/auth/me": body = USER
     elif path == "/automation/active": body = {"status": "IDLE"}
@@ -153,6 +158,33 @@ with sync_playwright() as p:
     check("applications: reconciliation dialog has no axe violations", res == [], res)
     pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
     check("applications: Esc closes the reconciliation dialog", pg.get_by_role("dialog").count() == 0)
+    pg.context.close()
+
+    # ---- Rationale and Screenshot dialogs, and the platform login dialog
+    pg = new_page(1280)
+    pg.goto(BASE + "/applications"); pg.wait_for_selector("text=Staff Engineer", timeout=10000)
+    pg.get_by_role("button", name="Why?").first.click(); pg.wait_for_timeout(300)
+    check("rationale: Why? opens a dialog with its title", pg.get_by_role("dialog").count() == 1 and pg.get_by_text("decision rationale").count() >= 1)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+    check("rationale: Esc closes it", pg.get_by_role("dialog").count() == 0)
+    pg.locator("tr", has_text="Staff Engineer").locator("button[aria-expanded]").first.click(); pg.wait_for_timeout(300)
+    shot = pg.get_by_role("button", name="View Screenshot Artifact")
+    shot.first.click(); pg.wait_for_timeout(500)
+    check("screenshot: opens a dialog with the image", pg.get_by_role("dialog").count() == 1 and pg.get_by_role("dialog").locator("img").count() == 1)
+    pg.evaluate(AXE)
+    res = pg.evaluate("axe.run(document.querySelector('[role=dialog]'), {resultTypes:['violations']}).then(r => r.violations.map(v => v.id))")
+    check("screenshot: dialog has no axe violations", res == [], res)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+    check("screenshot: Esc closes it", pg.get_by_role("dialog").count() == 0)
+    pg.context.close()
+
+    pg = new_page(1280)
+    pg.goto(BASE + "/settings/connections"); pg.wait_for_timeout(900)
+    pg.get_by_role("button", name="Connect").first.click(); pg.wait_for_timeout(500)
+    dlg = pg.get_by_role("dialog")
+    check("login dialog: opens while waiting for the portal login", dlg.count() == 1 and dlg.get_by_text("Awaiting login completion").count() == 1)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("login dialog: Esc does NOT close it (not dismissible)", pg.get_by_role("dialog").count() == 1)
     pg.context.close()
 
     # ---- Insights: one section at a time, kept in the URL
