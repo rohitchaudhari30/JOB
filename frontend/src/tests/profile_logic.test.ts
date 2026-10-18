@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateCompleteness, defaultProfile, isProfileTabComplete } from '../pages/profile/profileLogic';
+import { calculateCompleteness, defaultProfile, isProfileTabComplete, monthsFromHistory } from '../pages/profile/profileLogic';
 import type { CandidateProfile } from '../types';
 
 const skill = (n: string) => ({ skill_name: n }) as any;
@@ -30,5 +30,22 @@ describe('profile completeness', () => {
     expect(isProfileTabComplete('resumes', p, 1, 0)).toBe(true);
     expect(isProfileTabComplete('answers', p, 0, 3)).toBe(true);
     expect(isProfileTabComplete('answers', p, 0, 2)).toBe(false);
+  });
+});
+
+describe('monthsFromHistory', () => {
+  const now = new Date('2026-01-15');
+  it('adds separate jobs', () => {
+    expect(monthsFromHistory([{ start_date: '2020-01-01', end_date: '2021-01-01' }, { start_date: '2022-01-01', end_date: '2023-01-01' }], now)).toBe(24);
+  });
+  it('counts overlapping jobs once', () => {
+    expect(monthsFromHistory([{ start_date: '2020-01-01', end_date: '2022-01-01' }, { start_date: '2021-01-01', end_date: '2023-01-01' }], now)).toBe(36);
+  });
+  it('runs a current job to now', () => {
+    expect(monthsFromHistory([{ start_date: '2025-01-01', is_current: true }], now)).toBe(12);
+  });
+  it('ignores entries with no usable start date and handles empty input', () => {
+    expect(monthsFromHistory([{ start_date: 'garbage' }, {}], now)).toBe(0);
+    expect(monthsFromHistory(undefined, now)).toBe(0);
   });
 });

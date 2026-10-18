@@ -73,3 +73,39 @@ export function isProfileTabComplete(
       return false;
   }
 }
+
+/**
+ * Months covered by the work-experience list, with overlapping jobs counted once.
+ * Entries without a parseable start date are ignored; a current job (or a missing end
+ * date on a job with a start) runs to `now`. Returns 0 when nothing is usable.
+ */
+export function monthsFromHistory(
+  experiences: ReadonlyArray<{ start_date?: string; end_date?: string; is_current?: boolean }> | undefined,
+  now: Date = new Date(),
+): number {
+  const toIndex = (d: Date) => d.getFullYear() * 12 + d.getMonth();
+  const spans: Array<[number, number]> = [];
+  for (const e of experiences ?? []) {
+    const start = e.start_date ? new Date(e.start_date) : null;
+    if (!start || Number.isNaN(start.getTime())) continue;
+    const endRaw = !e.is_current && e.end_date ? new Date(e.end_date) : now;
+    const end = Number.isNaN(endRaw.getTime()) ? now : endRaw;
+    const s = toIndex(start);
+    const t = toIndex(end);
+    if (t > s) spans.push([s, t]);
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  let total = 0;
+  let cur: [number, number] | null = null;
+  for (const sp of spans) {
+    if (!cur || sp[0] > cur[1]) {
+      if (cur) total += cur[1] - cur[0];
+      cur = [sp[0], sp[1]];
+    } else if (sp[1] > cur[1]) cur[1] = sp[1];
+  }
+  if (cur) total += cur[1] - cur[0];
+  return total;
+}
+
+/** Gap (months) beyond which the typed total is worth a second look. */
+export const EXPERIENCE_MISMATCH_MONTHS = 6;
