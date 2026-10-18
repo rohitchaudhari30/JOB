@@ -1,6 +1,5 @@
 {
   "components/Navbar.tsx": 430,
-  "pages/AIMatches.tsx": 653,
   "pages/JobDiscovery.tsx": 638,
   "pages/ProfileManager.tsx": 488,
   "services/api.ts": 492,
