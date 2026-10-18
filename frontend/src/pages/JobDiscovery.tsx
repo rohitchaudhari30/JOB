@@ -1,23 +1,20 @@
 import { ReadinessBanner } from '../components/ReadinessBanner';
 import { useJobActions } from '../hooks/useJobActions';
 import { useRecordRoute } from '../hooks/useRecordRoute';
+import { useAppliedJobs } from './jobs/useAppliedJobs';
+import { useLiveApplyEvents } from './jobs/useLiveApplyEvents';
 import { DiscoveryControls } from './jobs/DiscoveryControls';
 import { DiscoveryToolbar } from './jobs/DiscoveryToolbar';
 import { SelectionBar } from './jobs/SelectionBar';
-import { JobCard } from './jobs/JobCard';
 import { JobDetailDrawer, jobToDetailModel } from './jobs/JobDetailDrawer';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import {
-  Trash2,
-  CheckSquare,
-  Square,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+
 import { api } from '../services/api';
-import { wsClient } from '../services/ws';
 import { useToast } from '../context/ToastContext';
-import { AutomationRunStatus, Job, Application, Resume, MatchResult } from '../types';
+import { AutomationRunStatus, Job, Resume, MatchResult } from '../types';
+import { DiscoveredJobsHeader } from './jobs/DiscoveredJobsHeader';
+import { DiscoveredJobsGrid } from './jobs/DiscoveredJobsGrid';
+import { JobsPagination } from './jobs/JobsPagination';
 
 interface JobDiscoveryProps {
   activeRun?: AutomationRunStatus | null;
@@ -51,17 +48,13 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   // Queue & Selection Management
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
   const [isStartingQueue, setIsStartingQueue] = useState(false);
-  const [appliedJobMap, setAppliedJobMap] = useState<Map<string, { appliedAt?: string; status: string }>>(new Map());
-  const [liveApplyingJobId, setLiveApplyingJobId] = useState<string | null>(null);
-  const [liveQueueJobIds, setLiveQueueJobIds] = useState<Set<string>>(new Set());
-  const [liveSubmittedJobIds, setLiveSubmittedJobIds] = useState<Set<string>>(new Set());
 
   // Pre-flight setup data & guardrails
   const [connections, setConnections] = useState<any[]>([]);
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [matchesMap, setMatchesMap] = useState<Map<string, MatchResult>>(new Map());
   const [filterMinFit, setFilterMinFit] = useState(false);
-  const [appliedTodayCount, setAppliedTodayCount] = useState(0);
+  const { appliedJobMap, appliedTodayCount, loadAppliedJobs } = useAppliedJobs();
 
   const loadPreflightData = async () => {
     try {
@@ -83,44 +76,6 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     }
   };
 
-  const loadAppliedJobs = async () => {
-    try {
-      const mapData = await api.getAppliedJobMap().catch(async () => {
-        // Fallback to listApplications if endpoint unavailable
-        const apps = await api.listApplications();
-        const fallback: Record<string, { status: string; applied_at?: string }> = {};
-        (apps || []).forEach((app: Application) => {
-          if (app.job_id) {
-            fallback[app.job_id] = {
-              status: app.workflow_state,
-              applied_at: app.applied_at || app.created_at,
-            };
-          }
-        });
-        return fallback;
-      });
-
-      const map = new Map<string, { appliedAt?: string; status: string }>();
-      let countToday = 0;
-      const todayStr = new Date().toDateString();
-
-      Object.entries(mapData || {}).forEach(([jobId, info]) => {
-        map.set(jobId, {
-          appliedAt: info.applied_at,
-          status: info.status,
-        });
-        if (info.applied_at && new Date(info.applied_at).toDateString() === todayStr && info.status === 'APPLIED') {
-          countToday++;
-        }
-      });
-
-      setAppliedJobMap(map);
-      setAppliedTodayCount(countToday);
-    } catch {
-      // Ignore if list fails
-    }
-  };
-
   const handleEvaluateSingle = async (jobId: string) => {
     const res = await actions.evaluateJob(jobId);
     if (res) {
@@ -135,42 +90,13 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   useEffect(() => {
     loadAppliedJobs();
     loadPreflightData();
-
-    // Listen to live WebSocket events to mark applications in real-time
-    const unsubscribeEvent = wsClient.onEvent((evt) => {
-      if (evt.event_name === 'AUTO_APPLYING') {
-        if (evt.payload?.job_id) {
-          setLiveApplyingJobId(evt.payload.job_id);
-        } else if (evt.message) {
-          const matchJob = jobs.find((j) => evt.message.includes(j.company) || evt.message.includes(j.title));
-          if (matchJob) setLiveApplyingJobId(matchJob.id);
-        }
-      } else if (
-        evt.event_name === 'APPLICATION_SUBMITTED' ||
-        evt.state === 'APPLIED'
-      ) {
-        if (evt.payload?.job_id) {
-          setLiveSubmittedJobIds((prev) => new Set(prev).add(evt.payload.job_id));
-        } else if (liveApplyingJobId) {
-          setLiveSubmittedJobIds((prev) => new Set(prev).add(liveApplyingJobId));
-        }
-        setLiveApplyingJobId(null);
-        loadAppliedJobs();
-      } else if (
-        evt.event_name === 'RUN_COMPLETED' ||
-        evt.event_name === 'RUN_ABORTED' ||
-        evt.event_name === 'RUN_FAILED'
-      ) {
-        setLiveApplyingJobId(null);
-        setLiveQueueJobIds(new Set());
-        loadAppliedJobs();
-      }
-    });
-
-    return () => {
-      unsubscribeEvent();
-    };
   }, []);
+
+  const { liveApplyingJobId, setLiveApplyingJobId, liveQueueJobIds, setLiveQueueJobIds, liveSubmittedJobIds } =
+    useLiveApplyEvents(
+    jobs,
+    loadAppliedJobs
+  );
 
   useEffect(() => {
     // Load candidate profile defaults
@@ -441,179 +367,11 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
 
       {/* Discovered Jobs Header & Bulk Selection Controls */}
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center space-x-3">
-            <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Discovered Job Repository ({totalCount} total{totalCount > pageSize ? ` · page ${page}` : ''})
-            </h2>
-            {displayedJobs.length > 0 && (
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleSelectAll}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center space-x-1 cursor-pointer"
-                >
-                  {selectedCount === displayedJobs.length ? (
-                    <>
-                      <CheckSquare className="w-3.5 h-3.5" />
-                      <span>Deselect All</span>
-                    </>
-                  ) : (
-                    <>
-                      <Square className="w-3.5 h-3.5" />
-                      <span>Select All ({displayedJobs.length})</span>
-                    </>
-                  )}
-                </button>
+        <DiscoveredJobsHeader totalCount={totalCount} pageSize={pageSize} page={page} displayedJobs={displayedJobs} handleSelectAll={handleSelectAll} handleSelectTopN={handleSelectTopN} selectedCount={selectedCount} jobs={jobs} showConfirmClear={showConfirmClear} setShowConfirmClear={setShowConfirmClear} isClearing={isClearing} handleClearAll={handleClearAll} />
 
-                {displayedJobs.length >= 5 && (
-                  <button
-                    onClick={() => handleSelectTopN(5)}
-                    className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
-                    title="Select top 5 newest jobs"
-                  >
-                    ⚡ Top 5
-                  </button>
-                )}
-                {displayedJobs.length >= 10 && (
-                  <button
-                    onClick={() => handleSelectTopN(10)}
-                    className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
-                    title="Select top 10 newest jobs"
-                  >
-                    ⚡ Top 10
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+        <DiscoveredJobsGrid loading={loading} displayedJobs={displayedJobs} filterMinFit={filterMinFit} selectedJobIds={selectedJobIds} appliedJobMap={appliedJobMap} liveSubmittedJobIds={liveSubmittedJobIds} liveQueueJobIds={liveQueueJobIds} liveApplyingJobId={liveApplyingJobId} activeRun={activeRun} matchesMap={matchesMap} evaluatingJobIds={evaluatingJobIds} deletingId={deletingId} toggleJobSelection={toggleJobSelection} record={record} handleEvaluateSingle={handleEvaluateSingle} handleSingleJobApply={handleSingleJobApply} handleDeleteJob={handleDeleteJob} onNavigate={onNavigate} />
 
-          <div className="flex items-center space-x-2">
-            {jobs.length > 0 && (
-              <div>
-                {!showConfirmClear ? (
-                  <button
-                    onClick={() => setShowConfirmClear(true)}
-                    className="px-3 py-1 rounded-xl text-xs font-semibold text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60 flex items-center space-x-1.5 transition-all cursor-pointer shadow-xs"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Clear All ({jobs.length})</span>
-                  </button>
-                ) : (
-                  <div className="flex items-center space-x-2 animate-fadeIn bg-rose-50 dark:bg-rose-950/50 px-3 py-1 rounded-xl border border-rose-200 dark:border-rose-900/80">
-                    <span className="text-xs text-rose-700 dark:text-rose-300 font-semibold">Delete all {jobs.length} jobs?</span>
-                    <button
-                      onClick={handleClearAll}
-                      disabled={isClearing}
-                      className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer disabled:opacity-50"
-                    >
-                      {isClearing ? 'Clearing...' : 'Yes, Delete'}
-                    </button>
-                    <button
-                      onClick={() => setShowConfirmClear(false)}
-                      className="px-2 py-0.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-16 text-slate-500 text-xs">Loading fresh jobs...</div>
-        ) : displayedJobs.length === 0 ? (
-          <div className="text-center py-16 bg-white dark:bg-slate-900/30 rounded-3xl border border-slate-200/80 dark:border-slate-800 text-slate-500 text-xs shadow-sm">
-            {filterMinFit
-              ? 'No jobs found with >= 80% AI match fit. Try evaluating more jobs or resetting the filter.'
-              : 'No jobs found matching the selected freshness or keyword criteria.'}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayedJobs.map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                isSelected={selectedJobIds.has(job.id)}
-                appInfo={appliedJobMap.get(job.id)}
-                isLiveSubmitted={liveSubmittedJobIds.has(job.id)}
-                isLiveQueued={liveQueueJobIds.has(job.id)}
-                liveApplyingJobId={liveApplyingJobId}
-                activeRun={activeRun}
-                match={matchesMap.get(job.id)}
-                evaluating={evaluatingJobIds.has(job.id)}
-                deleting={deletingId === job.id}
-                onToggleSelect={toggleJobSelection}
-                onOpen={record.open}
-                onEvaluate={(id) => void handleEvaluateSingle(id)}
-                onApply={handleSingleJobApply}
-                onDelete={handleDeleteJob}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Pagination Controls */}
-        {totalCount > pageSize && (
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 pb-6 border-t border-slate-200/60 dark:border-slate-800">
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              Showing <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min((page - 1) * pageSize + 1, totalCount)}</span> to{' '}
-              <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(page * pageSize, totalCount)}</span> of{' '}
-              <span className="font-bold text-slate-800 dark:text-slate-200">{totalCount}</span> opportunities
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors flex items-center space-x-1 cursor-pointer"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-                <span>Previous</span>
-              </button>
-
-              <div className="flex items-center space-x-1">
-                {Array.from({ length: Math.min(5, Math.ceil(totalCount / pageSize)) }, (_, i) => {
-                  const totalPages = Math.ceil(totalCount / pageSize);
-                  let pageNum: number;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (page <= 3) {
-                    pageNum = i + 1;
-                  } else if (page >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = page - 2 + i;
-                  }
-                  const isCurrent = page === pageNum;
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setPage(pageNum)}
-                      className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        isCurrent
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                onClick={() => setPage((p) => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
-                disabled={page >= Math.ceil(totalCount / pageSize)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors flex items-center space-x-1 cursor-pointer"
-              >
-                <span>Next</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
+        <JobsPagination page={page} pageSize={pageSize} totalCount={totalCount} setPage={setPage} />
       </div>
 
       <SelectionBar
