@@ -4,7 +4,6 @@
   "pages/ApplicationCRM.tsx": 713,
   "pages/DirectApply.tsx": 660,
   "pages/JobDiscovery.tsx": 638,
-  "pages/PlatformConnections.tsx": 498,
   "pages/ProfileManager.tsx": 488,
   "services/api.ts": 492,
   "types/index.ts": 517
