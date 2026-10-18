@@ -3,6 +3,7 @@ import { FileText, Upload, Trash2, Check, Loader2, Download } from 'lucide-react
 import { api } from '../../services/api';
 import { Resume } from '../../types';
 import { useToast } from '../../context/ToastContext';
+import { Button } from '../../components/ui/Button';
 
 interface ResumeLibraryTabProps {
   resumes: Resume[];
@@ -275,11 +276,8 @@ export const ResumeLibraryTab: React.FC<ResumeLibraryTabProps> = ({ resumes, onR
                 <span>Set as active default resume for automated applications</span>
               </label>
 
-              <button
-                type="submit"
-                disabled={!selectedFile || uploadingResume}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center space-x-1.5 disabled:opacity-40 transition-all cursor-pointer shadow-sm shrink-0"
-              >
+              <Button variant="primary" size="sm" type="submit"
+                disabled={!selectedFile || uploadingResume}>
                 {uploadingResume ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -291,7 +289,7 @@ export const ResumeLibraryTab: React.FC<ResumeLibraryTabProps> = ({ resumes, onR
                     <span>Upload to Library</span>
                   </>
                 )}
-              </button>
+              </Button>
             </div>
           </form>
         </div>

@@ -14,6 +14,7 @@ import { wsClient } from './services/ws';
 import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
 import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES, needsCanonicalRedirect } from './utils/navigation';
+import { Button } from './components/ui/Button';
 
 // Pages load on demand so the first screen downloads less code (FE-03).
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
@@ -226,11 +227,8 @@ export const App: React.FC = () => {
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 mt-2 cursor-pointer"
-            >
+            <Button variant="primary" size="sm" type="submit" className="w-full"
+              disabled={authLoading}>
               <LogIn className="w-4 h-4" />
               <span>
                 {authLoading
@@ -239,7 +237,7 @@ export const App: React.FC = () => {
                   ? 'Create Free Account'
                   : 'Sign In to Console'}
               </span>
-            </button>
+            </Button>
 
             {/* Demo shortcut exists only in local dev builds (SEC-02). */}
             {import.meta.env.DEV && (

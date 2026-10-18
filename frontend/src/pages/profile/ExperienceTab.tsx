@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Trash2, Building } from 'lucide-react';
 import type { CandidateProfile } from '../../types';
+import { Button } from '../../components/ui/Button';
 
 interface ExperienceTabProps {
   profile: CandidateProfile;
@@ -130,15 +131,12 @@ export const ExperienceTab: React.FC<ExperienceTabProps> = ({
               <span>This is my current role</span>
             </label>
 
-            <button
-              type="button"
+            <Button variant="primary" size="sm"
               onClick={handleAddExperience}
-              disabled={!newExpCompany.trim() || !newExpTitle.trim()}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer disabled:opacity-50"
-            >
+              disabled={!newExpCompany.trim() || !newExpTitle.trim()}>
               <Plus className="w-3.5 h-3.5" />
               <span>Add Company Role</span>
-            </button>
+            </Button>
           </div>
         </div>
       </div>

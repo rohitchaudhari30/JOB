@@ -1,6 +1,7 @@
 import React from 'react';
 import { Rocket, Play, Plus, Pause, Square, RotateCcw, Trash2, Sliders } from 'lucide-react';
 import type { Campaign } from '../../types';
+import { Button } from '../../components/ui/Button';
 
 interface CampaignHeaderProps {
   campaigns: Campaign[];
@@ -149,15 +150,12 @@ export const CampaignHeader: React.FC<CampaignHeaderProps> = ({
               </button>
             </>
           ) : (
-            <button
-              type="button"
+            <Button variant="primary" size="sm"
               onClick={handleStartCampaignExecution}
-              disabled={campaignActionLoading}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
-            >
+              disabled={campaignActionLoading}>
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>Run Campaign</span>
-            </button>
+            </Button>
           )}
 
           <button

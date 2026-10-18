@@ -3,6 +3,7 @@ import { Sparkles, Clock, Briefcase, MapPin, Sliders, Play, Zap, Globe, X } from
 import type { CandidateProfile, Resume } from '../../types';
 import type { SafetySettings } from './safetySettings';
 import { FRESHNESS_OPTIONS } from './freshness';
+import { Button } from '../../components/ui/Button';
 
 interface CriteriaCardProps {
   applicationMode: 'AUTO' | 'APPROVAL';
@@ -343,14 +344,12 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
             <span>Configure Schedule & Safety</span>
           </button>
 
-          <button
+          <Button variant="primary" size="sm" className="w-full sm:w-auto"
             onClick={handleStartApply}
-            disabled={starting}
-            className="w-full sm:w-auto px-8 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs shadow-xl shadow-indigo-600/25 flex items-center justify-center space-x-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
-          >
+            disabled={starting}>
             <Play className="w-4 h-4 fill-current" />
             <span>{starting ? 'Starting Run...' : 'START APPLY NOW'}</span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

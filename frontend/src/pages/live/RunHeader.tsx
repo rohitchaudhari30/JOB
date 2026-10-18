@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pause, RotateCcw, Square, Activity, Compass, Rocket, Layers, Maximize2, Columns } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
 
 interface Props {
   isRunning: boolean;
@@ -137,14 +138,12 @@ export const RunHeader: React.FC<Props> = ({
           )}
 
           {/* 1-Click Profile Autopilot */}
-          <button
+          <Button variant="primary" size="sm"
             onClick={handleStartProfileRun}
-            disabled={isStarting}
-            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
-          >
+            disabled={isStarting}>
             <Rocket className="w-3.5 h-3.5" />
             <span>{isStarting ? 'Starting Engine...' : 'Run Profile Autopilot'}</span>
-          </button>
+          </Button>
         </div>
       )}
     </div>

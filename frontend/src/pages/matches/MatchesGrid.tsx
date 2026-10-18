@@ -3,6 +3,7 @@ import { Sparkles, Brain, Send, Building, MapPin, ExternalLink, RefreshCw, Check
 import type { MatchResult } from '../../types';
 import { getMatchScore } from '../../utils/matchScores';
 import { getDecisionBadge, getScoreColor } from '../jobs/matchBadges';
+import { Button } from '../../components/ui/Button';
 
 interface Props {
   loading: boolean;
@@ -61,14 +62,12 @@ export const MatchesGrid: React.FC<Props> = ({
 
         <div className="flex items-center justify-center gap-3 pt-2">
           {allMatches.length === 0 ? (
-            <button
+            <Button variant="primary" size="sm"
               onClick={handleEvaluateAll}
-              disabled={isEvaluatingAll}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center space-x-2 transition-all cursor-pointer"
-            >
+              disabled={isEvaluatingAll}>
               <Sparkles className="w-4 h-4 text-amber-300 fill-amber-300" />
               <span>Run AI Matching</span>
-            </button>
+            </Button>
           ) : (
             <button
               onClick={() => {
