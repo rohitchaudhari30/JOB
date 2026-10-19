@@ -40,6 +40,18 @@ Tests at this point: frontend 146 vitest pass, tsc clean, build ok, browser smok
 - 89 raw buttons now have `type="button"` so none can submit a form by accident.
 - The 102 console errors in the smoke run are blocked Google-font requests in this sandbox, not app errors (the proxy log shows fonts.googleapis.com refused).
 
+## Decisions taken with industry-standard defaults, then built (same branch)
+| Item | Decision | Built |
+|---|---|---|
+| SEC-08 tokens | Access token in memory, refresh token in HttpOnly SameSite=Strict cookie (scoped to `/api/v1/auth`, Secure outside dev), rotation, revocation, Origin check | Backend + frontend; 5 backend tests, 4 unit tests, browser check that nothing token-like is in storage |
+| Q-02 / AUT-17 schedules | Schedules start runs. Enabling a schedule arms it (first run at its next slot). One live run per user, operating hours, daily limits and the approval band still apply. API schedules default to `auto_apply=false` (opt-in). Operator kill switch `SCHEDULED_RUNS_ENABLED`. | Found that the UI's campaign schedule was stored but never fired; added `workers/campaign_scheduler.py` (one-minute ticker, shared `launch_campaign_run`). 17 tests, mutation-checked |
+| Q-03 matches volume | Server-side paging with total count; UI loads 100 at a time with "Load more" | Fixed a silent cut-off at 50. 2 backend, 2 unit, 2 browser checks |
+| Q-08 Account | Change password (signs out every other session), download my data (allow-list, no secrets), delete account (already existed) | Migration 0007, 7 backend tests, 5 unit tests, 8 browser checks |
+| Q-04 quick run, Q-05 mobile | Quick run stays as is; layout is responsive for full management (no horizontal scroll at 375/768 px, checked) | No code change |
+| AI-03 thresholds | Not changed: score meaning needs a labelled evaluation first | Numbers above |
+
+Latest checks: backend 420 passed, 1 skipped; frontend 156 unit tests, tsc clean, size ratchet ok, build ok; browser smoke 75/75 with axe 0 violations on 10 pages and 0 uncaught errors; keyboard check 0 issues on 10 pages.
+
 ## Still open
 - DUP-01, 02, 07, 09: kept as separate scopes on purpose (see ARCHITECTURE.md); merging them would change behaviour.
 - About 80 raw buttons are tabs, filter pills and icon buttons that do not fit the four Button variants; converting them needs new variants first.
