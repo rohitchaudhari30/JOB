@@ -15,6 +15,8 @@ export const TAB_TO_PATH: Record<NavTab, string> = {
   live_console: '/automation/live',
   analytics: '/insights',
   profile: '/settings/profile',
+  resumes: '/settings/resumes',
+  preferences: '/settings/preferences',
   connections: '/settings/connections',
   account: '/settings/account',
 };
@@ -29,6 +31,8 @@ export const PATH_TO_TAB: Record<string, NavTab> = {
   '/automation/live': 'live_console',
   '/insights': 'analytics',
   '/settings/profile': 'profile',
+  '/settings/resumes': 'resumes',
+  '/settings/preferences': 'preferences',
   '/settings/connections': 'connections',
   '/settings/account': 'account',
   // legacy (kept as redirects)
@@ -55,6 +59,9 @@ export const PATH_TO_TAB: Record<string, NavTab> = {
   '/analytics': 'analytics',
   '/profile': 'profile',
   '/candidate-profile': 'profile',
+  '/resumes': 'resumes',
+  '/resume': 'resumes',
+  '/preferences': 'preferences',
   '/connections': 'connections',
   '/settings': 'profile',
   '/platform-connections': 'connections',
@@ -71,7 +78,9 @@ export const TAB_TITLES: Record<NavTab, string> = {
   schedules: `Automation · Safety & schedule | ${BRAND_NAME}`,
   live_console: `Automation · Live run | ${BRAND_NAME}`,
   analytics: `Insights | ${BRAND_NAME}`,
-  profile: `Settings · Profile & resumes | ${BRAND_NAME}`,
+  profile: `Settings · Profile | ${BRAND_NAME}`,
+  resumes: `Settings · Resumes & answers | ${BRAND_NAME}`,
+  preferences: `Settings · Preferences | ${BRAND_NAME}`,
   connections: `Settings · Platform connections | ${BRAND_NAME}`,
   account: `Settings · Account | ${BRAND_NAME}`,
 };
@@ -122,9 +131,11 @@ export const NAV_GROUPS: NavGroup[] = [
     id: 'settings',
     label: 'Settings',
     entry: 'profile',
-    members: ['profile', 'connections', 'account'],
+    members: ['profile', 'resumes', 'preferences', 'connections', 'account'],
     sections: [
-      { tab: 'profile', label: 'Profile & resumes' },
+      { tab: 'profile', label: 'Profile' },
+      { tab: 'resumes', label: 'Resumes & answers' },
+      { tab: 'preferences', label: 'Preferences' },
       { tab: 'connections', label: 'Platform connections' },
       { tab: 'account', label: 'Account' },
     ],
@@ -184,6 +195,11 @@ export function resolveTab(input: NavTab | string | null | undefined): NavTab {
     case 'profile':
     case 'candidate-profile':
       return 'profile';
+    case 'resumes':
+    case 'resume':
+      return 'resumes';
+    case 'preferences':
+      return 'preferences';
     case 'connections':
     case 'platform-connections':
       return 'connections';

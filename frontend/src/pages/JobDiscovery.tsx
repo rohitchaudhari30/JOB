@@ -291,8 +291,8 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     }
 
     if (!hasResume) {
-      showWarning('Please upload a PDF resume in Candidate Profile before auto-applying.');
-      if (onNavigate) onNavigate('profile');
+      showWarning('Please upload a PDF resume in Settings › Resumes & answers before auto-applying.');
+      if (onNavigate) onNavigate('resumes');
       return;
     }
 

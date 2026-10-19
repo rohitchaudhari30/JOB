@@ -96,6 +96,6 @@ describe('ReadinessBanner', () => {
     fireEvent.click(screen.getByText('Connect LinkedIn'));
     expect(onNavigate).toHaveBeenCalledWith('connections');
     fireEvent.click(screen.getByText('Upload resume'));
-    expect(onNavigate).toHaveBeenCalledWith('profile');
+    expect(onNavigate).toHaveBeenCalledWith('resumes');
   });
 });

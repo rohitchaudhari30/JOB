@@ -27,7 +27,7 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
       <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
         <div>
           <h2 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-            Core Technical Skills Matrix
+            Skills
           </h2>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Skills are compared against job descriptions by the multi-stage matching engine.
@@ -86,6 +86,7 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({
           <span className="text-[11px] font-bold text-slate-400">Exp:</span>
           <input
             type="number"
+            aria-label="Years of experience with this skill"
             min="0"
             max="40"
             value={newSkillYears}

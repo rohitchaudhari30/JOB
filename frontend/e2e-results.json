@@ -36,9 +36,29 @@
    "detail": "http://localhost:4173/settings/connections"
   },
   {
-   "name": "Settings sub-tabs present",
+   "name": "Settings sub-pages present",
    "ok": true,
    "detail": ""
+  },
+  {
+   "name": "Preferences edit shows the sticky save bar",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "moving Preferences -> Profile keeps URL change and does not prompt",
+   "ok": true,
+   "detail": "[]http://localhost:4173/settings/profile"
+  },
+  {
+   "name": "unsaved edit still pending after the move",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "leaving the profile form with unsaved edits still asks first",
+   "ok": true,
+   "detail": "['You have unsaved changes. Leave this page and discard them?']http://localhost:4173/settings/profile"
   },
   {
    "name": "deep link /applications/app1 opens drawer and keeps URL",
@@ -276,6 +296,16 @@
    "detail": "scrollWidth=375 innerWidth=375"
   },
   {
+   "name": "375px no horizontal page scroll on /settings/resumes",
+   "ok": true,
+   "detail": "scrollWidth=375 innerWidth=375"
+  },
+  {
+   "name": "375px no horizontal page scroll on /settings/preferences",
+   "ok": true,
+   "detail": "scrollWidth=375 innerWidth=375"
+  },
+  {
    "name": "375px no horizontal page scroll on /settings/connections",
    "ok": true,
    "detail": "scrollWidth=375 innerWidth=375"
@@ -346,6 +376,16 @@
    "detail": "scrollWidth=768 innerWidth=768"
   },
   {
+   "name": "768px no horizontal page scroll on /settings/resumes",
+   "ok": true,
+   "detail": "scrollWidth=768 innerWidth=768"
+  },
+  {
+   "name": "768px no horizontal page scroll on /settings/preferences",
+   "ok": true,
+   "detail": "scrollWidth=768 innerWidth=768"
+  },
+  {
    "name": "768px no horizontal page scroll on /settings/connections",
    "ok": true,
    "detail": "scrollWidth=768 innerWidth=768"
@@ -390,7 +430,6 @@
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -415,6 +454,15 @@
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
@@ -467,6 +515,14 @@
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -499,6 +555,8 @@
   "/automation/live": [],
   "/insights": [],
   "/settings/profile": [],
+  "/settings/resumes": [],
+  "/settings/preferences": [],
   "/settings/connections": [],
   "/settings/account": []
  }

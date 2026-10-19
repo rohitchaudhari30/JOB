@@ -100,7 +100,18 @@ with sync_playwright() as p:
     check("no pause/stop controls on Dashboard", pg.get_by_role("button", name="Pause").count() == 0 and pg.get_by_role("button", name="Stop").count() == 0)
     pg.get_by_role("button", name="Reconnect").first.click(); pg.wait_for_timeout(500)
     check("Reconnect alert opens Platform connections", pg.url.endswith("/settings/connections"), pg.url)
-    check("Settings sub-tabs present", pg.get_by_role("link", name="Profile & resumes").count() == 1 and pg.get_by_role("link", name="Platform connections").count() == 1)
+    check("Settings sub-pages present", all(pg.get_by_role("link", name=n, exact=True).count() == 1 for n in ["Profile", "Resumes & answers", "Preferences", "Platform connections", "Account"]))
+    # Settings split: edits on one profile page survive moving to another, with no discard prompt.
+    pg.goto(BASE + "/settings/preferences"); pg.wait_for_selector("text=Compensation & notice period", timeout=10000)
+    dialogs = []
+    pg.on("dialog", lambda d: (dialogs.append(d.message), d.accept() if d.type == "beforeunload" else d.dismiss()))
+    pg.get_by_role("spinbutton").first.fill("45"); pg.wait_for_timeout(300)
+    check("Preferences edit shows the sticky save bar", pg.get_by_role("region", name="Save changes").count() == 1)
+    pg.get_by_role("link", name="Profile", exact=True).click(); pg.wait_for_timeout(500)
+    check("moving Preferences -> Profile keeps URL change and does not prompt", pg.url.endswith("/settings/profile") and dialogs == [], str(dialogs) + pg.url)
+    check("unsaved edit still pending after the move", pg.get_by_role("region", name="Save changes").count() == 1)
+    pg.get_by_role("link", name="Platform connections").click(); pg.wait_for_timeout(500)
+    check("leaving the profile form with unsaved edits still asks first", len(dialogs) == 1 and pg.url.endswith("/settings/profile"), str(dialogs) + pg.url)
 
     pg.goto(BASE + "/applications/app1"); pg.wait_for_selector("role=dialog", timeout=10000)
     check("deep link /applications/app1 opens drawer and keeps URL", pg.url.endswith("/applications/app1") and pg.get_by_role("dialog").count() == 1, pg.url)
@@ -117,7 +128,7 @@ with sync_playwright() as p:
     check("/schedules -> campaigns safety deep link", pg.url.endswith("/automation/campaigns/safety"), pg.url)
 
     # axe on each primary page
-    for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]:
+    for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/resumes", "/settings/preferences", "/settings/connections", "/settings/account"]:
         pg.goto(BASE + path); pg.wait_for_timeout(900)
         pg.evaluate(AXE)
         res = pg.evaluate("axe.run(document, {resultTypes:['violations']}).then(r => r.violations.map(v => ({id:v.id, impact:v.impact, n:v.nodes.length})))")
@@ -229,7 +240,7 @@ with sync_playwright() as p:
     # ---- unsaved-changes guard on Profile
     pg = new_page(1280)
     dialogs = []
-    pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    pg.on("dialog", lambda d: (dialogs.append(d.message), d.accept() if d.type == "beforeunload" else d.dismiss()))
     pg.goto(BASE + "/settings/profile"); pg.wait_for_timeout(900)
     pg.get_by_role("link", name="Home").first.click(); pg.wait_for_timeout(300)
     check("profile: no prompt when nothing was edited", not dialogs and pg.url.endswith("/home"), pg.url)
@@ -243,7 +254,7 @@ with sync_playwright() as p:
     # ---- mobile + tablet overflow and drawer
     for w in (375, 768):
         pg = new_page(w, 800)
-        for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]:
+        for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/resumes", "/settings/preferences", "/settings/connections", "/settings/account"]:
             pg.goto(BASE + path); pg.wait_for_timeout(700)
             sw = pg.evaluate("document.documentElement.scrollWidth"); iw = pg.evaluate("window.innerWidth")
             check(f"{w}px no horizontal page scroll on {path}", sw <= iw + 1, f"scrollWidth={sw} innerWidth={iw}")

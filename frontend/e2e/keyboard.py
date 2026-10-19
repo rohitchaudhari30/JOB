@@ -4,7 +4,7 @@ src = open(__file__.replace("keyboard.py", "smoke.py")).read().split("results = 
 exec(src)
 from playwright.sync_api import sync_playwright
 
-PAGES = ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]
+PAGES = ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/resumes", "/settings/preferences", "/settings/connections", "/settings/account"]
 bad = 0
 with sync_playwright() as p:
     b = p.chromium.launch()

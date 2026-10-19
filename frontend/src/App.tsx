@@ -22,6 +22,7 @@ const LiveAutomation = lazy(() => import('./pages/LiveAutomation').then((m) => (
 const AIMatches = lazy(() => import('./pages/AIMatches').then((m) => ({ default: m.AIMatches })));
 const JobDiscovery = lazy(() => import('./pages/JobDiscovery').then((m) => ({ default: m.JobDiscovery })));
 const ApplicationCRM = lazy(() => import('./pages/ApplicationCRM').then((m) => ({ default: m.ApplicationCRM })));
+const PROFILE_VIEW_TABS: ReadonlySet<string> = new Set(['profile', 'resumes', 'preferences']);
 const ProfileManager = lazy(() => import('./pages/ProfileManager').then((m) => ({ default: m.ProfileManager })));
 const PlatformConnections = lazy(() => import('./pages/PlatformConnections').then((m) => ({ default: m.PlatformConnections })));
 const DirectApply = lazy(() => import('./pages/DirectApply').then((m) => ({ default: m.DirectApply })));
@@ -289,7 +290,9 @@ export const App: React.FC = () => {
   const handleTabChange = (target: NavTab | string, replace = false) => {
     const canonicalTab = resolveTab(target);
     // Pages with unsaved edits (Profile) get a chance to cancel the move; redirects (replace) never prompt.
-    if (!replace && canonicalTab !== activeTab && !confirmLeave()) return;
+    // The three profile pages share one form, so moving between them never discards edits.
+    const sameForm = PROFILE_VIEW_TABS.has(canonicalTab) && PROFILE_VIEW_TABS.has(activeTab);
+    if (!replace && canonicalTab !== activeTab && !sameForm && !confirmLeave()) return;
     const targetPath = TAB_TO_PATH[canonicalTab] || '/home';
     setActiveTab(canonicalTab);
 
@@ -369,7 +372,9 @@ export const App: React.FC = () => {
           {(activeTab === 'crm' || (activeTab as string) === 'applications') && <ApplicationCRM onNavigate={handleTabChange} />}
           {activeTab === 'analytics' && <Analytics onNavigate={handleTabChange} />}
           {activeTab === 'account' && <AccountSettings onPasswordChanged={setAuthToken} onAccountDeleted={handleAccountDeleted} />}
-          {activeTab === 'profile' && <ProfileManager onNavigate={handleTabChange} />}
+          {(activeTab === 'profile' || activeTab === 'resumes' || activeTab === 'preferences') && (
+            <ProfileManager onNavigate={handleTabChange} view={activeTab} />
+          )}
           {activeTab === 'schedules' && <DirectApply onNavigate={handleTabChange} initialTab="schedules" />}
           </Suspense>
           </ErrorBoundary>

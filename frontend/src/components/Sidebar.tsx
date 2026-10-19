@@ -14,6 +14,8 @@ export type NavTab =
   | 'dashboard'
   | 'direct_apply'
   | 'profile'
+  | 'resumes'
+  | 'preferences'
   | 'connections'
   | 'discovery'
   | 'matches'

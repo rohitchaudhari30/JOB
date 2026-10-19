@@ -85,7 +85,7 @@ export const SavedAnswersTab: React.FC<SavedAnswersTabProps> = ({ savedAnswers, 
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <div>
               <h2 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Saved Screening Answers Library
+                Saved screening answers
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Pre-saved answers feed directly into the dynamic form engine so portals never prompt you twice.
