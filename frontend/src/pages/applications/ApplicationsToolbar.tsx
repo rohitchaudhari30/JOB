@@ -37,9 +37,9 @@ export const ApplicationsToolbar: React.FC<Props> = ({
         />
         {searchQuery && (
           <button type="button"
-            aria-label="Close"
+            aria-label="Clear search"
             onClick={() => setSearchQuery('')}
-            className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+            className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer hit-area"
           >
             <X className="w-3 h-3" />
           </button>

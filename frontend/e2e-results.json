@@ -415,7 +415,6 @@
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",

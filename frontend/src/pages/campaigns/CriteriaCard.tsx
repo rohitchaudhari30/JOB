@@ -95,9 +95,9 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
               >
                 {role}
                 <button type="button"
-                  aria-label="Close"
+                  aria-label={`Remove role ${role}`}
                   onClick={() => handleRemoveRole(role)}
-                  className="ml-1.5 hover:text-indigo-900 dark:hover:text-white cursor-pointer"
+                  className="ml-1.5 hover:text-indigo-900 dark:hover:text-white cursor-pointer hit-area"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -130,9 +130,9 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
               >
                 {loc}
                 <button type="button"
-                  aria-label="Close"
+                  aria-label={`Remove location ${loc}`}
                   onClick={() => handleRemoveLocation(loc)}
-                  className="ml-1.5 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                  className="ml-1.5 hover:text-slate-900 dark:hover:text-white cursor-pointer hit-area"
                 >
                   <X className="w-3 h-3" />
                 </button>

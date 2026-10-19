@@ -311,6 +311,12 @@ export const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark' : ''} bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200`}>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-indigo-700 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to main content
+      </a>
       <Navbar
         user={user}
         onLogout={handleLogout}
@@ -334,7 +340,7 @@ export const App: React.FC = () => {
           onClose={() => setNavOpen(false)}
         />
 
-        <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8 w-full">
+        <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 md:px-8 md:py-8 w-full focus:outline-none">
           <SectionTabs activeTab={activeTab} onTabChange={handleTabChange} />
           <ErrorBoundary resetKey={activeTab}>
           <Suspense fallback={<div className="p-8 text-sm text-slate-500" role="status">Loading…</div>}>

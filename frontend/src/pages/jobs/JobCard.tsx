@@ -267,10 +267,11 @@ export const JobCard: React.FC<JobCardProps> = ({
             href={job.apply_url}
             target="_blank"
             rel="noreferrer"
-            className="text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center space-x-0.5"
-            title="View Original Job Link"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+            title="View original job posting (opens in a new tab)"
+            aria-label="View original job posting (opens in a new tab)"
           >
-            <ExternalLink className="w-3 h-3" />
+            <ExternalLink className="w-4 h-4" aria-hidden="true" />
           </a>
 
           {isCurrentlyApplying ? (

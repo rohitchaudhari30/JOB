@@ -241,3 +241,35 @@
 .dark\:text-slate-500.dark\:text-slate-500:is(.dark *) {
   color: #94a3b8;
 }
+
+/* Tap targets (WCAG 2.5.8 / mobile guidance): controls are at least 32px tall everywhere and
+   44px on touch screens. Utilities (h-*, min-h-*) still win because this lives in the base layer.
+   Tiny icon buttons that must stay visually small opt in with .hit-area (invisible 32px+ hit zone). */
+@layer base {
+  button:not(.hit-area),
+  select,
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']) {
+    min-height: 2rem;
+  }
+  button:not(.hit-area) {
+    min-width: 2rem;
+  }
+  @media (pointer: coarse) {
+    button:not(.hit-area),
+    select,
+    input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']) {
+      min-height: 2.75rem;
+    }
+  }
+}
+.hit-area {
+  position: relative;
+}
+.hit-area::after {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: max(100%, 2rem);
+  height: max(100%, 2rem);
+  transform: translate(-50%, -50%);
+}
