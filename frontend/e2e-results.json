@@ -106,6 +106,16 @@
    "detail": "http://localhost:4173/jobs"
   },
   {
+   "name": "matches: shows 'Showing 1 of 250' and a Load more button (Q-03)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "matches: Load more does not duplicate a match",
+   "ok": true,
+   "detail": ""
+  },
+  {
    "name": "matches: deep link opens the drawer with the match summary",
    "ok": true,
    "detail": "http://localhost:4173/jobs/matches/job1"
@@ -369,6 +379,8 @@
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",

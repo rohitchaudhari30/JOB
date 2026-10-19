@@ -44,6 +44,12 @@ export const jobsApi = {
     const res = await apiClient.get('/jobs/matches', { params });
     return res.data;
   },
+  // One page of matches plus the total for the same filters (X-Total-Count), so callers can page (Q-03).
+  listMatchesPage: async (params: { min_score?: number; decision?: string; skip?: number; limit?: number }): Promise<{ items: MatchResult[]; total: number }> => {
+    const res = await apiClient.get('/jobs/matches', { params });
+    const header = Number(res.headers?.['x-total-count']);
+    return { items: res.data, total: Number.isFinite(header) ? header : res.data.length };
+  },
   evaluateMatch: async (jobId: string, customWeights?: any): Promise<MatchResult> => {
     const res = await apiClient.post(`/jobs/matches/${jobId}/evaluate`, customWeights || {});
     return res.data;

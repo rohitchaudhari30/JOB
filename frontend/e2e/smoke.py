@@ -66,7 +66,8 @@ def handler(route):
     elif path.startswith("/analytics/weights-tuning"): body = {}
     elif path.startswith("/analytics/ai-status"): body = {}
     elif path.startswith("/analytics"): body = []
-    route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+    extra = {"X-Total-Count": "250"} if path == "/jobs/matches" else {}
+    route.fulfill(status=200, content_type="application/json", body=json.dumps(body), headers=extra)
 
 results = {"checks": [], "console_errors": [], "axe": {}}
 def check(name, ok, detail=""):
@@ -147,6 +148,10 @@ with sync_playwright() as p:
     check("jobs: drawer has no axe violations", res == [], res)
     pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
     check("jobs: Esc closes the drawer and returns to /jobs", pg.get_by_role("dialog").count() == 0 and pg.url.endswith("/jobs"), pg.url)
+    pg.goto(BASE + "/jobs/matches"); pg.wait_for_selector("text=Showing 1 of 250", timeout=10000)
+    check("matches: shows 'Showing 1 of 250' and a Load more button (Q-03)", pg.get_by_role("button", name="Load more").count() == 1)
+    pg.get_by_role("button", name="Load more").click(); pg.wait_for_timeout(600)
+    check("matches: Load more does not duplicate a match", pg.get_by_text("Showing 1 of 250").count() == 1 and pg.get_by_text("Staff Engineer").count() >= 1)
     pg.goto(BASE + "/jobs/matches/job1"); pg.wait_for_selector("role=dialog", timeout=10000)
     dlg = pg.get_by_role("dialog")
     check("matches: deep link opens the drawer with the match summary", dlg.count() == 1 and dlg.get_by_text("Strong fit for the role.").count() >= 1, pg.url)

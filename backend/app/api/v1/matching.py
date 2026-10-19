@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Annotated, Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import (
@@ -134,6 +134,7 @@ def _to_response_dto(m: Any) -> MatchResultResponse:
 
 @router.get("", response_model=List[MatchResultResponse])
 async def list_job_matches(
+    response: Response,
     current_user: Annotated[User, Depends(get_current_user)],
     match_repo: Annotated[SqlAlchemyMatchResultRepository, Depends(get_matching_repository)],
     min_score: Optional[float] = Query(None, ge=0.0, le=100.0),
@@ -148,6 +149,10 @@ async def list_job_matches(
         decision=decision,
         skip=skip,
         limit=limit,
+    )
+    # Total for the same filters, so the UI can say "50 of 312" and offer the next page (Q-03).
+    response.headers["X-Total-Count"] = str(
+        await match_repo.count_by_user(current_user.id, min_score=min_score, decision=decision)
     )
     return [_to_response_dto(m) for m in matches]
 

@@ -6,11 +6,14 @@ import { useJobActions } from '../hooks/useJobActions';
 import { useRecordRoute } from '../hooks/useRecordRoute';
 import { getMatchScore } from '../utils/matchScores';
 import { JobDetailDrawer, matchToDetailModel } from './jobs/JobDetailDrawer';
+import { Button } from '../components/ui/Button';
 import { ReadinessBanner } from '../components/ReadinessBanner';
 import { MatchesHero } from './matches/MatchesHero';
 import { MatchesKpis } from './matches/MatchesKpis';
 import { MatchesToolbar } from './matches/MatchesToolbar';
 import { MatchesGrid } from './matches/MatchesGrid';
+
+const PAGE_SIZE = 100;
 
 interface AIMatchesProps {
   onNavigate?: (tab: any) => void;
@@ -22,6 +25,8 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   const record = useRecordRoute('/jobs/matches', 'matches');
   const [allMatches, setAllMatches] = useState<MatchResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [serverTotal, setServerTotal] = useState(0);
   const [minScoreFilter, setMinScoreFilter] = useState<number>(0);
   const [decisionFilter, setDecisionFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -34,13 +39,31 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   const loadAllMatches = async () => {
     try {
       setLoading(true);
-      // Fetch all matches from backend
-      const data = await api.listMatches({ min_score: 0 });
-      setAllMatches(data);
+      // First page, best score first; the rest comes with "Load more" (Q-03).
+      const page = await api.listMatchesPage({ min_score: 0, skip: 0, limit: PAGE_SIZE });
+      setAllMatches(page.items);
+      setServerTotal(page.total);
     } catch (e) {
       console.error('Failed to load matches:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    try {
+      setLoadingMore(true);
+      const page = await api.listMatchesPage({ min_score: 0, skip: allMatches.length, limit: PAGE_SIZE });
+      // Matches can be re-evaluated between pages: never show the same job twice.
+      setAllMatches((prev) => {
+        const have = new Set(prev.map((m) => m.job_id));
+        return [...prev, ...page.items.filter((m) => !have.has(m.job_id))];
+      });
+      setServerTotal(page.total);
+    } catch (e) {
+      console.error('Failed to load more matches:', e);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -111,8 +134,8 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
     const review = allMatches.filter((m) => m.decision === 'REQUIRE_APPROVAL').length;
     const strong = allMatches.filter((m) => getMatchScore(m) >= 60).length;
     const avg = total > 0 ? Math.round(allMatches.reduce((acc, m) => acc + getMatchScore(m), 0) / total) : 0;
-    return { total, autoApply, review, strong, avg };
-  }, [allMatches]);
+    return { total: Math.max(total, serverTotal), autoApply, review, strong, avg };
+  }, [allMatches, serverTotal]);
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -129,6 +152,17 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
       <MatchesToolbar allMatches={allMatches} filteredAndSortedMatches={filteredAndSortedMatches} minScoreFilter={minScoreFilter} setMinScoreFilter={setMinScoreFilter} decisionFilter={decisionFilter} setDecisionFilter={setDecisionFilter} searchQuery={searchQuery} setSearchQuery={setSearchQuery} sortBy={sortBy} setSortBy={setSortBy} />
 
       <MatchesGrid loading={loading} allMatches={allMatches} filteredAndSortedMatches={filteredAndSortedMatches} isEvaluatingAll={isEvaluatingAll} applyingJobId={applyingJobId} handleEvaluateAll={handleEvaluateAll} handleApplySingle={handleApplySingle} onNavigate={onNavigate} record={record} setDecisionFilter={setDecisionFilter} setMinScoreFilter={setMinScoreFilter} setSearchQuery={setSearchQuery} />
+
+      {allMatches.length < serverTotal && (
+        <div className="flex flex-col items-center gap-2 py-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400" role="status">
+            Showing {allMatches.length} of {serverTotal} matches, best first. Filters and search apply to the matches shown.
+          </p>
+          <Button variant="secondary" size="sm" loading={loadingMore} onClick={() => void loadMore()}>
+            Load more
+          </Button>
+        </div>
+      )}
 
       <JobDetailDrawer
         model={drawerModel}
