@@ -116,6 +116,36 @@
    "detail": ""
   },
   {
+   "name": "account: Settings has an Account tab",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Change password stays disabled until valid",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Change password enables when valid",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Delete needs a password first",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Delete asks for confirmation (dialog)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Esc closes the confirmation and nothing was deleted",
+   "ok": true,
+   "detail": ""
+  },
+  {
    "name": "matches: deep link opens the drawer with the match summary",
    "ok": true,
    "detail": "http://localhost:4173/jobs/matches/job1"
@@ -251,6 +281,11 @@
    "detail": "scrollWidth=375 innerWidth=375"
   },
   {
+   "name": "375px no horizontal page scroll on /settings/account",
+   "ok": true,
+   "detail": "scrollWidth=375 innerWidth=375"
+  },
+  {
    "name": "375px sidebar hidden by default",
    "ok": true,
    "detail": ""
@@ -316,6 +351,11 @@
    "detail": "scrollWidth=768 innerWidth=768"
   },
   {
+   "name": "768px no horizontal page scroll on /settings/account",
+   "ok": true,
+   "detail": "scrollWidth=768 innerWidth=768"
+  },
+  {
    "name": "768px sidebar hidden by default",
    "ok": true,
    "detail": ""
@@ -377,8 +417,13 @@
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -421,6 +466,10 @@
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -451,6 +500,7 @@
   "/automation/live": [],
   "/insights": [],
   "/settings/profile": [],
-  "/settings/connections": []
+  "/settings/connections": [],
+  "/settings/account": []
  }
 }

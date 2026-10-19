@@ -22,6 +22,7 @@ To scale to several processes later, in this order:
 4. Move from SQLite to Postgres.
 
 ## Decisions taken as defaults (change if you disagree)
+- **Account (Q-08):** Settings › Account has change password, download my data and delete my account. Changing the password sets `users.tokens_valid_after`, which ends every other session (access and refresh tokens issued before it are refused; the caller gets a fresh pair). The export is an allow-list of the user's own tables (`user_data_export.py`) without credentials, saved browser sessions or file paths. Deletion needs the password and removes all owned rows and files (PRV-01).
 - **Login tokens (SEC-08):** done. Access token in browser memory only; refresh token in an HttpOnly, SameSite=Strict cookie scoped to `/api/v1/auth` (Secure outside dev). Rotated on every refresh, revoked on logout, foreign `Origin` refused. Needs the app and API on one origin (nginx proxy does this); a cross-origin deployment must also set `CORS_ORIGINS` and revisit SameSite.
 - **Matching weights (DB-07):** stay in `saved_answers` under the intent `matching_weights`. A dedicated table is worth it only when weights get versioned.
 - **Browser stealth (COMP-01):** see `BROWSER_STEALTH_ENABLED` in `app/core/config.py`.

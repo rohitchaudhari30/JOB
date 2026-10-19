@@ -117,7 +117,7 @@ with sync_playwright() as p:
     check("/schedules -> campaigns safety deep link", pg.url.endswith("/automation/campaigns/safety"), pg.url)
 
     # axe on each primary page
-    for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections"]:
+    for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]:
         pg.goto(BASE + path); pg.wait_for_timeout(900)
         pg.evaluate(AXE)
         res = pg.evaluate("axe.run(document, {resultTypes:['violations']}).then(r => r.violations.map(v => ({id:v.id, impact:v.impact, n:v.nodes.length})))")
@@ -152,6 +152,16 @@ with sync_playwright() as p:
     check("matches: shows 'Showing 1 of 250' and a Load more button (Q-03)", pg.get_by_role("button", name="Load more").count() == 1)
     pg.get_by_role("button", name="Load more").click(); pg.wait_for_timeout(600)
     check("matches: Load more does not duplicate a match", pg.get_by_text("Showing 1 of 250").count() == 1 and pg.get_by_text("Staff Engineer").count() >= 1)
+    pg.goto(BASE + "/settings/account"); pg.wait_for_selector("text=Change password", timeout=10000)
+    check("account: Settings has an Account tab", pg.get_by_role("link", name="Account").count() >= 1)
+    check("account: Change password stays disabled until valid", pg.get_by_role("button", name="Change password").is_disabled())
+    pg.get_by_label("Current password").fill("old-pass-1"); pg.get_by_label("New password", exact=True).fill("new-pass-123"); pg.get_by_label("Repeat new password").fill("new-pass-123")
+    check("account: Change password enables when valid", pg.get_by_role("button", name="Change password").is_enabled())
+    check("account: Delete needs a password first", pg.get_by_role("button", name="Delete my account").is_disabled())
+    pg.get_by_label("Your password").fill("x"); pg.get_by_role("button", name="Delete my account").click(); pg.wait_for_selector("role=dialog")
+    check("account: Delete asks for confirmation (dialog)", pg.get_by_role("dialog").count() == 1)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("account: Esc closes the confirmation and nothing was deleted", pg.get_by_role("dialog").count() == 0 and pg.url.endswith("/settings/account"))
     pg.goto(BASE + "/jobs/matches/job1"); pg.wait_for_selector("role=dialog", timeout=10000)
     dlg = pg.get_by_role("dialog")
     check("matches: deep link opens the drawer with the match summary", dlg.count() == 1 and dlg.get_by_text("Strong fit for the role.").count() >= 1, pg.url)
@@ -233,7 +243,7 @@ with sync_playwright() as p:
     # ---- mobile + tablet overflow and drawer
     for w in (375, 768):
         pg = new_page(w, 800)
-        for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections"]:
+        for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]:
             pg.goto(BASE + path); pg.wait_for_timeout(700)
             sw = pg.evaluate("document.documentElement.scrollWidth"); iw = pg.evaluate("window.innerWidth")
             check(f"{w}px no horizontal page scroll on {path}", sw <= iw + 1, f"scrollWidth={sw} innerWidth={iw}")

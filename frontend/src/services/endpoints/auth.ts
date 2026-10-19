@@ -21,6 +21,18 @@ export const authApi = {
       // Offline or already expired: the local sign-out still happens.
     }
   },
+  changePassword: async (current_password: string, new_password: string): Promise<{ access_token: string }> => {
+    const res = await apiClient.post('/auth/change-password', { current_password, new_password });
+    return res.data;
+  },
+  // Raw JSON text of everything stored about the user (credentials and file paths excluded by the server).
+  exportMyData: async (): Promise<Blob> => {
+    const res = await apiClient.get('/auth/me/export', { responseType: 'blob' });
+    return res.data;
+  },
+  deleteAccount: async (password: string): Promise<void> => {
+    await apiClient.delete('/auth/me', { data: { password } });
+  },
   getMe: async (): Promise<User> => {
     const res = await apiClient.get('/auth/me');
     return res.data;

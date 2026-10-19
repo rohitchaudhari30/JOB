@@ -16,6 +16,7 @@ export const TAB_TO_PATH: Record<NavTab, string> = {
   analytics: '/insights',
   profile: '/settings/profile',
   connections: '/settings/connections',
+  account: '/settings/account',
 };
 
 export const PATH_TO_TAB: Record<string, NavTab> = {
@@ -29,6 +30,7 @@ export const PATH_TO_TAB: Record<string, NavTab> = {
   '/insights': 'analytics',
   '/settings/profile': 'profile',
   '/settings/connections': 'connections',
+  '/settings/account': 'account',
   // legacy (kept as redirects)
   '/dashboard': 'dashboard',
   '/': 'dashboard',
@@ -71,6 +73,7 @@ export const TAB_TITLES: Record<NavTab, string> = {
   analytics: `Insights | ${BRAND_NAME}`,
   profile: `Settings · Profile & resumes | ${BRAND_NAME}`,
   connections: `Settings · Platform connections | ${BRAND_NAME}`,
+  account: `Settings · Account | ${BRAND_NAME}`,
 };
 
 export type NavGroupId = 'home' | 'jobs' | 'applications' | 'automation' | 'insights' | 'settings';
@@ -119,10 +122,11 @@ export const NAV_GROUPS: NavGroup[] = [
     id: 'settings',
     label: 'Settings',
     entry: 'profile',
-    members: ['profile', 'connections'],
+    members: ['profile', 'connections', 'account'],
     sections: [
       { tab: 'profile', label: 'Profile & resumes' },
       { tab: 'connections', label: 'Platform connections' },
+      { tab: 'account', label: 'Account' },
     ],
   },
 ];
@@ -183,6 +187,8 @@ export function resolveTab(input: NavTab | string | null | undefined): NavTab {
     case 'connections':
     case 'platform-connections':
       return 'connections';
+    case 'account':
+      return 'account';
     case 'schedules':
     case 'schedule':
       return 'schedules';

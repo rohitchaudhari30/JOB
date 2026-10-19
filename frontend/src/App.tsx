@@ -25,6 +25,7 @@ const ApplicationCRM = lazy(() => import('./pages/ApplicationCRM').then((m) => (
 const ProfileManager = lazy(() => import('./pages/ProfileManager').then((m) => ({ default: m.ProfileManager })));
 const PlatformConnections = lazy(() => import('./pages/PlatformConnections').then((m) => ({ default: m.PlatformConnections })));
 const DirectApply = lazy(() => import('./pages/DirectApply').then((m) => ({ default: m.DirectApply })));
+const AccountSettings = lazy(() => import('./pages/AccountSettings').then((m) => ({ default: m.AccountSettings })));
 const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.Analytics })));
 
 export const App: React.FC = () => {
@@ -154,6 +155,13 @@ export const App: React.FC = () => {
     } finally {
       setAuthLoading(false);
     }
+  };
+
+  const handleAccountDeleted = () => {
+    setAuthToken(null);
+    setUser(null);
+    wsClient.disconnect();
+    showSuccess('Your account and data were deleted.');
   };
 
   const handleLogout = () => {
@@ -354,6 +362,7 @@ export const App: React.FC = () => {
           {activeTab === 'connections' && <PlatformConnections onNavigate={handleTabChange} />}
           {(activeTab === 'crm' || (activeTab as string) === 'applications') && <ApplicationCRM onNavigate={handleTabChange} />}
           {activeTab === 'analytics' && <Analytics onNavigate={handleTabChange} />}
+          {activeTab === 'account' && <AccountSettings onPasswordChanged={setAuthToken} onAccountDeleted={handleAccountDeleted} />}
           {activeTab === 'profile' && <ProfileManager onNavigate={handleTabChange} />}
           {activeTab === 'schedules' && <DirectApply onNavigate={handleTabChange} initialTab="schedules" />}
           </Suspense>
