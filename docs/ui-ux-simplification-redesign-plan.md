@@ -371,7 +371,7 @@ Common to all workspaces: use the shared `PageHeader` (new, §10) with title, on
 
 ### 8.3 Applications
 * **Existing [V]:** KPI cards, chips, search, extra filters, table, drawer, verify modal.
-* **Verified issues:** UX2-03 (client-derived status), too many equal-weight row buttons (UX2-07), deep link needs the row in the loaded page.
+* **Verified issues:** UX2-03 (client-derived status), deep link needs the row in the loaded page. *(Correction found while implementing Phase 2: the row already shows one state-driven primary action, and a "Needs attention" chip already existed; the real defect was the chip count and the list using different rules.)*
 * **Layout [P]:** header → one filter bar (search, status chips, More filters) → table/cards → drawer. One primary action per row by state; others in overflow.
 * **Preserved:** all §6.3; Verify flow untouched.
 * **Backend:** `GET /applications` with additive `display_status` and `needs_attention` (§12); `GET /applications/{id}`.
@@ -668,3 +668,11 @@ Keep the six-area navigation and all URLs; spend the effort inside pages. Do Pha
 | Settings › Platform connections | 5 | 535 | `GET /connections`; `POST /connections/{id}/connect`; `POST /connections/{id}/disconnect`; `POST /connections/{id}/verify` |
 | Settings › Account | 1 | 170 | `DELETE /auth/me`; `GET /auth/me/export`; `POST /auth/change-password` |
 | App shell (sign-in, nav, bell, run chip) | 4 | 972 | `GET /auth/me`; `POST /auth/login`; `POST /auth/logout`; `POST /auth/register` |
+---
+
+## Appendix C. Implementation log
+
+| Phase | Status | What changed | Evidence |
+|---|---|---|---|
+| 1 | Done (local commit) | Tabs, IconButton, PageHeader, OverflowMenu; 320 px overflow fixed; skip link; 32 px / 44 px touch minimum; specific labels on clear/remove buttons | vitest 163; smoke 75/75; keyboard 0 issues; matrix 0 overflow at all 7 widths |
+| 2 | Done (local commit) | Backend `display_status` and `needs_attention` (domain function, DTO fields, stats use the same rule); frontend prefers server values | backend 439 passed / 1 skipped (19 new); vitest 167; smoke 75/75 |

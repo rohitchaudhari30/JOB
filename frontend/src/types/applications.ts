@@ -40,6 +40,10 @@ export interface Application {
   retry_count?: number;
   error_category?: string;
   next_retry_at?: string;
+  /** Server-owned user-facing status (backend domain/applications/display_status.py). */
+  display_status?: string;
+  /** Server-owned: the user must act or look (failed, paused, or submission unverified). */
+  needs_attention?: boolean;
 }
 
 export interface ApplicationStats {

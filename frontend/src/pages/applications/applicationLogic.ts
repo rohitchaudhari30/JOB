@@ -3,72 +3,70 @@ import { DerivedStatus, parseSafeDate, getDayStartTimestamp, getDayEndTimestamp 
 
 /** Pure logic for the Applications page: status derivation, formatting, KPI stats, filtering and sorting. */
 
-export const getDerivedStatus = (app: Application): { label: DerivedStatus; className: string } => {
+const STATUS_CLASSES: Record<DerivedStatus, string> = {
+  Applied:
+    'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40',
+  'Already applied':
+    'bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/40',
+  'Company site':
+    'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/40',
+  'Needs Verification':
+    'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-800/40',
+  Failed:
+    'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/40',
+  Skipped:
+    'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/40',
+  Pending:
+    'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+};
+
+const isDerivedStatus = (v: unknown): v is DerivedStatus =>
+  typeof v === 'string' && Object.prototype.hasOwnProperty.call(STATUS_CLASSES, v);
+
+/**
+ * Fallback only: used when the API response has no `display_status` (older server or a partial
+ * payload). The server value always wins; keep this identical to the backend rule.
+ */
+const deriveStatusLocally = (app: Application): DerivedStatus => {
   const reason = (app.failure_reason || '').toLowerCase();
-
-  if (app.workflow_state === 'APPLIED') {
-    return {
-      label: 'Applied',
-      className:
-        'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40',
-    };
-  }
-
-  if (reason.includes('already applied') || reason.includes('already_applied')) {
-    return {
-      label: 'Already applied',
-      className:
-        'bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/40',
-    };
-  }
-
+  if (app.workflow_state === 'APPLIED') return 'Applied';
+  if (reason.includes('already applied') || reason.includes('already_applied')) return 'Already applied';
   if (
     reason.includes('company site') ||
     reason.includes('external') ||
     reason.includes('redirect') ||
     reason.includes('apply on company')
   ) {
-    return {
-      label: 'Company site',
-      className:
-        'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/40',
-    };
+    return 'Company site';
   }
-
   if (
     app.workflow_state === 'RECONCILIATION_REQUIRED' ||
     app.workflow_state === 'SUBMISSION_UNKNOWN' ||
     reason.includes('reconciliation_required') ||
     reason.includes('submission_uncertain')
   ) {
-    return {
-      label: 'Needs Verification',
-      className:
-        'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-800/40',
-    };
+    return 'Needs Verification';
   }
+  if (app.workflow_state === 'FAILED' || app.workflow_state === 'REJECTED') return 'Failed';
+  if (app.workflow_state === 'SKIPPED') return 'Skipped';
+  return 'Pending';
+};
 
-  if (app.workflow_state === 'FAILED' || app.workflow_state === 'REJECTED') {
-    return {
-      label: 'Failed',
-      className:
-        'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/40',
-    };
-  }
+/** The status chip for an application. Prefers the server-owned `display_status`. */
+export const getDerivedStatus = (app: Application): { label: DerivedStatus; className: string } => {
+  const label = isDerivedStatus(app.display_status) ? app.display_status : deriveStatusLocally(app);
+  return { label, className: STATUS_CLASSES[label] };
+};
 
-  if (app.workflow_state === 'SKIPPED') {
-    return {
-      label: 'Skipped',
-      className:
-        'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/40',
-    };
-  }
-
-  return {
-    label: 'Pending',
-    className:
-      'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
-  };
+/** True when the user must act or look. Prefers the server-owned flag. */
+export const needsAttention = (app: Application): boolean => {
+  if (typeof app.needs_attention === 'boolean') return app.needs_attention;
+  return (
+    app.workflow_state === 'FAILED' ||
+    app.workflow_state === 'RECONCILIATION_REQUIRED' ||
+    app.workflow_state === 'SUBMISSION_UNKNOWN' ||
+    (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_'))
+  );
 };
 
 export const formatExperience = (app: Application): string => {
@@ -181,12 +179,7 @@ export function computeStats(applications: Application[], matchScores: ScoreMap,
     if (isReview) localReviewQueueCount++;
 
     // Needs Attention: Failed, paused on challenge/rate limit, or uncertain submission requiring verification
-    const isAttention =
-      app.workflow_state === 'FAILED' ||
-      app.workflow_state === 'RECONCILIATION_REQUIRED' ||
-      app.workflow_state === 'SUBMISSION_UNKNOWN' ||
-      (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_'));
-    if (isAttention) localNeedsAttentionCount++;
+    if (needsAttention(app)) localNeedsAttentionCount++;
   });
 
   const total = backendStats?.total ?? applications.length;
@@ -251,14 +244,7 @@ export function filterAndSortApplications(applications: Application[], matchScor
       );
     });
   } else if (selectedFilter === 'Needs Attention') {
-    result = result.filter((app) => {
-      return (
-        app.workflow_state === 'FAILED' ||
-        app.workflow_state === 'RECONCILIATION_REQUIRED' ||
-        app.workflow_state === 'SUBMISSION_UNKNOWN' ||
-        (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_'))
-      );
-    });
+    result = result.filter(needsAttention);
   } else if (selectedFilter !== 'All') {
     result = result.filter((app) => getDerivedStatus(app).label === selectedFilter);
   }

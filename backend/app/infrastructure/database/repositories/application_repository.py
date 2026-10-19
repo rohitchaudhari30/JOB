@@ -12,6 +12,7 @@ from app.domain.applications.entities import (
     WorkflowStateEnum,
 )
 from app.domain.applications.repositories import ApplicationRepository
+from app.domain.applications.display_status import NEEDS_ATTENTION_STATES
 from app.infrastructure.database.models.models import (
     ApplicationEventModel,
     ApplicationModel,
@@ -405,7 +406,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             counts.get(WorkflowStateEnum.RECONCILIATION_REQUIRED.value, 0)
             + counts.get(WorkflowStateEnum.SUBMISSION_UNKNOWN.value, 0)
         )
-        needs_attention = failed + paused + reconciliation_required
+        # Same rule as the per-application ``needs_attention`` flag (domain/applications/display_status.py).
+        needs_attention = sum(counts.get(state.value, 0) for state in NEEDS_ATTENTION_STATES)
         # "success_rate" here means: share of all applications that reached the applied state.
         # It is not an interview or offer rate (ANA-05).
         success_rate = round((applied / total) * 100, 1) if total > 0 else 0.0

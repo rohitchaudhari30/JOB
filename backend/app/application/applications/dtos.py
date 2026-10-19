@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
+from app.domain.applications.display_status import derive_display_status, needs_attention as is_attention_state
 from app.domain.applications.entities import WorkflowStateEnum
 
 
@@ -45,6 +46,18 @@ class ApplicationResponseDTO(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     questions: List[ApplicationQuestionDTO] = []
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def display_status(self) -> str:
+        """User-facing status (server-owned; see domain/applications/display_status.py)."""
+        return derive_display_status(self.workflow_state, self.failure_reason)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def needs_attention(self) -> bool:
+        """True when the user must act or look (failed, paused, or submission unverified)."""
+        return is_attention_state(self.workflow_state)
 
 
 class CreateApplicationDTO(BaseModel):
