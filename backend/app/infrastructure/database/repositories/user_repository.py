@@ -19,6 +19,7 @@ class SqlAlchemyUserRepository(UserRepository):
             is_superuser=model.is_superuser,
             created_at=model.created_at,
             updated_at=model.updated_at,
+            tokens_valid_after=model.tokens_valid_after,
         )
 
     async def get_by_id(self, user_id: str) -> User | None:
@@ -32,6 +33,13 @@ class SqlAlchemyUserRepository(UserRepository):
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
+
+    async def set_password(self, user_id: str, hashed_password: str, tokens_valid_after) -> None:
+        """New password hash plus the cut-off that signs every older token out."""
+        model = (await self._session.execute(select(UserModel).where(UserModel.id == user_id))).scalar_one()
+        model.hashed_password = hashed_password
+        model.tokens_valid_after = tokens_valid_after
+        await self._session.flush()
 
     async def create(self, user: User) -> User:
         model = UserModel(

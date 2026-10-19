@@ -36,7 +36,7 @@ from app.application.campaigns.use_cases import (
     StopCampaignExecutionUseCase,
     UpdateCampaignUseCase,
 )
-from app.core.exceptions import EntityNotFoundException, ValidationException
+from app.core.exceptions import ConflictException, EntityNotFoundException, ValidationException
 from app.domain.ai.contracts import AIGateway
 from app.domain.auth.entities import User
 from app.domain.campaigns.entities import Campaign, CampaignExecution
@@ -364,69 +364,38 @@ async def launch_campaign(
     Closing the browser tab after this call cannot leave a started campaign with no run.
     """
     from app.application.automation.orchestrator import orchestrator
-    from app.domain.matching.entities import MatchRule
+    from app.application.campaigns.launch import LaunchOptions, launch_campaign_run
 
     req = req or LaunchCampaignRequest()
-
-    existing = orchestrator.get_active_user_run(current_user.id)
-    if existing and existing.status.value == "RUNNING":
-        raise HTTPException(status_code=409, detail=f"An active automation run [{existing.run_id}] is already in progress.")
-
-    campaign = await campaign_repo.get_by_id(campaign_id)
-    if not campaign or campaign.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Campaign not found.")
-
-    resume_id = req.resume_id or campaign.target_resume_id
-    if resume_id:
-        resume = await resume_repo.get_by_id(resume_id)
-        if not resume or resume.user_id != current_user.id:
-            raise HTTPException(status_code=404, detail=f"Resume [{resume_id}] not found.")
-
-    roles = req.roles or campaign.rule.target_roles or ["Software Engineer"]
-    locations = req.locations or campaign.rule.target_locations or None
-    source_type = (campaign.rule.target_platforms or ["naukri"])[0].lower()
-
-    start_use_case = StartCampaignExecutionUseCase(
-        campaign_repo=campaign_repo,
-        execution_repo=execution_repo,
-        log_repo=log_repo,
-        connection_manager=conn_mgr,
-        connection_repo=conn_repo,
-    )
     try:
-        execution = await start_use_case.execute(campaign_id=campaign_id, user_id=current_user.id, worker_id=worker_id)
+        result = await launch_campaign_run(
+            orchestrator=orchestrator,
+            user_id=current_user.id,
+            campaign_id=campaign_id,
+            options=LaunchOptions(**req.model_dump()),
+            campaign_repo=campaign_repo,
+            execution_repo=execution_repo,
+            log_repo=log_repo,
+            connection_manager=conn_mgr,
+            connection_repo=conn_repo,
+            resume_repo=resume_repo,
+            worker_id=worker_id,
+            pipeline_repos=dict(
+                job_repo=job_repo,
+                source_repo=source_repo,
+                profile_repo=profile_repo,
+                resume_repo=resume_repo,
+                match_repo=match_repo,
+                app_repo=app_repo,
+                user_repo=user_repo,
+                ai_gateway=ai_gateway,
+            ),
+        )
+    except ConflictException as e:
+        raise HTTPException(status_code=409, detail=e.message)
     except EntityNotFoundException as e:
         raise HTTPException(status_code=404, detail=str(e))
-
-    rule = MatchRule(
-        auto_apply_threshold=campaign.rule.auto_apply_threshold,
-        approval_threshold=campaign.rule.review_threshold,
-        max_job_age_hours=req.max_job_age_hours,
-    )
-    session = await orchestrator.start_run(
-        user_id=current_user.id,
-        source_type=source_type,
-        roles=roles,
-        locations=locations,
-        min_salary=None,
-        match_rule=rule,
-        auto_apply_matches=req.auto_apply_matches,
-        max_applications=campaign.safety_policy.daily_application_limit,
-        job_repo=job_repo,
-        source_repo=source_repo,
-        profile_repo=profile_repo,
-        resume_repo=resume_repo,
-        match_repo=match_repo,
-        app_repo=app_repo,
-        user_repo=user_repo,
-        ai_gateway=ai_gateway,
-        headless=req.headless,
-        execution_id=execution.id,
-        campaign_id=campaign_id,
-        worker_id=execution.worker_id or worker_id,
-        resume_id=resume_id,
-    )
-    return {"execution": _to_execution_response(execution), "run_id": session.run_id, "status": session.status.value}
+    return {"execution": _to_execution_response(result.execution), "run_id": result.run_id, "status": result.status}
 
 
 @router.post("/leases/reclaim", response_model=Dict[str, Any])

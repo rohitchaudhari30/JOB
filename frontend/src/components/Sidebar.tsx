@@ -20,7 +20,8 @@ export type NavTab =
   | 'live_console'
   | 'crm'
   | 'analytics'
-  | 'schedules';
+  | 'schedules'
+  | 'account';
 
 interface SidebarProps {
   activeTab: NavTab;

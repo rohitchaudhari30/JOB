@@ -18,7 +18,7 @@ class ScheduleJobConfig(BaseModel):
     locations: List[str] = Field(default_factory=list)
     cron_expression: Optional[str] = None  # e.g., "0 9 * * 1-5" (Mon-Fri at 9 AM)
     interval_minutes: Optional[int] = None  # e.g., 180 (Every 3 hours)
-    auto_apply: bool = True
+    auto_apply: bool = False  # unattended submitting is opt-in; off = discover and match, then wait for approval
     max_applications_per_run: int = 10
     is_active: bool = True
     created_at: Optional[datetime] = None
@@ -70,6 +70,26 @@ class AutomationSchedulerWorker:
                 )
             except Exception as e:
                 logger.warning(f"Could not register lease_reclamation_sweeper: {e}")
+
+        if self._scheduler and not self._scheduler.get_job("campaign_schedule_ticker"):
+            async def _tick():
+                try:
+                    from app.workers.campaign_scheduler import run_due_campaign_schedules
+                    await run_due_campaign_schedules()
+                except Exception as e:
+                    logger.warning(f"Error during campaign schedule tick: {e}")
+
+            try:
+                self._scheduler.add_job(
+                    func=_tick,
+                    trigger=IntervalTrigger(seconds=60),
+                    id="campaign_schedule_ticker",
+                    replace_existing=True,
+                    max_instances=1,
+                    coalesce=True,
+                )
+            except Exception as e:
+                logger.warning(f"Could not register campaign_schedule_ticker: {e}")
 
         if self._scheduler and not self._scheduler.get_job("stale_submitting_sweeper"):
             async def _sweep_stale_submitting():
@@ -141,6 +161,9 @@ class AutomationSchedulerWorker:
                 id=config.schedule_id,
                 replace_existing=True,
                 kwargs=kwargs,
+                max_instances=1,  # a slow run must not overlap itself
+                coalesce=True,  # missed firings collapse into one
+                misfire_grace_time=300,
             )
             self._configs[config.schedule_id] = config
             logger.info(f"Registered scheduled automation job [{config.schedule_id}] for user [{config.user_id}].")
@@ -166,13 +189,47 @@ class AutomationSchedulerWorker:
 
 
 async def scheduled_run_callback(schedule_id: str, user_id: str) -> None:
-    """What a schedule does when it fires.
+    """What a schedule does when it fires: start one run for that user, through the same path as the Start button.
 
-    For now it only records that the schedule fired. Starting a real automation run
-    (which may submit applications) from a timer is a product decision that has not
-    been made yet, so it is deliberately not done here.
+    Safe by construction:
+    * `SCHEDULED_RUNS_ENABLED` is an operator kill switch.
+    * Only one live run per user: if one is already active (or paused), this firing is skipped.
+    * `auto_apply` is off unless the user chose it. Off means discover and match only; matches wait for approval.
+    * With it on, the pipeline still applies the REQUIRE_APPROVAL rule and the daily account/platform caps.
+    * It never raises into the scheduler; every outcome is logged.
     """
-    logger.info("Schedule [%s] fired for user [%s]. No run is started automatically yet.", schedule_id, user_id)
+    from app.core.config import settings
+
+    if not settings.SCHEDULED_RUNS_ENABLED:
+        logger.info("Schedule [%s] fired but scheduled runs are disabled (SCHEDULED_RUNS_ENABLED=false).", schedule_id)
+        return
+    config = scheduler_worker.get_schedule(schedule_id)
+    if config is None or not config.is_active or config.user_id != user_id:
+        logger.warning("Schedule [%s] fired but is unknown, inactive or not owned by [%s]; nothing started.", schedule_id, user_id)
+        return
+    try:
+        from app.application.automation.orchestrator import orchestrator
+        from app.core.exceptions import ConflictException
+
+        live = await orchestrator.get_live_run_id(user_id)
+        if live:
+            logger.info("Schedule [%s] skipped: run [%s] is already active for user [%s].", schedule_id, live, user_id)
+            return
+        session = await orchestrator.start_run(
+            user_id=user_id,
+            source_type=config.source_type,
+            roles=config.roles,
+            locations=config.locations or None,
+            auto_apply_matches=config.auto_apply,
+            max_applications=max(1, min(config.max_applications_per_run, settings.GLOBAL_ACCOUNT_SAFE_CEILING)),
+        )
+        logger.info(
+            "Schedule [%s] started run [%s] for user [%s] (auto_apply=%s).", schedule_id, session.run_id, user_id, config.auto_apply
+        )
+    except ConflictException:
+        logger.info("Schedule [%s] skipped: another run started first for user [%s].", schedule_id, user_id)
+    except Exception as e:  # never break the scheduler loop
+        logger.error("Schedule [%s] could not start a run for user [%s]: %s", schedule_id, user_id, e)
 
 
 async def save_schedule(config: ScheduleJobConfig) -> None:

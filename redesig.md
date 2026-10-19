@@ -602,3 +602,27 @@ Verified: 365 backend tests pass (9 new); mutation checks confirm the race test 
 **Verified:** the full backend suite passes (371 tests). The probe's four problem lists (changed, leaked, vacuous, inconclusive) are all empty.
 
 **Not covered:** jobs catalog and `platform` routes are classified as not per-user records. WebSocket authentication was not probed. The application resume and retry controls are rejected by the state machine (422 and 400) rather than succeeding, so those controls are weak, though the handler is reached. Postgres and the real database are untested.
+
+### 28.13 One live run per user (database guard) and start-up recovery
+
+Migration `0006` adds a partial unique index so a user can have only one run in `STARTING`, `RUNNING` or `PAUSED`. Two start requests arriving together used to both pass the in-memory check. Now the second one gets a 409.
+
+Behaviour changes you should know about:
+- **A paused run now blocks starting another.** The old check only looked at `RUNNING`, so a paused run was ignored and a second run silently replaced it in memory, leaving the first orphaned. The user must now resume or stop the paused run. Both start endpoints (`/automation/start` and campaign launch) check the database as well as memory.
+- **Runs left live by a crash are ended at start-up.** `init_db` marks `STARTING`/`RUNNING`/`PAUSED`/`STOPPING` runs as `FAILED` with "Interrupted: the server restarted while this run was active." Runs only live in one process's memory, so at start-up none can really be running. This assumes a single backend process. With several processes, one restarting would end the others' runs.
+- As with the campaign guard, if the data already holds two live runs for one user the index is skipped with a warning and nothing is changed. The legacy-database path does the same.
+
+Verified: 381 backend tests pass (10 new). Breaking each fix (endpoint check, start-up recovery, the index) made its test fail. Five older unit tests mocked the orchestrator and needed the new call added to their mocks.
+
+Not verified: Postgres. Not done: IMP-053's other half (non-SQLite concurrency review) is not started. Campaign executions left live by a crash are not recovered at start-up (only runs are).
+
+### 28.14 Phase 6: file-size limit finished, wider browser checks, warning traced
+
+**Size limit (done).** All 13 frontend files that were over 400 lines are now under it, and the size baseline is empty, so the limit applies to every file. Analytics, LiveTelemetryPanel, LiveAutomation, Dashboard, PlatformConnections, ApplicationCRM, DirectApply, AIMatches, JobDiscovery, ProfileManager and Navbar were split into section components and hooks. `types/index.ts` and `services/api.ts` were split by domain behind the same import paths (`types/index.ts` re-exports; `api` is the spread of per-area objects in `services/endpoints/`). The split was mechanical, with one deliberate behaviour fix: the live "applying now" tracking on Jobs now reads current values (the old subscription captured stale ones, so its fallback never worked). A unit test now covers the profile completeness logic.
+
+**Browser checks.** `e2e/smoke.py` now has 56 checks (mocked API, no backend): 56/56 pass, axe 0 violations on all 9 pages, and no uncaught page errors. New checks cover the Jobs and Matches drawers (deep link, content, axe, Esc), the six Insights sections and `?view=`, the Platform connections card, and the reconciliation, Rationale, Screenshot and platform login dialogs (63 checks, all pass). The login dialog is checked to stay open on Esc, as designed. The script prints a harmless CancelledError at exit because that test leaves a request unanswered on purpose.
+
+**Warning traced.** The extra pytest warning was ours: the resume upload used a status constant Starlette has deprecated. Now the plain `413`. One third-party warning remains.
+
+**Still not verified:** the OTP dialog (it needs a live WebSocket event); dark mode with real data; Firefox and Safari; screen readers.
+**Not done:** the move of old pages to the shared Button and StatusChip (about 130 raw buttons). It changes sizes and radius everywhere, so it needs your visual review before it is worth doing.

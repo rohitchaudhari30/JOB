@@ -10,11 +10,19 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text, update
+from sqlalchemy.exc import IntegrityError
+
+from app.core.exceptions import ConflictException
 
 from app.core import database
 from app.infrastructure.ai.gateway import MultiTierAIGateway
-from app.infrastructure.database.models.models import AutomationEventModel, AutomationRunModel
+from app.infrastructure.database.models.models import (
+    ACTIVE_EXECUTION_WHERE,
+    AutomationEventModel,
+    AutomationRunModel,
+    CampaignExecutionModel,
+)
 from app.infrastructure.database.repositories.application_repository import SqlAlchemyApplicationRepository
 from app.infrastructure.database.repositories.campaign_repository import (
     SqlAlchemyCampaignExecutionRepository,
@@ -35,6 +43,9 @@ from app.infrastructure.database.repositories.user_repository import SqlAlchemyU
 logger = logging.getLogger("app.infrastructure.run_persistence")
 
 FINISHED_STATUSES = ("COMPLETED", "ABORTED", "FAILED")
+LIVE_STATUSES = ("STARTING", "RUNNING", "PAUSED")
+# Also ended on start-up: a run caught in the middle of stopping when the process died.
+INTERRUPTED_STATUSES = LIVE_STATUSES + ("STOPPING",)
 
 
 @dataclass
@@ -78,7 +89,65 @@ class SqlRunPersistence:
                     last_event_seq=0,
                 )
             )
+            try:
+                await db.commit()
+            except IntegrityError:
+                # The database allows one live run per user (uq_automation_run_one_active_per_user).
+                await db.rollback()
+                raise ConflictException("An active automation run is already in progress.") from None
+
+    async def get_live_run_id(self, user_id: str) -> Optional[str]:
+        """The id of this user's live run (starting, running or paused), if any."""
+        async with database.AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(AutomationRunModel.id)
+                .where(AutomationRunModel.user_id == user_id, AutomationRunModel.status.in_(LIVE_STATUSES))
+                .limit(1)
+            )
+            return result.scalar_one_or_none()
+
+    async def recover_interrupted_runs(self) -> int:
+        """Ends runs a dead process left live, so they cannot block the user's next run.
+
+        Runs only live in this process's memory, so at start-up none can really be running.
+        """
+        async with database.AsyncSessionLocal() as db:
+            result = await db.execute(
+                update(AutomationRunModel)
+                .where(AutomationRunModel.status.in_(INTERRUPTED_STATUSES))
+                .values(
+                    status="FAILED",
+                    error_message="Interrupted: the server restarted while this run was active.",
+                    finished_at=datetime.now(timezone.utc),
+                )
+            )
             await db.commit()
+            count = result.rowcount or 0
+        if count:
+            logger.warning("Ended %s automation run(s) left active by a previous server process.", count)
+        return count
+
+    async def recover_interrupted_executions(self) -> int:
+        """Aborts campaign executions a dead process left active (same single-process assumption as runs).
+
+        Without this, the one-active-execution-per-campaign index would block the campaign from ever
+        starting again after a crash.
+        """
+        async with database.AsyncSessionLocal() as db:
+            result = await db.execute(
+                update(CampaignExecutionModel)
+                .where(text(ACTIVE_EXECUTION_WHERE))
+                .values(
+                    status="ABORTED",
+                    error_message="Interrupted: the server restarted while this execution was active.",
+                    completed_at=datetime.now(timezone.utc),
+                )
+            )
+            await db.commit()
+            count = result.rowcount or 0
+        if count:
+            logger.warning("Aborted %s campaign execution(s) left active by a previous server process.", count)
+        return count
 
     @asynccontextmanager
     async def open_pipeline_repositories(self) -> AsyncIterator[PipelineRepositories]:

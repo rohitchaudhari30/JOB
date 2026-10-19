@@ -22,10 +22,14 @@ To scale to several processes later, in this order:
 4. Move from SQLite to Postgres.
 
 ## Decisions taken as defaults (change if you disagree)
-- **Login tokens (SEC-08):** kept in browser storage for now. Moving to HttpOnly same-site cookies needs the frontend and API on one site plus CSRF protection; plan it when deployment is fixed.
+- **Quick run (Q-04) and mobile (Q-05):** quick run is kept; pages are responsive for full management (no horizontal scroll at 375 and 768 px).
+- **Matching thresholds (AI-03):** unchanged. Re-setting 60/75/90 needs a labelled evaluation (`scripts/evaluate_matching.py`).
+- **Account (Q-08):** Settings › Account has change password, download my data and delete my account. Changing the password sets `users.tokens_valid_after`, which ends every other session (access and refresh tokens issued before it are refused; the caller gets a fresh pair). The export is an allow-list of the user's own tables (`user_data_export.py`) without credentials, saved browser sessions or file paths. Deletion needs the password and removes all owned rows and files (PRV-01).
+- **Login tokens (SEC-08):** done. Access token in browser memory only; refresh token in an HttpOnly, SameSite=Strict cookie scoped to `/api/v1/auth` (Secure outside dev). Rotated on every refresh, revoked on logout, foreign `Origin` refused. Needs the app and API on one origin (nginx proxy does this); a cross-origin deployment must also set `CORS_ORIGINS` and revisit SameSite.
 - **Matching weights (DB-07):** stay in `saved_answers` under the intent `matching_weights`. A dedicated table is worth it only when weights get versioned.
 - **Browser stealth (COMP-01):** see `BROWSER_STEALTH_ENABLED` in `app/core/config.py`.
-- **Schedules:** saved and restored, but firing only logs. Starting unattended auto-apply runs is a product decision.
+- **Campaign schedules (the UI's Safety & schedule tab):** a one-minute ticker (`workers/campaign_scheduler.py`) launches due schedules through `application/campaigns/launch.py`, the same code as the Run button. Enabling a schedule arms it (first run at its next slot, never immediately); the slot is advanced before launching so failures are not retried every minute; slots over 1 h late (downtime) and slots outside operating hours or while a run is live are skipped. Enabling the schedule is the user's consent to the same auto-apply behaviour as the Run button (still bounded by daily/hourly limits, operating hours and the approval band).
+- **API schedules `/automation/schedules` (Q-02):** a firing schedule starts one run for its owner through the same orchestrator path as the Start button. Skipped if the user already has a live run. `auto_apply` is **off by default** (discover and match only; matches wait for approval); when the user turns it on the pipeline still applies REQUIRE_APPROVAL and the daily caps. `SCHEDULED_RUNS_ENABLED=false` is an operator kill switch. Misfires coalesce, no overlap. Like run recovery, this assumes one backend process.
 
 ## Duplicates: what each one is and who owns it
 | Item | Decision |
@@ -39,7 +43,7 @@ To scale to several processes later, in this order:
 | DUP-07 profile write paths | `PUT /profile` now saves lists too; the granular endpoints remain for small edits. |
 | DUP-08 experience months | `total_experience_months` is entered by the user; it is not derived from the experience list. |
 | DUP-09 workflow vs outcome | `workflow_state` is set by the system; `outcome_status` by the user or platform events; `application_events` is the history of both. |
-| DUP-10 run vs execution | The run is the live view, the campaign execution is the stored owner of counters; they are synchronised when a run is paused, resumed or stopped. |
+| DUP-10 run vs execution | The run is the live view, the campaign execution is the stored owner of counters; they are synchronised only through `application/automation/execution_sync.py` (pause/resume/stop and the final sync). At start-up, executions and runs a dead process left active are ended (`recover_interrupted_*`). |
 | DUP-11 apply use case | One factory (`app/application/applications/factory.py`). |
 | DUP-12 repeated UI pieces | Helpers moved out of the applications page; further shared components are future work. |
 | DUP-13 encryptor alias | One name: `session_encryptor`. |

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.models.models import (
@@ -205,6 +205,12 @@ async def seed_a(client: AsyncClient, db_session: AsyncSession, monkeypatch, tmp
                                     workflow_state="RECONCILIATION_REQUIRED", outcome_status="NOT_SUBMITTED", retry_count=0,
                                     screenshot_file_path=f"screenshots/{shot}"))
     run_id = f"run_{uuid.uuid4().hex[:10]}"
+    # The database allows one live run per user, so retire the one an earlier route left behind.
+    await db_session.execute(
+        update(AutomationRunModel)
+        .where(AutomationRunModel.user_id == user_a, AutomationRunModel.status.in_(("STARTING", "RUNNING", "PAUSED")))
+        .values(status="COMPLETED")
+    )
     db_session.add(AutomationRunModel(id=run_id, user_id=user_a, status="RUNNING"))
     # The run routes act on the in-memory session (not the DB row), so give A a live one.
     from app.application.automation.orchestrator import AutomationSession, orchestrator

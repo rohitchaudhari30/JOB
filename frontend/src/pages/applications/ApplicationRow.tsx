@@ -126,14 +126,14 @@ export const ApplicationRow: React.FC<Props> = ({
           {app.workflow_state === 'APPROVAL_REQUIRED' ||
           (typeof matchScore === 'number' && matchScore >= 65 && matchScore < 80 && app.workflow_state !== 'APPLIED') ? (
             <div className="inline-flex items-center justify-end space-x-2">
-              <button
+              <button type="button"
                 onClick={() => onApprove(app.id)}
                 className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 cursor-pointer"
                 title="Approve and execute application"
               >
                 Approve
               </button>
-              <button
+              <button type="button"
                 onClick={() => onReject(app.id)}
                 className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] font-semibold transition-colors cursor-pointer"
                 title="Dismiss from review queue"
@@ -143,7 +143,7 @@ export const ApplicationRow: React.FC<Props> = ({
             </div>
           ) : statusObj.label === 'Needs Verification' ? (
             <div className="inline-flex items-center justify-end space-x-2">
-              <button
+              <button type="button"
                 onClick={() => onReconcile(app)}
                 className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 cursor-pointer flex items-center space-x-1"
                 title="Inspect submission and verify outcome"
@@ -151,7 +151,7 @@ export const ApplicationRow: React.FC<Props> = ({
                 <AlertCircle className="w-3 h-3" />
                 <span>Verify Outcome</span>
               </button>
-              <button
+              <button type="button"
                 onClick={() => onToggleReason(app.id)}
                 aria-expanded={isExpanded}
                 className="text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
@@ -166,7 +166,7 @@ export const ApplicationRow: React.FC<Props> = ({
             </div>
           ) : statusObj.label === 'Failed' || (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_')) ? (
             <div className="inline-flex items-center justify-end space-x-2">
-              <button
+              <button type="button"
                 onClick={() => onRetry(app)}
                 className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] shadow-2xs transition-transform active:scale-95 cursor-pointer flex items-center space-x-1"
                 title="Retry application submission"
@@ -174,7 +174,7 @@ export const ApplicationRow: React.FC<Props> = ({
                 <RotateCcw className="w-3 h-3" />
                 <span>Retry</span>
               </button>
-              <button
+              <button type="button"
                 onClick={() => onToggleReason(app.id)}
                 aria-expanded={isExpanded}
                 className="text-xs font-semibold text-rose-700 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
@@ -189,7 +189,7 @@ export const ApplicationRow: React.FC<Props> = ({
             </div>
           ) : statusObj.label === 'Skipped' ? (
             <div className="inline-flex items-center justify-end space-x-2">
-              <button
+              <button type="button"
                 onClick={() => onToggleReason(app.id)}
                 aria-expanded={isExpanded}
                 className="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 flex items-center space-x-0.5 cursor-pointer transition-colors"
@@ -205,7 +205,7 @@ export const ApplicationRow: React.FC<Props> = ({
           ) : applyUrl ? (
             <div className="inline-flex items-center justify-end space-x-2.5">
               {Array.isArray(app.questions) && app.questions.length > 0 && (
-                <button
+                <button type="button"
                   onClick={() => onToggleReason(app.id)}
                   className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center space-x-0.5 cursor-pointer"
                   title="View answered screening questions"
@@ -224,7 +224,7 @@ export const ApplicationRow: React.FC<Props> = ({
               </a>
             </div>
           ) : Array.isArray(app.questions) && app.questions.length > 0 ? (
-            <button
+            <button type="button"
               onClick={() => onToggleReason(app.id)}
               className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center space-x-0.5 cursor-pointer"
               title="View answered screening questions"
@@ -247,7 +247,7 @@ export const ApplicationRow: React.FC<Props> = ({
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>Error Diagnostics &amp; Audit Trace</span>
                 </div>
-                <button aria-label="Close"
+                <button type="button" aria-label="Close"
                   onClick={() => onToggleReason(null)}
                   className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                 >
@@ -277,7 +277,7 @@ export const ApplicationRow: React.FC<Props> = ({
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
                 <div className="flex items-center space-x-3">
                   {app.screenshot_file_path && (
-                    <button
+                    <button type="button"
                       onClick={() => onScreenshot(app.id, app.screenshot_file_path!)}
                       className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer"
                     >

@@ -9,11 +9,12 @@ import { BRAND_NAME, BRAND_SUFFIX } from './utils/brand';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
 import { User } from './types';
-import { api, setAuthToken } from './services/api';
+import { api, setAuthToken, restoreSession } from './services/api';
 import { wsClient } from './services/ws';
 import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
 import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES, needsCanonicalRedirect } from './utils/navigation';
+import { Button } from './components/ui/Button';
 
 // Pages load on demand so the first screen downloads less code (FE-03).
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
@@ -24,6 +25,7 @@ const ApplicationCRM = lazy(() => import('./pages/ApplicationCRM').then((m) => (
 const ProfileManager = lazy(() => import('./pages/ProfileManager').then((m) => ({ default: m.ProfileManager })));
 const PlatformConnections = lazy(() => import('./pages/PlatformConnections').then((m) => ({ default: m.PlatformConnections })));
 const DirectApply = lazy(() => import('./pages/DirectApply').then((m) => ({ default: m.DirectApply })));
+const AccountSettings = lazy(() => import('./pages/AccountSettings').then((m) => ({ default: m.AccountSettings })));
 const Analytics = lazy(() => import('./pages/Analytics').then((m) => ({ default: m.Analytics })));
 
 export const App: React.FC = () => {
@@ -38,6 +40,7 @@ export const App: React.FC = () => {
   const [authFullName, setAuthFullName] = useState('');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  const [booting, setBooting] = useState(true);
 
   // URL & Browser History Synchronization
   useEffect(() => {
@@ -66,11 +69,11 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      loadCurrentUser();
-    }
+    // Signed in already? The refresh cookie gives a fresh in-memory access token.
+    void (async () => {
+      if (await restoreSession()) await loadCurrentUser();
+      setBooting(false);
+    })();
 
     const handleAuthExpired = () => {
       setUser(null);
@@ -106,13 +109,13 @@ export const App: React.FC = () => {
     try {
       if (isRegisterMode) {
         const res = await api.register(authEmail, authPassword, authFullName);
-        setAuthToken(res.access_token, res.refresh_token);
+        setAuthToken(res.access_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Account created successfully!');
       } else {
         const res = await api.login(authEmail, authPassword);
-        setAuthToken(res.access_token, res.refresh_token);
+        setAuthToken(res.access_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Welcome back!');
@@ -130,7 +133,7 @@ export const App: React.FC = () => {
       // Try login first
       try {
         const res = await api.login('demo.engineer@example.com', 'SecurePassword123!');
-        setAuthToken(res.access_token, res.refresh_token);
+        setAuthToken(res.access_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Logged in as demo user!');
@@ -142,7 +145,7 @@ export const App: React.FC = () => {
           'SecurePassword123!',
           'Lead Automation Engineer'
         );
-        setAuthToken(regRes.access_token, regRes.refresh_token);
+        setAuthToken(regRes.access_token);
         const u = await api.getMe();
         setUser(u);
         showSuccess('Demo user registered and logged in!');
@@ -154,6 +157,13 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleAccountDeleted = () => {
+    setAuthToken(null);
+    setUser(null);
+    wsClient.disconnect();
+    showSuccess('Your account and data were deleted.');
+  };
+
   const handleLogout = () => {
     void api.logout(); // revoke tokens on the server; runs before we clear them below
     setAuthToken(null);
@@ -161,6 +171,14 @@ export const App: React.FC = () => {
     wsClient.disconnect();
     showSuccess('Logged out successfully');
   };
+
+  if (booting) {
+    return (
+      <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-sm text-slate-500">
+        Loading…
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -226,11 +244,8 @@ export const App: React.FC = () => {
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 transition-transform active:scale-95 disabled:opacity-50 mt-2 cursor-pointer"
-            >
+            <Button variant="primary" size="sm" type="submit" className="w-full"
+              disabled={authLoading}>
               <LogIn className="w-4 h-4" />
               <span>
                 {authLoading
@@ -239,7 +254,7 @@ export const App: React.FC = () => {
                   ? 'Create Free Account'
                   : 'Sign In to Console'}
               </span>
-            </button>
+            </Button>
 
             {/* Demo shortcut exists only in local dev builds (SEC-02). */}
             {import.meta.env.DEV && (
@@ -347,6 +362,7 @@ export const App: React.FC = () => {
           {activeTab === 'connections' && <PlatformConnections onNavigate={handleTabChange} />}
           {(activeTab === 'crm' || (activeTab as string) === 'applications') && <ApplicationCRM onNavigate={handleTabChange} />}
           {activeTab === 'analytics' && <Analytics onNavigate={handleTabChange} />}
+          {activeTab === 'account' && <AccountSettings onPasswordChanged={setAuthToken} onAccountDeleted={handleAccountDeleted} />}
           {activeTab === 'profile' && <ProfileManager onNavigate={handleTabChange} />}
           {activeTab === 'schedules' && <DirectApply onNavigate={handleTabChange} initialTab="schedules" />}
           </Suspense>

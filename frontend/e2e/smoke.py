@@ -21,7 +21,7 @@ AXE = open(os.environ["AXE_PATH"]).read()
 USER = {"id": "u1", "email": "demo@example.com", "full_name": "Demo User"}
 APP = {"id": "app1", "user_id": "u1", "job_id": "job1", "idempotency_key": "k", "workflow_state": "RECONCILIATION_REQUIRED",
        "outcome_status": "NOT_SUBMITTED", "created_at": "2026-10-01T10:00:00Z", "questions": [], "job_title": "Staff Engineer",
-       "company": "Acme", "platform": "linkedin", "match_score": 91}
+       "company": "Acme", "platform": "linkedin", "match_score": 91, "screenshot_file_path": "shots/app1.png"}
 OVERVIEW = {"today_applied_count": 3, "effective_daily_limit": 25, "quota_remaining": 22, "quota_percentage": 12.0,
   "active_run": {"is_running": False, "run_id": None, "campaign_id": None, "campaign_name": None, "status": "IDLE",
                  "current_job_title": None, "current_platform": None, "progress_percentage": 0.0},
@@ -29,16 +29,34 @@ OVERVIEW = {"today_applied_count": 3, "effective_daily_limit": 25, "quota_remain
                        "action_label": "Reconnect", "action_url": "/settings/connections", "severity": "HIGH"}],
   "readiness": [{"key": "platform", "title": "Job Platform Connected", "is_ready": False, "action_label": "Connect Portal", "action_url": "/settings/connections"}],
   "top_matches": [{"job_id": "job1", "title": "Staff Engineer", "company": "Acme", "location": "Remote", "platform": "LinkedIn", "match_score": 94.5, "decision": "AUTO_APPLY"}]}
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082")
+JOB = {"id": "job1", "source_id": "s1", "source_type": "linkedin", "external_job_id": "x1", "title": "Staff Engineer", "company": "Acme",
+       "location": "Remote", "apply_url": "https://example.com/apply", "raw_description": "Build things.", "is_active": True,
+       "posted_at": "2026-10-15T10:00:00Z", "freshness_bucket": "LAST_7_DAYS"}
+MATCH = {"id": "m1", "user_id": "u1", "job_id": "job1", "match_score": 88, "overall_score": 88, "hard_filter_passed": True,
+         "skill_match_score": 80, "semantic_score": 70, "reasoning_summary": "Strong fit for the role.", "matched_skills": ["python"],
+         "missing_skills": ["go"], "decision": "REQUIRE_APPROVAL", "ai_provider_used": "test", "job": JOB, "job_title": "Staff Engineer",
+         "company": "Acme", "location": "Remote"}
 STATS = {"total": 1, "applied": 0, "paused": 0, "failed": 0, "approval_required": 0, "reconciliation_required": 1, "needs_attention": 1}
 
 def handler(route):
     req = route.request
     path = req.url.split("/api/v1", 1)[1].split("?")[0]
     m = req.method
+    if path == "/auth/refresh" and m == "POST":
+        return route.fulfill(status=200, content_type="application/json", body=json.dumps({"id": "u1", "email": "a@b.c", "access_token": "mem-token"}))
+    if path.endswith("/screenshot"):
+        return route.fulfill(status=200, content_type="image/png", body=PNG)
+    if path.endswith("/connect"):
+        return  # never answered: keeps the "waiting for login" dialog open
     body = []
     if path == "/auth/me": body = USER
     elif path == "/automation/active": body = {"status": "IDLE"}
     elif path == "/dashboard/overview": body = OVERVIEW
+    elif path == "/jobs/matches": body = [MATCH]
+    elif path == "/jobs": body = {"items": [JOB], "total": 1}
+    elif path == "/jobs/discover": body = {}
+    elif path == "/resumes": body = []
     elif path == "/applications": body = [APP]
     elif path == "/applications/stats": body = STATS
     elif path == "/applications/applied-map": body = {}
@@ -48,7 +66,8 @@ def handler(route):
     elif path.startswith("/analytics/weights-tuning"): body = {}
     elif path.startswith("/analytics/ai-status"): body = {}
     elif path.startswith("/analytics"): body = []
-    route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+    extra = {"X-Total-Count": "250"} if path == "/jobs/matches" else {}
+    route.fulfill(status=200, content_type="application/json", body=json.dumps(body), headers=extra)
 
 results = {"checks": [], "console_errors": [], "axe": {}}
 def check(name, ok, detail=""):
@@ -59,7 +78,6 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     def new_page(w, h=900):
         ctx = b.new_context(viewport={"width": w, "height": h})
-        ctx.add_init_script("localStorage.setItem('auth_token','t'); localStorage.setItem('refresh_token','r');")
         ctx.route("**/api/v1/**", handler)
         pg = ctx.new_page()
         pg.on("console", lambda msg: results["console_errors"].append(f"{w}px {msg.type}: {msg.text[:160]}") if msg.type == "error" else None)
@@ -72,6 +90,12 @@ with sync_playwright() as p:
     check("legacy /dashboard redirects to /home", pg.url.endswith("/home"), pg.url)
     nav_items = pg.locator("nav[aria-label='Primary navigation'] a").all_inner_texts()
     check("sidebar has 6 items", len(nav_items) == 6, nav_items)
+    check("tokens are not kept in browser storage (SEC-08)", pg.evaluate("[...Object.keys(localStorage), ...Object.keys(sessionStorage)].filter(k => /token|auth/i.test(k)).length") == 0 and "mem-token" not in pg.content())
+    ctx2 = b.new_context(viewport={"width": 1280, "height": 900})
+    ctx2.route("**/api/v1/**", lambda r: r.fulfill(status=401, content_type="application/json", body='{"detail":"x"}'))
+    out = ctx2.new_page(); out.goto(BASE + "/home"); out.wait_for_selector("text=Sign In to Console", timeout=10000)
+    check("signed-out visit (no refresh cookie) shows the login page", out.get_by_text("Sign In to Console").count() >= 1)
+    ctx2.close()
     check("sidebar footer is honest when idle", pg.locator("text=No active run").count() >= 1 and pg.locator("text=Autopilot Active").count() == 0)
     check("no pause/stop controls on Dashboard", pg.get_by_role("button", name="Pause").count() == 0 and pg.get_by_role("button", name="Stop").count() == 0)
     pg.get_by_role("button", name="Reconnect").first.click(); pg.wait_for_timeout(500)
@@ -93,7 +117,7 @@ with sync_playwright() as p:
     check("/schedules -> campaigns safety deep link", pg.url.endswith("/automation/campaigns/safety"), pg.url)
 
     # axe on each primary page
-    for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections"]:
+    for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]:
         pg.goto(BASE + path); pg.wait_for_timeout(900)
         pg.evaluate(AXE)
         res = pg.evaluate("axe.run(document, {resultTypes:['violations']}).then(r => r.violations.map(v => ({id:v.id, impact:v.impact, n:v.nodes.length})))")
@@ -113,6 +137,95 @@ with sync_playwright() as p:
     check("modal: Esc closes it", dlg.count() == 0)
     pg.context.close()
 
+    # ---- Jobs and Matches detail drawers (shared JobDetailDrawer)
+    pg = new_page(1280)
+    pg.goto(BASE + "/jobs/job1"); pg.wait_for_selector("role=dialog", timeout=10000)
+    dlg = pg.get_by_role("dialog")
+    check("jobs: deep link /jobs/job1 opens the drawer", dlg.count() == 1 and pg.url.endswith("/jobs/job1"), pg.url)
+    check("jobs: drawer shows the job title and company", dlg.get_by_text("Staff Engineer").count() >= 1 and dlg.get_by_text("Acme").count() >= 1)
+    pg.evaluate(AXE)
+    res = pg.evaluate("axe.run(document.querySelector('[role=dialog]'), {resultTypes:['violations']}).then(r => r.violations.map(v => v.id))")
+    check("jobs: drawer has no axe violations", res == [], res)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("jobs: Esc closes the drawer and returns to /jobs", pg.get_by_role("dialog").count() == 0 and pg.url.endswith("/jobs"), pg.url)
+    pg.goto(BASE + "/jobs/matches"); pg.wait_for_selector("text=Showing 1 of 250", timeout=10000)
+    check("matches: shows 'Showing 1 of 250' and a Load more button (Q-03)", pg.get_by_role("button", name="Load more").count() == 1)
+    pg.get_by_role("button", name="Load more").click(); pg.wait_for_timeout(600)
+    check("matches: Load more does not duplicate a match", pg.get_by_text("Showing 1 of 250").count() == 1 and pg.get_by_text("Staff Engineer").count() >= 1)
+    pg.goto(BASE + "/settings/account"); pg.wait_for_selector("text=Change password", timeout=10000)
+    check("account: Settings has an Account tab", pg.get_by_role("link", name="Account").count() >= 1)
+    check("account: Change password stays disabled until valid", pg.get_by_role("button", name="Change password").is_disabled())
+    pg.get_by_label("Current password").fill("old-pass-1"); pg.get_by_label("New password", exact=True).fill("new-pass-123"); pg.get_by_label("Repeat new password").fill("new-pass-123")
+    check("account: Change password enables when valid", pg.get_by_role("button", name="Change password").is_enabled())
+    check("account: Delete needs a password first", pg.get_by_role("button", name="Delete my account").is_disabled())
+    pg.get_by_label("Your password").fill("x"); pg.get_by_role("button", name="Delete my account").click(); pg.wait_for_selector("role=dialog")
+    check("account: Delete asks for confirmation (dialog)", pg.get_by_role("dialog").count() == 1)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("account: Esc closes the confirmation and nothing was deleted", pg.get_by_role("dialog").count() == 0 and pg.url.endswith("/settings/account"))
+    pg.goto(BASE + "/jobs/matches/job1"); pg.wait_for_selector("role=dialog", timeout=10000)
+    dlg = pg.get_by_role("dialog")
+    check("matches: deep link opens the drawer with the match summary", dlg.count() == 1 and dlg.get_by_text("Strong fit for the role.").count() >= 1, pg.url)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("matches: Esc closes the drawer", pg.get_by_role("dialog").count() == 0 and pg.url.endswith("/jobs/matches"), pg.url)
+    pg.context.close()
+
+    # ---- Applications: the reconciliation dialog opens from the row and closes with Esc
+    pg = new_page(1280)
+    pg.goto(BASE + "/applications"); pg.wait_for_selector("text=Staff Engineer", timeout=10000)
+    pg.get_by_role("button", name="Verify Outcome").first.click(); pg.wait_for_timeout(300)
+    dlg = pg.get_by_role("dialog")
+    check("applications: Verify Outcome opens a dialog", dlg.count() == 1 and dlg.is_visible())
+    pg.evaluate(AXE)
+    res = pg.evaluate("axe.run(document.querySelector('[role=dialog]'), {resultTypes:['violations']}).then(r => r.violations.map(v => v.id))")
+    check("applications: reconciliation dialog has no axe violations", res == [], res)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+    check("applications: Esc closes the reconciliation dialog", pg.get_by_role("dialog").count() == 0)
+    pg.context.close()
+
+    # ---- Rationale and Screenshot dialogs, and the platform login dialog
+    pg = new_page(1280)
+    pg.goto(BASE + "/applications"); pg.wait_for_selector("text=Staff Engineer", timeout=10000)
+    pg.get_by_role("button", name="Why?").first.click(); pg.wait_for_timeout(300)
+    check("rationale: Why? opens a dialog with its title", pg.get_by_role("dialog").count() == 1 and pg.get_by_text("decision rationale").count() >= 1)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+    check("rationale: Esc closes it", pg.get_by_role("dialog").count() == 0)
+    pg.locator("tr", has_text="Staff Engineer").locator("button[aria-expanded]").first.click(); pg.wait_for_timeout(300)
+    shot = pg.get_by_role("button", name="View Screenshot Artifact")
+    shot.first.click(); pg.wait_for_timeout(500)
+    check("screenshot: opens a dialog with the image", pg.get_by_role("dialog").count() == 1 and pg.get_by_role("dialog").locator("img").count() == 1)
+    pg.evaluate(AXE)
+    res = pg.evaluate("axe.run(document.querySelector('[role=dialog]'), {resultTypes:['violations']}).then(r => r.violations.map(v => v.id))")
+    check("screenshot: dialog has no axe violations", res == [], res)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
+    check("screenshot: Esc closes it", pg.get_by_role("dialog").count() == 0)
+    pg.context.close()
+
+    pg = new_page(1280)
+    pg.goto(BASE + "/settings/connections"); pg.wait_for_timeout(900)
+    pg.get_by_role("button", name="Connect").first.click(); pg.wait_for_timeout(500)
+    dlg = pg.get_by_role("dialog")
+    check("login dialog: opens while waiting for the portal login", dlg.count() == 1 and dlg.get_by_text("Awaiting login completion").count() == 1)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("login dialog: Esc does NOT close it (not dismissible)", pg.get_by_role("dialog").count() == 1)
+    pg.context.close()
+
+    # ---- Insights: one section at a time, kept in the URL
+    pg = new_page(1280)
+    pg.goto(BASE + "/insights"); pg.wait_for_selector("role=tablist", timeout=10000)
+    tabs = pg.get_by_role("tab").all_inner_texts()
+    check("insights: six sections", len(tabs) == 6, tabs)
+    pg.get_by_role("tab", name="Sources").click(); pg.wait_for_timeout(300)
+    check("insights: choosing Sources updates the URL and selection", "view=sources" in pg.url and pg.get_by_role("tab", name="Sources").get_attribute("aria-selected") == "true", pg.url)
+    pg.goto(BASE + "/insights?view=scoring"); pg.wait_for_timeout(800)
+    check("insights: ?view=scoring opens that section", pg.get_by_role("tab", name="Scoring weights").get_attribute("aria-selected") == "true")
+    pg.context.close()
+
+    # ---- Platform connections: cards render with their action
+    pg = new_page(1280)
+    pg.goto(BASE + "/settings/connections"); pg.wait_for_timeout(900)
+    check("connections: a platform card renders with a Connect action", pg.get_by_text("LinkedIn").count() >= 1 and pg.get_by_role("button", name="Connect").count() >= 1)
+    pg.context.close()
+
     # ---- unsaved-changes guard on Profile
     pg = new_page(1280)
     dialogs = []
@@ -130,7 +243,7 @@ with sync_playwright() as p:
     # ---- mobile + tablet overflow and drawer
     for w in (375, 768):
         pg = new_page(w, 800)
-        for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections"]:
+        for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]:
             pg.goto(BASE + path); pg.wait_for_timeout(700)
             sw = pg.evaluate("document.documentElement.scrollWidth"); iw = pg.evaluate("window.innerWidth")
             check(f"{w}px no horizontal page scroll on {path}", sw <= iw + 1, f"scrollWidth={sw} innerWidth={iw}")
@@ -149,3 +262,7 @@ with sync_playwright() as p:
 json.dump(results, open(os.environ.get("RESULTS_PATH", "e2e-results.json"), "w"), indent=1)
 fails = [c for c in results["checks"] if not c["ok"]]
 print(f"\n{len(results['checks'])-len(fails)}/{len(results['checks'])} checks passed; console errors: {len(results['console_errors'])}")
+page_errors = [e for e in results["console_errors"] if "pageerror" in e]
+print(f"uncaught page errors: {len(page_errors)}")
+for e in sorted(set(page_errors))[:10]:
+    print("  ", e)

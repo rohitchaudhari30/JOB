@@ -1,5 +1,6 @@
 import React from 'react';
 import { Compass, Sparkles } from 'lucide-react';
+import { Button } from '../../components/ui/Button';
 
 interface DiscoveryControlsProps {
   experience: number;
@@ -125,18 +126,16 @@ export const DiscoveryControls: React.FC<DiscoveryControlsProps> = ({
 
         {/* Discover Button */}
         <div className="md:col-span-2">
-          <button
+          <Button variant="primary" size="sm" className="w-full h-10"
             onClick={handleTriggerDiscovery}
-            disabled={isDiscovering}
-            className="w-full h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+            disabled={isDiscovering}>
             <Sparkles className={`w-3.5 h-3.5 ${isDiscovering ? 'animate-spin' : ''}`} />
             <span className="truncate">
               {isDiscovering
                 ? `Scanning ${platform === 'linkedin' ? 'LinkedIn' : platform === 'naukri' ? 'Naukri' : platform}...`
                 : 'Find Fresh Jobs'}
             </span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

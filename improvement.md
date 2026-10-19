@@ -426,7 +426,7 @@ The full previous text is available in git history (`git show ed4ae9a:improvemen
 | IMP-050 | Pin `pypdf` and `python-docx` versions | unpinned in requirements | Confirmed, S |
 | IMP-051 | Align `campaign_safety_policies.timezone` server_default with model | one drift found | Confirmed, S |
 | IMP-052 | DB-level guard for "one active run/execution" | none exists; app-level only | Conditional, M (migration) |
-| IMP-053 | Verify concurrency on a non-SQLite engine before any move off SQLite | only SQLite driver installed | Conditional |
+| IMP-053 | Verify concurrency on a non-SQLite engine before any move off SQLite | **NOT VERIFIED**: no PostgreSQL server could be installed here (pip and apt both refused). An opt-in test exists (`tests/integration/test_postgres_guards.py`, skipped unless `TEST_POSTGRES_URL` is set) but has never been run | Conditional |
 | IMP-054 | Finish BOLA probe (id-based routes with a second user + anonymous) | done: probe covers every id route with user B and anonymous; found and fixed a pause/resume ownership hole (redesig.md §28.12) | Verification, M |
 | IMP-055 | `frontend/Dockerfile` Node 22 | CI already on 22; Dockerfile unverified | Confirmed, S |
 

@@ -11,6 +11,16 @@
    "detail": "['Home', 'Jobs', 'Applications', 'Automation', 'Insights', 'Settings']"
   },
   {
+   "name": "tokens are not kept in browser storage (SEC-08)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "signed-out visit (no refresh cookie) shows the login page",
+   "ok": true,
+   "detail": ""
+  },
+  {
    "name": "sidebar footer is honest when idle",
    "ok": true,
    "detail": ""
@@ -59,6 +69,161 @@
    "name": "/schedules -> campaigns safety deep link",
    "ok": true,
    "detail": "http://localhost:4173/automation/campaigns/safety"
+  },
+  {
+   "name": "modal: New Campaign opens as a dialog",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "modal: focus lands in the name field",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "modal: Esc closes it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "jobs: deep link /jobs/job1 opens the drawer",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/job1"
+  },
+  {
+   "name": "jobs: drawer shows the job title and company",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "jobs: drawer has no axe violations",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "name": "jobs: Esc closes the drawer and returns to /jobs",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs"
+  },
+  {
+   "name": "matches: shows 'Showing 1 of 250' and a Load more button (Q-03)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "matches: Load more does not duplicate a match",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Settings has an Account tab",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Change password stays disabled until valid",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Change password enables when valid",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Delete needs a password first",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Delete asks for confirmation (dialog)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "account: Esc closes the confirmation and nothing was deleted",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "matches: deep link opens the drawer with the match summary",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/matches/job1"
+  },
+  {
+   "name": "matches: Esc closes the drawer",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/matches"
+  },
+  {
+   "name": "applications: Verify Outcome opens a dialog",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "applications: reconciliation dialog has no axe violations",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "name": "applications: Esc closes the reconciliation dialog",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "rationale: Why? opens a dialog with its title",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "rationale: Esc closes it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "screenshot: opens a dialog with the image",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "screenshot: dialog has no axe violations",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "name": "screenshot: Esc closes it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "login dialog: opens while waiting for the portal login",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "login dialog: Esc does NOT close it (not dismissible)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "insights: six sections",
+   "ok": true,
+   "detail": "['Overview', 'Sources', 'Resumes', 'Campaigns', 'Skills', 'Scoring weights']"
+  },
+  {
+   "name": "insights: choosing Sources updates the URL and selection",
+   "ok": true,
+   "detail": "http://localhost:4173/insights?view=sources"
+  },
+  {
+   "name": "insights: ?view=scoring opens that section",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "connections: a platform card renders with a Connect action",
+   "ok": true,
+   "detail": ""
   },
   {
    "name": "profile: no prompt when nothing was edited",
@@ -112,6 +277,11 @@
   },
   {
    "name": "375px no horizontal page scroll on /settings/connections",
+   "ok": true,
+   "detail": "scrollWidth=375 innerWidth=375"
+  },
+  {
+   "name": "375px no horizontal page scroll on /settings/account",
    "ok": true,
    "detail": "scrollWidth=375 innerWidth=375"
   },
@@ -181,6 +351,11 @@
    "detail": "scrollWidth=768 innerWidth=768"
   },
   {
+   "name": "768px no horizontal page scroll on /settings/account",
+   "ok": true,
+   "detail": "scrollWidth=768 innerWidth=768"
+  },
+  {
    "name": "768px sidebar hidden by default",
    "ok": true,
    "detail": ""
@@ -242,6 +417,34 @@
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
@@ -263,6 +466,10 @@
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -285,32 +492,15 @@
   "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response"
  ],
  "axe": {
-  "/home": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ],
+  "/home": [],
   "/jobs": [],
-  "/jobs/matches": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ],
+  "/jobs/matches": [],
   "/applications": [],
   "/automation/campaigns": [],
   "/automation/live": [],
   "/insights": [],
   "/settings/profile": [],
-  "/settings/connections": [
-   {
-    "id": "heading-order",
-    "impact": "moderate",
-    "n": 1
-   }
-  ]
+  "/settings/connections": [],
+  "/settings/account": []
  }
 }

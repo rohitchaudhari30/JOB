@@ -3,6 +3,7 @@ import { Sparkles, Clock, Briefcase, MapPin, Sliders, Play, Zap, Globe, X } from
 import type { CandidateProfile, Resume } from '../../types';
 import type { SafetySettings } from './safetySettings';
 import { FRESHNESS_OPTIONS } from './freshness';
+import { Button } from '../../components/ui/Button';
 
 interface CriteriaCardProps {
   applicationMode: 'AUTO' | 'APPROVAL';
@@ -93,7 +94,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
                 className="inline-flex items-center px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-100 dark:border-indigo-500/20"
               >
                 {role}
-                <button
+                <button type="button"
                   aria-label="Close"
                   onClick={() => handleRemoveRole(role)}
                   className="ml-1.5 hover:text-indigo-900 dark:hover:text-white cursor-pointer"
@@ -128,7 +129,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
                 className="inline-flex items-center px-2.5 py-1 rounded-xl bg-slate-200/80 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold"
               >
                 {loc}
-                <button
+                <button type="button"
                   aria-label="Close"
                   onClick={() => handleRemoveLocation(loc)}
                   className="ml-1.5 hover:text-slate-900 dark:hover:text-white cursor-pointer"
@@ -343,14 +344,12 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
             <span>Configure Schedule & Safety</span>
           </button>
 
-          <button
+          <Button variant="primary" size="sm" className="w-full sm:w-auto"
             onClick={handleStartApply}
-            disabled={starting}
-            className="w-full sm:w-auto px-8 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs shadow-xl shadow-indigo-600/25 flex items-center justify-center space-x-2 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
-          >
+            disabled={starting}>
             <Play className="w-4 h-4 fill-current" />
             <span>{starting ? 'Starting Run...' : 'START APPLY NOW'}</span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

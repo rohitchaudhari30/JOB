@@ -40,13 +40,13 @@ async def test_register_and_login_flow(client: AsyncClient):
     assert me_data["full_name"] == "Senior Engineer"
 
     # 5. Refresh token rotation
-    assert "refresh_token" in login_data
-    refresh_token = login_data["refresh_token"]
-    refresh_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert "refresh_token" not in login_data  # cookie only (SEC-08)
+    assert client.cookies.get("refresh_token")
+    refresh_res = await client.post("/api/v1/auth/refresh")  # the browser's way: no body, cookie sent automatically
     assert refresh_res.status_code == 200
     new_data = refresh_res.json()
     assert "access_token" in new_data
-    assert "refresh_token" in new_data
+    assert "refresh_token" not in new_data
 
     # 6. Logout
     logout_res = await client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {new_data['access_token']}"})

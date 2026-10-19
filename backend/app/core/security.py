@@ -71,6 +71,22 @@ def decode_refresh_token(token: str) -> Dict[str, Any]:
         raise AuthenticationException("Invalid or expired refresh token.")
 
 
+def issued_before_cutoff(payload: Dict[str, Any], tokens_valid_after: datetime | None) -> bool:
+    """True when the token was issued before the user's "sign out everywhere" moment.
+
+    JWT `iat` has whole-second resolution, so compare against the cut-off truncated to the second:
+    a token minted in the same second as the change (the fresh one handed back to the caller) stays valid.
+    """
+    if tokens_valid_after is None:
+        return False
+    if tokens_valid_after.tzinfo is None:
+        tokens_valid_after = tokens_valid_after.replace(tzinfo=timezone.utc)
+    iat = payload.get("iat")
+    if iat is None:
+        return True  # no issue time on a user with a cut-off: cannot prove it is newer
+    return int(iat) < int(tokens_valid_after.timestamp())
+
+
 class SessionStorageEncryptor:
     """
     Handles envelope encryption and decryption of Playwright storage_state

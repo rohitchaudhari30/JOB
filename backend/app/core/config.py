@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     # Security & Session
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # Active session access token (60 mins)
+    SCHEDULED_RUNS_ENABLED: bool = True    # operator kill switch: false = schedules fire but start nothing
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7     # Revocable refresh token lifespan (7 days)
     SESSION_COOKIE_MAX_AGE_DAYS: int = 30
     # Comma-separated emails allowed to run destructive, shared-data operations

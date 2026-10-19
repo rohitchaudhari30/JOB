@@ -45,6 +45,8 @@ class UserModel(Base):
     full_name = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
+    # Tokens issued before this instant are refused (set on password change = sign out everywhere).
+    tokens_valid_after = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -429,6 +431,10 @@ class AIRequestModel(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
+# A run in one of these statuses is "live". A user may have only one (IMP-052 for runs).
+ACTIVE_RUN_WHERE = "status IN ('STARTING','RUNNING','PAUSED')"
+
+
 class AutomationRunModel(Base):
     __tablename__ = "automation_runs"
 
@@ -451,6 +457,16 @@ class AutomationRunModel(Base):
     finished_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_automation_run_one_active_per_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text(ACTIVE_RUN_WHERE),
+            postgresql_where=text(ACTIVE_RUN_WHERE),
+        ),
+    )
 
     user = relationship("UserModel", back_populates="automation_runs")
     events = relationship("AutomationEventModel", back_populates="run", cascade="all, delete-orphan")

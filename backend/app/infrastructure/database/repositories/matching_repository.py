@@ -228,6 +228,17 @@ class SqlAlchemyMatchResultRepository(MatchResultRepository):
             entity.raw_posted_text = match.raw_posted_text
         return entity
 
+    @staticmethod
+    def _filters(user_id: str, min_score: float | None, decision: str | None) -> list:
+        conds = [MatchResultModel.user_id == user_id]
+        if min_score is not None:
+            conds.append(
+                or_(MatchResultModel.match_score >= min_score, MatchResultModel.overall_score >= min_score)
+            )
+        if decision:
+            conds.append(MatchResultModel.decision == decision)
+        return conds
+
     async def list_by_user(
         self,
         user_id: str,
@@ -238,25 +249,19 @@ class SqlAlchemyMatchResultRepository(MatchResultRepository):
     ) -> List[MatchResult]:
         stmt = (
             select(MatchResultModel)
-            .where(MatchResultModel.user_id == user_id)
+            .where(*self._filters(user_id, min_score, decision))
             .options(selectinload(MatchResultModel.job))
-            .order_by(MatchResultModel.match_score.desc())
+            # id breaks ties so pages never repeat or skip a row when scores are equal
+            .order_by(MatchResultModel.match_score.desc(), MatchResultModel.id)
             .offset(skip)
             .limit(limit)
         )
-        if min_score is not None:
-            stmt = stmt.where(
-                or_(
-                    MatchResultModel.match_score >= min_score,
-                    MatchResultModel.overall_score >= min_score,
-                )
-            )
-        if decision:
-            stmt = stmt.where(MatchResultModel.decision == decision)
-
         result = await self._session.execute(stmt)
-        models = result.scalars().all()
-        return [self._to_entity(m) for m in models]
+        return [self._to_entity(m) for m in result.scalars().all()]
+
+    async def count_by_user(self, user_id: str, min_score: float | None = None, decision: str | None = None) -> int:
+        stmt = select(func.count()).select_from(MatchResultModel).where(*self._filters(user_id, min_score, decision))
+        return int((await self._session.execute(stmt)).scalar_one())
 
 
 class SqlAlchemyMatchingTaskRepository(MatchingTaskRepository):

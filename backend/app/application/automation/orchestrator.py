@@ -14,7 +14,7 @@ from app.application.applications.commands import ApplicationSource, QueueApplic
 from app.application.applications.use_cases import CreateApplicationUseCase, ExecuteApplicationUseCase
 from app.application.jobs.use_cases import DiscoverJobsUseCase
 from app.application.matching.use_cases import EvaluateJobMatchUseCase
-from app.core.exceptions import EntityNotFoundException, PlatformException
+from app.core.exceptions import ConflictException, EntityNotFoundException, PlatformException
 from app.domain.ai.contracts import AIGateway
 from app.domain.applications.entities import Application, WorkflowStateEnum
 from app.domain.applications.repositories import ApplicationRepository
@@ -24,6 +24,7 @@ from app.domain.matching.entities import DecisionEnum, MatchResult, MatchRule
 from app.domain.matching.repositories import MatchResultRepository
 from app.domain.profile.repositories import CandidateProfileRepository, ResumeRepository
 from app.domain.auth.repositories import UserRepository
+from app.application.automation.execution_sync import FINISHED_EXECUTION_STATES, apply_final_state
 from app.domain.automation.state_machine import AutomationState, AutomationStateMachine
 
 logger = logging.getLogger("app.automation.orchestrator")
@@ -257,6 +258,13 @@ class AutomationOrchestrator:
             return self._sessions.get(run_id)
         return None
 
+    async def get_live_run_id(self, user_id: str) -> Optional[str]:
+        """The id of the user's starting, running or paused run, from memory first and then the database."""
+        mem = self.get_active_user_run(user_id)
+        if mem and mem.status in (AutomationState.STARTING, AutomationState.RUNNING, AutomationState.PAUSED):
+            return mem.run_id
+        return await persistence.get_live_run_id(user_id)
+
     async def start_run(
         self,
         user_id: str,
@@ -312,6 +320,8 @@ class AutomationOrchestrator:
 
         try:
             await _persist_run_initial()
+        except ConflictException:
+            raise  # another live run exists: the caller answers 409, nothing was started
         except Exception as run_err:
             logger.error(f"Failed to persist initial AutomationRunModel [{run_id}]: {run_err}")
             raise RuntimeError(f"Cannot start automation run without persistent database record: {run_err}") from run_err
@@ -514,24 +524,13 @@ class AutomationOrchestrator:
                                     f"stale session lease_version [{session.lease_version}] < current [{exec_model.lease_version}]"
                                 )
                                 return
-                            if exec_model.status in ("COMPLETED", "FAILED", "ABORTED") and exec_model.worker_id != session.worker_id:
+                            if exec_model.status in FINISHED_EXECUTION_STATES and exec_model.worker_id != session.worker_id:
                                 logger.warning(
                                     f"Execution [{session.execution_id}] already finalized by another worker [{exec_model.worker_id}]."
                                 )
                                 return
 
-                            if session.status == AutomationState.COMPLETED:
-                                exec_model.status = "COMPLETED"
-                            elif session.status == AutomationState.FAILED:
-                                exec_model.status = "FAILED"
-                                exec_model.error_message = session.error_message
-                            elif session.status in (AutomationState.ABORTED, AutomationState.STOPPED):
-                                exec_model.status = "ABORTED"
-                            exec_model.completed_at = datetime.now(timezone.utc)
-                            exec_model.discovered_count = session.discovered_jobs_count
-                            exec_model.qualified_count = session.qualified_jobs_count
-                            exec_model.submitted_count = session.applications_submitted_count
-                            exec_model.failed_count = session.failed_applications_count
+                            apply_final_state(exec_model, session)
                             await repo.save(exec_model)
 
                     if execution_repo:

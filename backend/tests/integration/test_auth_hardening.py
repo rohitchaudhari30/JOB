@@ -14,7 +14,11 @@ PASSWORD = "Password123!"
 async def _register(client, email):
     res = await client.post("/api/v1/auth/register", json={"email": email, "password": PASSWORD})
     assert res.status_code == 201, res.text
-    return res.json()
+    data = res.json()
+    assert "refresh_token" not in data  # never in the body (SEC-08): cookie only
+    data["refresh_token"] = client.cookies.get("refresh_token")  # captured for the tests below
+    client.cookies.clear()  # tests present the token explicitly, like an API client
+    return data
 
 
 @pytest.mark.asyncio
@@ -44,6 +48,7 @@ async def test_refresh_token_works_only_once(client):
     data = await _register(client, "rotate.user@example.com")
     first = await client.post("/api/v1/auth/refresh", json={"refresh_token": data["refresh_token"]})
     assert first.status_code == 200
+    client.cookies.clear()  # replay the OLD token, as a thief would
     second = await client.post("/api/v1/auth/refresh", json={"refresh_token": data["refresh_token"]})
     assert second.status_code == 401
     # the new pair keeps working

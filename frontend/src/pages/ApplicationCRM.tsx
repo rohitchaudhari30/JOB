@@ -1,24 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import {
-  Search,
-  SlidersHorizontal,
-  ChevronDown,
-  ArrowUpDown,
-  Table as TableIcon,
-  RefreshCw,
-  X,
-  Building2,
-  Zap,
-  Briefcase,
-} from 'lucide-react';
+
 import { api } from '../services/api';
 import { Application, ApplicationStats } from '../types';
 import { useToast } from '../context/ToastContext';
-import { Pagination } from '../components/ui/Pagination';
 import { ScreenshotModal } from './applications/ScreenshotModal';
 import { RationaleModal } from './applications/RationaleModal';
 import { ReconciliationModal } from './applications/ReconciliationModal';
-import { ApplicationRow } from './applications/ApplicationRow';
 import { ApplicationKpis } from './applications/ApplicationKpis';
 import { ApplicationDrawer, ApplicationDrawerView } from './applications/ApplicationDrawer';
 import { useQueryParam } from '../hooks/useQueryParam';
@@ -31,6 +18,10 @@ import {
 } from './applications/applicationLogic';
 
 import { isUuidString, resolvePlatformName } from '../utils/applicationHelpers';
+import { ApplicationsHeader } from './applications/ApplicationsHeader';
+import { ApplicationsToolbar } from './applications/ApplicationsToolbar';
+import { SecondaryFilterBar } from './applications/SecondaryFilterBar';
+import { ApplicationsTable } from './applications/ApplicationsTable';
 
 
 interface ApplicationCRMProps {
@@ -257,45 +248,11 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
     return filteredApplications.slice(start, start + pageSize);
   }, [filteredApplications, currentPage, pageSize]);
 
-  const hasActiveSecondaryFilters = companyFilter || minMatchFilter > 0 || fromDate || toDate;
+  const hasActiveSecondaryFilters = Boolean(companyFilter || minMatchFilter > 0 || fromDate || toDate);
 
   return (
     <div className="space-y-5 animate-fadeIn">
-      {/* Top Header & Scout Status */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-3xl bg-white border border-slate-200/80 dark:bg-slate-900/80 dark:border-slate-800 shadow-xs">
-        <div className="flex items-center space-x-3.5">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-xs shrink-0">
-            <Briefcase className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              Application CRM
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Every job the automation reached, and what happened to it.
-            </p>
-          </div>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex items-center space-x-2.5 self-end sm:self-center">
-          <div className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200/60 dark:border-indigo-800/60 text-xs font-bold text-indigo-700 dark:text-indigo-300">
-            <span>Tracked:</span>
-            <span>{stats.total}</span>
-          </div>
-
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer"
-            title="Refresh pipeline"
-          
- aria-label="Refresh pipeline"
->
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
+      <ApplicationsHeader loadData={loadData} loading={loading} stats={stats} />
 
       <ApplicationKpis
         stats={stats}
@@ -309,335 +266,11 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
 
       {/* Main Table / Pipeline Card Container */}
       <div className="rounded-2xl bg-white border border-slate-200/80 dark:bg-slate-900 dark:border-slate-800 shadow-xs overflow-hidden">
-        {/* Industry-Standard Top Bar: Search + Filter Chips + Filters Button */}
-        <div className="p-3.5 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          {/* Left: Search input */}
-          <div className="relative flex items-center min-w-[260px] max-w-sm flex-1 sm:flex-initial">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search title or company"
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
-            />
-            {searchQuery && (
-              <button aria-label="Close"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
+        <ApplicationsToolbar filterChips={filterChips} hasActiveSecondaryFilters={hasActiveSecondaryFilters} searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} showFilterPanel={showFilterPanel} setShowFilterPanel={setShowFilterPanel} />
 
-          {/* Middle: Horizontal Filter Chips with live counts */}
-          <div className="flex items-center flex-wrap gap-1.5 overflow-x-auto py-1">
-            {filterChips.map((chip) => {
-              const isActive = selectedFilter === chip.id;
-              return (
-                <button
-                  key={chip.id}
-                  onClick={() => setSelectedFilter(chip.id)}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-slate-100 text-slate-900 border border-slate-300 dark:bg-slate-800 dark:text-white dark:border-slate-700 shadow-2xs font-semibold'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/50 border border-transparent'
-                  }`}
-                >
-                  {chip.dotColor && <span className={`w-2 h-2 rounded-full ${chip.dotColor} shrink-0`} />}
-                  <span>{chip.label}</span>
-                  <span
-                    className={`ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-semibold ${
-                      isActive
-                        ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 shadow-2xs'
-                        : 'bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500'
-                    }`}
-                  >
-                    {chip.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        <SecondaryFilterBar showFilterPanel={showFilterPanel} hasActiveSecondaryFilters={hasActiveSecondaryFilters} companyFilter={companyFilter} setCompanyFilter={setCompanyFilter} minMatchFilter={minMatchFilter} setMinMatchFilter={setMinMatchFilter} fromDate={fromDate} setFromDate={setFromDate} toDate={toDate} setToDate={setToDate} />
 
-          {/* Right: Filters Toggle Button */}
-          <button
-            onClick={() => setShowFilterPanel(!showFilterPanel)}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-              showFilterPanel || hasActiveSecondaryFilters
-                ? 'border-indigo-300 bg-indigo-50/60 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300'
-                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
-            }`}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Filters</span>
-            {hasActiveSecondaryFilters && (
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
-            )}
-          </button>
-        </div>
-
-        {/* Secondary Filter Bar matching Image 1 */}
-        {showFilterPanel && (
-          <div className="px-3.5 pb-3.5 pt-2 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3 animate-fadeIn">
-            {/* 1. Company Input with Building icon */}
-            <div className="relative flex items-center min-w-[180px] max-w-[220px] flex-1 sm:flex-initial">
-              <Building2 className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
-              <input
-                type="text"
-                value={companyFilter}
-                onChange={(e) => setCompanyFilter(e.target.value)}
-                placeholder="Company"
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              {companyFilter && (
-                <button aria-label="Close"
-                  onClick={() => setCompanyFilter('')}
-                  className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            {/* 2. Min match % Input with Zap icon */}
-            <div className="relative flex items-center min-w-[140px] max-w-[170px] flex-1 sm:flex-initial">
-              <Zap className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={minMatchFilter || ''}
-                onChange={(e) => setMinMatchFilter(e.target.value ? Number(e.target.value) : 0)}
-                placeholder="Min match %"
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-            </div>
-
-            {/* 3. From Date with Calendar picker */}
-            <div className="relative flex items-center px-3 py-1.5 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white min-w-[190px] max-w-[220px] flex-1 sm:flex-initial">
-              <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mr-2 select-none shrink-0">
-                From
-              </span>
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="w-full text-xs bg-transparent text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
-              />
-            </div>
-
-            {/* 4. To Date with Calendar picker */}
-            <div className="relative flex items-center px-3 py-1.5 text-xs rounded-xl bg-slate-50/70 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white min-w-[190px] max-w-[220px] flex-1 sm:flex-initial">
-              <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mr-2 select-none shrink-0">
-                To
-              </span>
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="w-full text-xs bg-transparent text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
-              />
-            </div>
-
-            {/* Reset link if any secondary filter is set */}
-            {hasActiveSecondaryFilters && (
-              <button
-                onClick={() => {
-                  setCompanyFilter('');
-                  setMinMatchFilter(0);
-                  setFromDate('');
-                  setToDate('');
-                }}
-                className="text-[11px] font-medium text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 underline cursor-pointer ml-auto"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Application Pipeline Table View */}
-        {loading ? (
-          <div className="text-center py-24 text-slate-400 dark:text-slate-500 text-xs">
-              Loading applications pipeline...
-            </div>
-          ) : filteredApplications.length === 0 ? (
-            <div className="text-center py-20 px-4 space-y-2">
-              <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
-                <TableIcon className="w-5 h-5" />
-              </div>
-              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">No applications match filter</p>
-              <p className="text-[11px] text-slate-400">
-                Try switching the status filter to &quot;All&quot; or clearing your filter criteria.
-              </p>
-              <button
-                onClick={() => {
-                  setSelectedFilter('All');
-                  setSearchQuery('');
-                  setCompanyFilter('');
-                  setMinMatchFilter(0);
-                  setFromDate('');
-                  setToDate('');
-                }}
-                className="mt-2 inline-flex items-center px-3 py-1.5 text-xs rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 font-medium hover:bg-indigo-100 transition-colors cursor-pointer"
-              >
-                Reset All Filters
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 text-[11px] font-semibold text-slate-400 dark:text-slate-500 select-none">
-                    <th className="py-3 px-4 font-semibold">Position</th>
-                    <th className="py-3 px-4 font-semibold">Location</th>
-                    <th className="py-3 px-4 font-semibold">Exp</th>
-                    <th className="py-3 px-4 font-semibold">Salary</th>
-                    <th
-                      onClick={() => {
-                        setSortColumn('status');
-                        setSortDirection(sortColumn === 'status' && sortDirection === 'desc' ? 'asc' : 'desc');
-                      }}
-                      className="py-3 px-4 font-semibold cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 transition-colors select-none"
-                    >
-                      <span className="inline-flex items-center space-x-1">
-                        <span>Status</span>
-                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                      </span>
-                    </th>
-                    <th
-                      onClick={() => {
-                        setSortColumn('match');
-                        setSortDirection(sortColumn === 'match' && sortDirection === 'desc' ? 'asc' : 'desc');
-                      }}
-                      className="py-3 px-4 font-semibold cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 transition-colors select-none"
-                    >
-                      <span className="inline-flex items-center space-x-1">
-                        <span>Match</span>
-                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
-                      </span>
-                    </th>
-                    <th
-                      onClick={() => {
-                        setSortColumn('date');
-                        setSortDirection(sortColumn === 'date' && sortDirection === 'desc' ? 'asc' : 'desc');
-                      }}
-                      className="py-3 px-4 font-semibold cursor-pointer hover:text-slate-700 dark:hover:text-slate-300 transition-colors select-none"
-                    >
-                      <span className="inline-flex items-center space-x-1">
-                        <span>Date</span>
-                        <ChevronDown
-                          className={`w-3 h-3 text-slate-400 transition-transform ${
-                            sortColumn === 'date' && sortDirection === 'asc' ? 'rotate-180' : ''
-                          }`}
-                        />
-                      </span>
-                    </th>
-                    <th className="py-3 px-4 font-semibold text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
-                  {paginatedApplications.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-14 px-4 text-center">
-                        <div className="max-w-sm mx-auto space-y-3">
-                          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-slate-800 flex items-center justify-center mx-auto text-indigo-600 dark:text-indigo-400 shadow-2xs">
-                            <Briefcase className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                              {applications.length === 0 ? 'No Applications Recorded Yet' : 'No Matching Applications Found'}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                              {applications.length === 0
-                                ? 'The automated engine has not submitted any applications yet. Discover jobs or launch an auto-apply campaign to get started.'
-                                : 'No applications match your active filters or search term. Try resetting your filters to see all records.'}
-                            </p>
-                          </div>
-                          <div className="flex items-center justify-center gap-2 pt-1">
-                            {applications.length === 0 && onNavigate ? (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => onNavigate('discovery')}
-                                  className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
-                                >
-                                  Discover Jobs
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => onNavigate('direct_apply')}
-                                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                                >
-                                  Start Auto-Apply
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedFilter('All');
-                                  setSearchQuery('');
-                                  setCompanyFilter('');
-                                  setMinMatchFilter(0);
-                                  setFromDate('');
-                                  setToDate('');
-                                }}
-                                className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
-                              >
-                                Reset All Filters
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedApplications.map((app) => (
-                      <ApplicationRow
-                        key={app.id}
-                        app={app}
-                        fallbackScore={matchScores.get(app.job_id)}
-                        isExpanded={expandedReasonId === app.id}
-                        onToggleReason={setExpandedReasonId}
-                        onOpen={openDrawer}
-                        onApprove={handleApprove}
-                        onReject={handleReject}
-                        onRetry={handleRetry}
-                        onRationale={setSelectedAppForRationale}
-                        onReconcile={setSelectedAppForReconciliation}
-                        onScreenshot={openScreenshotPreview}
-                      />
-                    ))
-                )}
-                </tbody>
-              </table>
-            </div>
-
-            <Pagination
-              page={currentPage}
-              pageSize={pageSize}
-              total={filteredApplications.length}
-              onPageChange={setCurrentPage}
-              onPageSizeChange={setPageSize}
-              onResetFilters={
-                filteredApplications.length !== applications.length
-                  ? () => {
-                      setSelectedFilter('All');
-                      setSearchQuery('');
-                      setCompanyFilter('');
-                      setMinMatchFilter(0);
-                      setFromDate('');
-                      setToDate('');
-                    }
-                  : undefined
-              }
-            />
-          </>
-        )}
+        <ApplicationsTable loading={loading} applications={applications} filteredApplications={filteredApplications} paginatedApplications={paginatedApplications} matchScores={matchScores} expandedReasonId={expandedReasonId} setExpandedReasonId={setExpandedReasonId} sortColumn={sortColumn} setSortColumn={setSortColumn} sortDirection={sortDirection} setSortDirection={setSortDirection} currentPage={currentPage} setCurrentPage={setCurrentPage} pageSize={pageSize} setPageSize={setPageSize} setSelectedFilter={setSelectedFilter} setSearchQuery={setSearchQuery} setCompanyFilter={setCompanyFilter} setMinMatchFilter={setMinMatchFilter} setFromDate={setFromDate} setToDate={setToDate} openDrawer={openDrawer} handleApprove={handleApprove} handleReject={handleReject} handleRetry={handleRetry} setSelectedAppForRationale={setSelectedAppForRationale} setSelectedAppForReconciliation={setSelectedAppForReconciliation} openScreenshotPreview={openScreenshotPreview} onNavigate={onNavigate} />
       </div>
 
       {(() => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Activity, Calendar, Clock, ShieldCheck, Sliders } from 'lucide-react';
 import { SafetySettings, SchedulePreset } from './safetySettings';
+import { Button } from '../../components/ui/Button';
 
 interface SafetyScheduleTabProps {
   settings: SafetySettings;
@@ -24,15 +25,12 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
               </p>
             </div>
           </div>
-          <button
-            type="button"
+          <Button variant="primary" size="sm"
             onClick={onSave}
-            disabled={saving}
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/25 flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
-          >
+            disabled={saving}>
             <Sliders className="w-3.5 h-3.5" />
             <span>Save Schedule &amp; Safety Policy</span>
-          </button>
+          </Button>
         </div>
 
         {/* Recurring Execution Cadence (Background Autopilot) */}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { User, Briefcase, MapPin, Phone } from 'lucide-react';
 import type { CandidateProfile } from '../../types';
+import { EXPERIENCE_MISMATCH_MONTHS, monthsFromHistory } from './profileLogic';
 
 interface PersonalTabProps {
   profile: CandidateProfile;
@@ -12,6 +13,8 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({ profile, setProfile })
   const expYears = Math.floor(totalExpMonths / 12);
   const expMonths = totalExpMonths % 12;
   const experienceDisplay = `${expYears}y ${expMonths > 0 ? `${expMonths}m` : ''}`.trim();
+  const historyMonths = monthsFromHistory(profile.experiences);
+  const mismatch = historyMonths > 0 && Math.abs(historyMonths - totalExpMonths) > EXPERIENCE_MISMATCH_MONTHS;
   return (
     <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-5">
       <div className="flex items-center space-x-2 border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -120,6 +123,18 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({ profile, setProfile })
               </select>
             </div>
           </div>
+          {mismatch && (
+            <p role="status" className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+              Your work history adds up to about {Math.floor(historyMonths / 12)}y {historyMonths % 12}m.{' '}
+              <button
+                type="button"
+                className="font-bold underline"
+                onClick={() => setProfile({ ...profile, total_experience_months: historyMonths })}
+              >
+                Use this
+              </button>
+            </p>
+          )}
         </div>
       </div>
 
