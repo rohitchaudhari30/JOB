@@ -79,6 +79,18 @@ class DeleteAccountRequest(BaseModel):
     password: str
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_long_enough(cls, value: str) -> str:
+        if len(value) < settings.PASSWORD_MIN_LENGTH:
+            raise ValueError(f"Password must be at least {settings.PASSWORD_MIN_LENGTH} characters long.")
+        return value
+
+
 class LogoutRequest(BaseModel):
     refresh_token: str | None = None
 
@@ -140,7 +152,7 @@ async def refresh_token_endpoint(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     req: RefreshTokenRequest | None = None,
 ):
-    from app.core.security import create_access_token, create_refresh_token, decode_refresh_token
+    from app.core.security import create_access_token, create_refresh_token, decode_refresh_token, issued_before_cutoff
     cookie_token = request.cookies.get(REFRESH_COOKIE)
     if cookie_token:
         _require_same_origin(request)
@@ -164,6 +176,8 @@ async def refresh_token_endpoint(
         user = await user_repo.get_by_id(user_id)
         if not user or not user.is_active:
             raise AuthenticationException("User account not found or inactive.")
+        if issued_before_cutoff(payload, user.tokens_valid_after):
+            raise AuthenticationException("Session ended: the password was changed.")
         new_access = create_access_token({"sub": user.id, "email": user.email})
         _set_refresh_cookie(response, create_refresh_token({"sub": user.id}))
         return AuthResponse(id=user.id, email=user.email, full_name=user.full_name, access_token=new_access)
@@ -227,3 +241,48 @@ async def delete_my_account(
     if not verify_password(req.password, current_user.hashed_password):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Password is incorrect.")
     await erase_user(session, current_user.id)
+
+
+@router.post("/change-password", response_model=AuthResponse, dependencies=[Depends(rate_limit("change_password"))])
+async def change_password(
+    req: ChangePasswordRequest,
+    response: Response,
+    current_user: Annotated[User, Depends(get_current_user)],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+):
+    """Change the password and sign out every other session (all tokens issued before now stop working).
+
+    The caller stays signed in: the response carries a fresh access token and sets a fresh refresh cookie.
+    """
+    from app.core.security import create_access_token, create_refresh_token, get_password_hash, verify_password
+
+    if not verify_password(req.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Current password is incorrect.")
+    if verify_password(req.new_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose a password different from the current one.")
+    await user_repo.set_password(current_user.id, get_password_hash(req.new_password), datetime.now(timezone.utc))
+    _set_refresh_cookie(response, create_refresh_token({"sub": current_user.id}))
+    return AuthResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        access_token=create_access_token({"sub": current_user.id, "email": current_user.email}),
+    )
+
+
+@router.get("/me/export", dependencies=[Depends(rate_limit("export"))])
+async def export_my_data(
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+):
+    """Download everything stored about the signed-in user as one JSON file. No credentials or file paths."""
+    import json
+
+    from app.infrastructure.database.repositories.user_data_export import export_user_data
+
+    payload = await export_user_data(session, current_user)
+    return Response(
+        content=json.dumps(payload, indent=2, default=str),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="my-data.json"', "Cache-Control": "no-store"},
+    )

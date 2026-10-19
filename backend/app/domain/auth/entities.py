@@ -12,6 +12,7 @@ class User:
     is_superuser: bool = False
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    tokens_valid_after: datetime | None = None
 
 
 @dataclass

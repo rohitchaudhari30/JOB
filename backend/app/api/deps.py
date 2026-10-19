@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.exceptions import AuthenticationException
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, issued_before_cutoff
 from app.domain.ai.contracts import AIGateway
 from app.domain.auth.entities import User
 from app.domain.auth.repositories import UserRepository
@@ -135,6 +135,12 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if issued_before_cutoff(payload, user.tokens_valid_after):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session ended: the password was changed.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
