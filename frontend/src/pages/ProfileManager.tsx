@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { User, FileText, ShieldCheck, Building, IndianRupee, HelpCircle, Loader2, Code2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { api } from '../services/api';
 import { CandidateProfile, CandidateSkill, Resume, Experience } from '../types';
 import { useToast } from '../context/ToastContext';
@@ -11,11 +11,17 @@ import { PreferencesTab } from './profile/PreferencesTab';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { ResumeLibraryTab } from './profile/ResumeLibraryTab';
 import { SavedAnswersTab } from './profile/SavedAnswersTab';
-import { defaultProfile, calculateCompleteness, isProfileTabComplete, SetupTab } from './profile/profileLogic';
+import { defaultProfile, calculateCompleteness } from './profile/profileLogic';
+import { PageHeader } from '../components/ui/PageHeader';
+import { UnsavedSaveBar } from './profile/UnsavedSaveBar';
 import { ProfileHero } from './profile/ProfileHero';
+
+/** Which Settings page is showing. All three share one form state, so unsaved edits survive moving between them. */
+export type ProfileView = 'profile' | 'resumes' | 'preferences';
 
 interface ProfileManagerProps {
   onNavigate?: (tab: any) => void;
+  view?: ProfileView;
 }
 
 
@@ -23,12 +29,11 @@ interface ProfileManagerProps {
 
 
 
-export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) => {
+export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate, view = 'profile' }) => {
   const { showSuccess, showError } = useToast();
   const [profile, setProfile] = useState<CandidateProfile>(defaultProfile);
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [savedAnswers, setSavedAnswers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<SetupTab>('personal');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -164,9 +169,6 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
   const expMonths = totalExpMonths % 12;
   const experienceDisplay = `${expYears}y ${expMonths > 0 ? `${expMonths}m` : ''}`.trim();
 
-  const isTabComplete = (tabId: SetupTab): boolean =>
-    isProfileTabComplete(tabId, profile, resumes.length, savedAnswers.length);
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 space-y-3">
@@ -176,92 +178,50 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({ onNavigate }) =>
     );
   }
 
-  const tabsConfig: { id: SetupTab; label: string; icon: React.ElementType; badge?: string | number }[] = [
-    { id: 'personal', label: 'Personal & Contact', icon: User },
-    { id: 'skills', label: 'Skills Matrix', icon: Code2, badge: profile.skills?.length || 0 },
-    { id: 'experience', label: 'Work Experience', icon: Building, badge: profile.experiences?.length || 0 },
-    { id: 'compensation', label: 'Compensation & Notice', icon: IndianRupee },
-    { id: 'preferences', label: 'Preferences & Visa', icon: ShieldCheck },
-    { id: 'resumes', label: 'Resume Library', icon: FileText, badge: resumes.length },
-    { id: 'answers', label: 'Screening Q&A', icon: HelpCircle, badge: savedAnswers.length },
-  ];
-
   return (
     <div className="space-y-6 w-full animate-fadeIn pb-16">
+      {view === 'profile' ? (
       <ProfileHero profile={profile} experienceDisplay={experienceDisplay} completenessScore={completenessScore} missingFields={missingFields} onNavigate={onNavigate} handleSaveProfile={handleSaveProfile} saving={saving} savedSuccess={savedSuccess} />
-
-      {/* Modern Segmented Navigation Tabs */}
-      <div className="flex flex-wrap gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-        {tabsConfig.map((tab) => {
-          const Icon = tab.icon;
-          const complete = isTabComplete(tab.id);
-          const isActive = activeTab === tab.id;
-
-          return (
-            <button type="button"
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
-                isActive
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
-              <span>{tab.label}</span>
-              {tab.badge !== undefined && (
-                <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold ${
-                    isActive
-                      ? 'bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400'
-                      : 'bg-slate-200/70 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                  }`}
-                >
-                  {tab.badge}
-                </span>
-              )}
-              {complete && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Section has saved data" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* PersonalTab */}
-      {activeTab === 'personal' && (
-        <PersonalTab profile={profile} setProfile={setProfile} />
-      )}
-
-      {/* SkillsTab */}
-      {activeTab === 'skills' && (
-        <SkillsTab profile={profile} handleAddSkill={handleAddSkill} handleRemoveSkill={handleRemoveSkill} newSkill={newSkill} newSkillYears={newSkillYears} setNewSkill={setNewSkill} setNewSkillYears={setNewSkillYears} />
-      )}
-
-      {/* ExperienceTab */}
-      {activeTab === 'experience' && (
-        <ExperienceTab profile={profile} handleAddExperience={handleAddExperience} handleRemoveExperience={handleRemoveExperience} newExpCompany={newExpCompany} newExpDesc={newExpDesc} newExpIsCurrent={newExpIsCurrent} newExpTitle={newExpTitle} setNewExpCompany={setNewExpCompany} setNewExpDesc={setNewExpDesc} setNewExpIsCurrent={setNewExpIsCurrent} setNewExpTitle={setNewExpTitle} />
-      )}
-
-      {/* CompensationTab */}
-      {activeTab === 'compensation' && (
-        <CompensationTab profile={profile} setProfile={setProfile} />
-      )}
-
-      {/* PreferencesTab */}
-      {activeTab === 'preferences' && (
-        <PreferencesTab profile={profile} setProfile={setProfile} />
-      )}
-
-      {activeTab === 'resumes' && (
-        <ResumeLibraryTab
-          resumes={resumes}
-          onResumesChange={setResumes}
-          defaultTargetRole={profile?.headline || ''}
+      ) : (
+        <PageHeader
+          title={view === 'resumes' ? 'Resumes & answers' : 'Preferences'}
+          description={
+            view === 'resumes'
+              ? 'The resume files and saved screening answers used on every application.'
+              : 'Compensation, notice period, work authorization and work mode used to match and fill forms.'
+          }
         />
       )}
 
-      {activeTab === 'answers' && <SavedAnswersTab savedAnswers={savedAnswers} onChange={setSavedAnswers} />}
+      {view === 'profile' && (
+        <>
+          <PersonalTab profile={profile} setProfile={setProfile} />
+          <SkillsTab profile={profile} handleAddSkill={handleAddSkill} handleRemoveSkill={handleRemoveSkill} newSkill={newSkill} newSkillYears={newSkillYears} setNewSkill={setNewSkill} setNewSkillYears={setNewSkillYears} />
+          <ExperienceTab profile={profile} handleAddExperience={handleAddExperience} handleRemoveExperience={handleRemoveExperience} newExpCompany={newExpCompany} newExpDesc={newExpDesc} newExpIsCurrent={newExpIsCurrent} newExpTitle={newExpTitle} setNewExpCompany={setNewExpCompany} setNewExpDesc={setNewExpDesc} setNewExpIsCurrent={setNewExpIsCurrent} setNewExpTitle={setNewExpTitle} />
+        </>
+      )}
+
+      {view === 'preferences' && (
+        <>
+          <CompensationTab profile={profile} setProfile={setProfile} />
+          <PreferencesTab profile={profile} setProfile={setProfile} />
+        </>
+      )}
+
+      {view === 'resumes' && (
+        <>
+          <ResumeLibraryTab
+            resumes={resumes}
+            onResumesChange={setResumes}
+            defaultTargetRole={profile?.headline || ''}
+          />
+          <SavedAnswersTab savedAnswers={savedAnswers} onChange={setSavedAnswers} />
+        </>
+      )}
+
+      {view !== 'resumes' && (
+        <UnsavedSaveBar dirty={dirty} saving={saving} savedSuccess={savedSuccess} onSave={() => handleSaveProfile(true)} />
+      )}
     </div>
   );
 };

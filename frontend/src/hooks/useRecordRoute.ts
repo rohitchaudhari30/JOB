@@ -31,14 +31,14 @@ export function useRecordRoute(
 
   const open = useCallback(
     (next: string) => {
-      window.history.pushState({ tab }, '', `${basePath.replace(/\/+$/, '')}/${encodeURIComponent(next)}`);
+      window.history.pushState({ tab }, '', `${basePath.replace(/\/+$/, '')}/${encodeURIComponent(next)}${window.location.search}`);
       setId(next);
     },
     [basePath, tab]
   );
 
   const close = useCallback(() => {
-    if (read() !== null) window.history.pushState({ tab }, '', basePath);
+    if (read() !== null) window.history.pushState({ tab }, '', basePath + window.location.search);
     setId(null);
   }, [basePath, read, tab]);
 

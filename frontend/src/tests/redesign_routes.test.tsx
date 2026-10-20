@@ -65,12 +65,17 @@ describe('redesign routes', () => {
 });
 
 describe('SectionTabs', () => {
-  it('shows sub-views for Jobs and navigates between them', () => {
+  it('shows sub-pages for Settings and navigates between them', () => {
     const onTabChange = vi.fn();
-    render(<SectionTabs activeTab="discovery" onTabChange={onTabChange} />);
-    expect(screen.getByText('Discover').closest('a')?.getAttribute('aria-current')).toBe('page');
-    fireEvent.click(screen.getByText('AI matches'));
-    expect(onTabChange).toHaveBeenCalledWith('matches');
+    render(<SectionTabs activeTab="profile" onTabChange={onTabChange} />);
+    expect(screen.getByText('Profile').closest('a')?.getAttribute('aria-current')).toBe('page');
+    fireEvent.click(screen.getByText('Preferences'));
+    expect(onTabChange).toHaveBeenCalledWith('preferences');
+  });
+
+  it('Jobs is one page: no section links (its lens switch lives inside the page)', () => {
+    const { container } = render(<SectionTabs activeTab="discovery" onTabChange={vi.fn()} />);
+    expect(container.firstChild).toBeNull();
   });
 
   it('treats the schedules deep link as Campaigns', () => {
@@ -96,6 +101,6 @@ describe('ReadinessBanner', () => {
     fireEvent.click(screen.getByText('Connect LinkedIn'));
     expect(onNavigate).toHaveBeenCalledWith('connections');
     fireEvent.click(screen.getByText('Upload resume'));
-    expect(onNavigate).toHaveBeenCalledWith('profile');
+    expect(onNavigate).toHaveBeenCalledWith('resumes');
   });
 });

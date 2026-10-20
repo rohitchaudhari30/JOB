@@ -81,10 +81,11 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
 
           {settings.schedulePreset === 'custom' && (
             <div className="pt-2 flex items-center space-x-3">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label htmlFor="sched-interval" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                 Run Every (minutes):
               </label>
               <input
+                id="sched-interval"
                 type="number"
                 min="30"
                 max="1440"
@@ -104,7 +105,7 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
           {/* Daily Limit */}
           <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+              <label htmlFor="safety-daily" className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
                 <span>Daily Application Limit</span>
               </label>
@@ -113,6 +114,7 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
               </span>
             </div>
             <input
+              id="safety-daily"
               type="number"
               min="1"
               max="100"
@@ -128,7 +130,7 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
           {/* Hourly Velocity */}
           <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+              <label htmlFor="safety-hourly" className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
                 <Activity className="w-4 h-4 text-indigo-500" />
                 <span>Hourly Velocity Cap</span>
               </label>
@@ -137,6 +139,7 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
               </span>
             </div>
             <input
+              id="safety-hourly"
               type="number"
               min="1"
               max="20"
@@ -152,7 +155,7 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
           {/* Cooldown Interval */}
           <div className="space-y-2 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-700/60">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+              <label htmlFor="safety-cooldown" className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
                 <Clock className="w-4 h-4 text-amber-500" />
                 <span>Cooldown Between Applications</span>
               </label>
@@ -161,6 +164,7 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
               </span>
             </div>
             <input
+              id="safety-cooldown"
               type="number"
               min="30"
               max="600"
@@ -187,8 +191,9 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Start Time</label>
+                <label htmlFor="safety-start" className="text-[10px] font-bold text-slate-500 uppercase">Start time</label>
                 <input
+                  id="safety-start"
                   type="time"
                   value={settings.operatingStart}
                   onChange={(e) => onChange({ operatingStart: e.target.value })}
@@ -196,8 +201,9 @@ export const SafetyScheduleTab: React.FC<SafetyScheduleTabProps> = ({ settings, 
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase">End Time</label>
+                <label htmlFor="safety-end" className="text-[10px] font-bold text-slate-500 uppercase">End time</label>
                 <input
+                  id="safety-end"
                   type="time"
                   value={settings.operatingEnd}
                   onChange={(e) => onChange({ operatingEnd: e.target.value })}

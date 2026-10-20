@@ -49,8 +49,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="h-16 border-b border-slate-200/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-40 transition-colors duration-200 shadow-xs">
-      <div className="flex items-center space-x-3">
+    <header className="h-16 border-b border-slate-200/80 bg-white/90 dark:border-slate-800 dark:bg-slate-900/90 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between gap-2 sticky top-0 z-40 transition-colors duration-200 shadow-xs">
+      <div className="flex items-center space-x-3 min-w-0">
         {onMenuClick && (
           <button
             type="button"
@@ -58,22 +58,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-label={navOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={navOpen}
             aria-controls="primary-navigation"
-            className="lg:hidden p-2 -ml-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="lg:hidden shrink-0 p-2.5 -ml-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <Menu className="w-5 h-5" aria-hidden="true" />
           </button>
         )}
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-600/20 ring-1 ring-white/20">
+        <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-600/20 ring-1 ring-white/20">
           <Bot className="w-5 h-5 text-white" />
         </div>
-        <div className="flex items-center space-x-2">
-          <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white">
+        <div className="flex items-center space-x-2 min-w-0 max-[379px]:hidden">
+          <span className="font-extrabold text-lg truncate tracking-tight text-slate-900 dark:text-white">
             {BRAND_NAME}<span className="text-indigo-600 dark:text-indigo-400">{BRAND_SUFFIX}</span>
           </span>
         </div>
       </div>
 
-      <div className="flex items-center space-x-2.5 sm:space-x-3">
+      <div className="flex items-center shrink-0 space-x-1.5 sm:space-x-3">
         {/* Live Run Active Global Pill */}
         {activeRun && (activeRun.status === 'RUNNING' || activeRun.status === 'PAUSED') && (
           <button type="button"

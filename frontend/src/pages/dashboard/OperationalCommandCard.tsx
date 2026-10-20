@@ -77,7 +77,7 @@ export const OperationalCommandCard: React.FC<Props> = ({
                 className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Launch Auto-Apply</span>
+                <span>Start campaign</span>
               </button>
             )}
           </div>

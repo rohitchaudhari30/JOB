@@ -38,9 +38,9 @@ export const ActivityStream: React.FC<ActivityStreamProps> = ({ logs, onRefresh 
               <Activity className="w-5 h-5" />
             </div>
             <div className="space-y-1">
-              <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white">
                 No Campaign Activity Recorded Yet
-              </h4>
+              </h3>
               <p className="text-[11px] text-slate-500 max-w-md mx-auto">
                 Activity logs will appear here when this campaign runs, showing pacing evaluations, safety limit checks, matched job qualification, and submission milestones.
               </p>

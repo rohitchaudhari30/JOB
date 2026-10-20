@@ -38,20 +38,20 @@ export const RecentActivityCard: React.FC<Props> = ({ recentApplications, onNavi
               key={app.id}
               className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 first:pt-0 last:pb-0"
             >
-              <div className="space-y-0.5">
-                <h3 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+              <div className="space-y-0.5 min-w-0">
+                <h3 className="font-bold text-slate-800 dark:text-slate-200 text-xs break-words">
                   {app.job_title || `Application #${app.id.slice(-8)}`}
                 </h3>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 break-words">
                   {app.company ? `${app.company} • ` : ''}Job ID: {app.job_id.slice(-10)} • Created:{' '}
                   {new Date(app.created_at).toLocaleDateString()}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
                 {/* Technical Execution State */}
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider break-all ${
                     app.workflow_state === 'APPLIED'
                       ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
                       : app.workflow_state.startsWith('PAUSED')
@@ -66,7 +66,7 @@ export const RecentActivityCard: React.FC<Props> = ({ recentApplications, onNavi
 
                 {/* Business CRM Outcome Status */}
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border break-all ${
                     app.outcome_status === 'SUBMITTED'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
                       : app.outcome_status === 'INTERVIEWING'

@@ -8,19 +8,19 @@ interface ReadinessBannerProps {
   missing: ReadinessGap[];
   /** Human platform name used in copy, e.g. "LinkedIn". */
   platformLabel?: string;
-  onNavigate: (tab: 'connections' | 'profile') => void;
+  onNavigate: (tab: 'connections' | 'profile' | 'resumes') => void;
 }
 
-const COPY: Record<ReadinessGap, { text: (p: string) => string; action: (p: string) => string; target: 'connections' | 'profile' }> = {
+const COPY: Record<ReadinessGap, { text: (p: string) => string; action: (p: string) => string; target: 'connections' | 'profile' | 'resumes' }> = {
   connection: {
     text: (p) => `${p} session is disconnected. Connect it so applications can be submitted.`,
     action: (p) => `Connect ${p.startsWith('Your ') ? 'platform' : p}`,
     target: 'connections',
   },
   resume: {
-    text: () => 'No resume uploaded. Upload one in Settings › Profile so it can be attached to applications.',
+    text: () => 'No resume uploaded. Upload one in Settings › Resumes & answers so it can be attached to applications.',
     action: () => 'Upload resume',
-    target: 'profile',
+    target: 'resumes',
   },
   profile: {
     text: () => 'Your profile is incomplete. Matching and form answers depend on it.',

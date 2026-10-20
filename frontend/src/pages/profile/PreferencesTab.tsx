@@ -15,7 +15,7 @@ export const PreferencesTab: React.FC<PreferencesTabProps> = ({ profile, setProf
         <ShieldCheck className="w-4 h-4 text-indigo-500" />
         <div>
           <h2 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-            Work Authorization &amp; Mode Preferences
+            Work authorization &amp; work mode
           </h2>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Determines eligibility filters for remote, onsite, and international opportunities.
@@ -70,6 +70,7 @@ export const PreferencesTab: React.FC<PreferencesTabProps> = ({ profile, setProf
           <input
             type="checkbox"
             id="relocation"
+            aria-label="Open to relocation"
             checked={profile.relocation_preference}
             onChange={(e) =>
               setProfile({

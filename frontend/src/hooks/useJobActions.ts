@@ -79,8 +79,8 @@ export function useJobActions({ onNavigate, readinessMissing }: Options = {}) {
         return null;
       }
       if (readiness.missing.includes('resume')) {
-        showWarning('Upload a resume in Settings › Profile before applying.');
-        onNavigate?.('profile');
+        showWarning('Upload a resume in Settings › Resumes & answers before applying.');
+        onNavigate?.('resumes');
         return null;
       }
       setQueueingIds((s) => new Set([...s, ...jobIds]));

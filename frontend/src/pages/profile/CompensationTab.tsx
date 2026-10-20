@@ -15,7 +15,7 @@ export const CompensationTab: React.FC<CompensationTabProps> = ({ profile, setPr
         <IndianRupee className="w-4 h-4 text-indigo-500" />
         <div>
           <h2 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-            Compensation &amp; Notice Period
+            Compensation &amp; notice period
           </h2>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
             Used to match salary filters and auto-answer compensation fields on portals.

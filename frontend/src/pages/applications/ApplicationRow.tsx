@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertCircle, Camera, ChevronDown, ChevronUp, ExternalLink, RotateCcw, X } from 'lucide-react';
 import type { Application } from '../../types';
 import { isUuidString, resolvePlatformName } from '../../utils/applicationHelpers';
-import { getDerivedStatus, formatExperience, formatSalary, formatDateDisplay } from './applicationLogic';
+import { getDerivedStatus, needsAttention, formatExperience, formatSalary, formatDateDisplay } from './applicationLogic';
 
 interface Props {
   app: Application;
@@ -164,7 +164,7 @@ export const ApplicationRow: React.FC<Props> = ({
                 )}
               </button>
             </div>
-          ) : statusObj.label === 'Failed' || (typeof app.workflow_state === 'string' && app.workflow_state.startsWith('PAUSED_')) ? (
+          ) : statusObj.label === 'Failed' || needsAttention(app) ? (
             <div className="inline-flex items-center justify-end space-x-2">
               <button type="button"
                 onClick={() => onRetry(app)}
@@ -247,7 +247,7 @@ export const ApplicationRow: React.FC<Props> = ({
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>Error Diagnostics &amp; Audit Trace</span>
                 </div>
-                <button type="button" aria-label="Close"
+                <button type="button" aria-label="Close details"
                   onClick={() => onToggleReason(null)}
                   className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                 >

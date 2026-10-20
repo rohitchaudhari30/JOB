@@ -19,9 +19,9 @@ import { Button } from './components/ui/Button';
 // Pages load on demand so the first screen downloads less code (FE-03).
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const LiveAutomation = lazy(() => import('./pages/LiveAutomation').then((m) => ({ default: m.LiveAutomation })));
-const AIMatches = lazy(() => import('./pages/AIMatches').then((m) => ({ default: m.AIMatches })));
-const JobDiscovery = lazy(() => import('./pages/JobDiscovery').then((m) => ({ default: m.JobDiscovery })));
+const JobsWorkspace = lazy(() => import('./pages/JobsWorkspace').then((m) => ({ default: m.JobsWorkspace })));
 const ApplicationCRM = lazy(() => import('./pages/ApplicationCRM').then((m) => ({ default: m.ApplicationCRM })));
+const PROFILE_VIEW_TABS: ReadonlySet<string> = new Set(['profile', 'resumes', 'preferences']);
 const ProfileManager = lazy(() => import('./pages/ProfileManager').then((m) => ({ default: m.ProfileManager })));
 const PlatformConnections = lazy(() => import('./pages/PlatformConnections').then((m) => ({ default: m.PlatformConnections })));
 const DirectApply = lazy(() => import('./pages/DirectApply').then((m) => ({ default: m.DirectApply })));
@@ -289,7 +289,9 @@ export const App: React.FC = () => {
   const handleTabChange = (target: NavTab | string, replace = false) => {
     const canonicalTab = resolveTab(target);
     // Pages with unsaved edits (Profile) get a chance to cancel the move; redirects (replace) never prompt.
-    if (!replace && canonicalTab !== activeTab && !confirmLeave()) return;
+    // The three profile pages share one form, so moving between them never discards edits.
+    const sameForm = PROFILE_VIEW_TABS.has(canonicalTab) && PROFILE_VIEW_TABS.has(activeTab);
+    if (!replace && canonicalTab !== activeTab && !sameForm && !confirmLeave()) return;
     const targetPath = TAB_TO_PATH[canonicalTab] || '/home';
     setActiveTab(canonicalTab);
 
@@ -311,6 +313,12 @@ export const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark' : ''} bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200`}>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-indigo-700 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Skip to main content
+      </a>
       <Navbar
         user={user}
         onLogout={handleLogout}
@@ -334,7 +342,7 @@ export const App: React.FC = () => {
           onClose={() => setNavOpen(false)}
         />
 
-        <main className="flex-1 overflow-y-auto px-6 py-6 md:px-8 md:py-8 w-full">
+        <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 md:px-8 md:py-8 w-full focus:outline-none">
           <SectionTabs activeTab={activeTab} onTabChange={handleTabChange} />
           <ErrorBoundary resetKey={activeTab}>
           <Suspense fallback={<div className="p-8 text-sm text-slate-500" role="status">Loading…</div>}>
@@ -351,9 +359,9 @@ export const App: React.FC = () => {
               onNavigate={handleTabChange}
             />
           )}
-          {activeTab === 'matches' && <AIMatches onNavigate={handleTabChange} />}
-          {activeTab === 'discovery' && (
-            <JobDiscovery
+          {(activeTab === 'discovery' || activeTab === 'matches') && (
+            <JobsWorkspace
+              tab={activeTab}
               activeRun={activeRun}
               onRefreshStatus={loadActiveRun}
               onNavigate={handleTabChange}
@@ -363,7 +371,9 @@ export const App: React.FC = () => {
           {(activeTab === 'crm' || (activeTab as string) === 'applications') && <ApplicationCRM onNavigate={handleTabChange} />}
           {activeTab === 'analytics' && <Analytics onNavigate={handleTabChange} />}
           {activeTab === 'account' && <AccountSettings onPasswordChanged={setAuthToken} onAccountDeleted={handleAccountDeleted} />}
-          {activeTab === 'profile' && <ProfileManager onNavigate={handleTabChange} />}
+          {(activeTab === 'profile' || activeTab === 'resumes' || activeTab === 'preferences') && (
+            <ProfileManager onNavigate={handleTabChange} view={activeTab} />
+          )}
           {activeTab === 'schedules' && <DirectApply onNavigate={handleTabChange} initialTab="schedules" />}
           </Suspense>
           </ErrorBoundary>

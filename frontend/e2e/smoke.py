@@ -86,7 +86,7 @@ with sync_playwright() as p:
 
     # ---- desktop
     pg = new_page(1280)
-    pg.goto(BASE + "/dashboard"); pg.wait_for_selector("text=Command Center", timeout=10000)
+    pg.goto(BASE + "/dashboard"); pg.wait_for_selector("h1:has-text(\"Home\")", timeout=10000)
     check("legacy /dashboard redirects to /home", pg.url.endswith("/home"), pg.url)
     nav_items = pg.locator("nav[aria-label='Primary navigation'] a").all_inner_texts()
     check("sidebar has 6 items", len(nav_items) == 6, nav_items)
@@ -100,7 +100,18 @@ with sync_playwright() as p:
     check("no pause/stop controls on Dashboard", pg.get_by_role("button", name="Pause").count() == 0 and pg.get_by_role("button", name="Stop").count() == 0)
     pg.get_by_role("button", name="Reconnect").first.click(); pg.wait_for_timeout(500)
     check("Reconnect alert opens Platform connections", pg.url.endswith("/settings/connections"), pg.url)
-    check("Settings sub-tabs present", pg.get_by_role("link", name="Profile & resumes").count() == 1 and pg.get_by_role("link", name="Platform connections").count() == 1)
+    check("Settings sub-pages present", all(pg.get_by_role("link", name=n, exact=True).count() == 1 for n in ["Profile", "Resumes & answers", "Preferences", "Platform connections", "Account"]))
+    # Settings split: edits on one profile page survive moving to another, with no discard prompt.
+    pg.goto(BASE + "/settings/preferences"); pg.wait_for_selector("text=Compensation & notice period", timeout=10000)
+    dialogs = []
+    pg.on("dialog", lambda d: (dialogs.append(d.message), d.accept() if d.type == "beforeunload" else d.dismiss()))
+    pg.get_by_role("spinbutton").first.fill("45"); pg.wait_for_timeout(300)
+    check("Preferences edit shows the sticky save bar", pg.get_by_role("region", name="Save changes").count() == 1)
+    pg.get_by_role("link", name="Profile", exact=True).click(); pg.wait_for_timeout(500)
+    check("moving Preferences -> Profile keeps URL change and does not prompt", pg.url.endswith("/settings/profile") and dialogs == [], str(dialogs) + pg.url)
+    check("unsaved edit still pending after the move", pg.get_by_role("region", name="Save changes").count() == 1)
+    pg.get_by_role("link", name="Platform connections").click(); pg.wait_for_timeout(500)
+    check("leaving the profile form with unsaved edits still asks first", len(dialogs) == 1 and pg.url.endswith("/settings/profile"), str(dialogs) + pg.url)
 
     pg.goto(BASE + "/applications/app1"); pg.wait_for_selector("role=dialog", timeout=10000)
     check("deep link /applications/app1 opens drawer and keeps URL", pg.url.endswith("/applications/app1") and pg.get_by_role("dialog").count() == 1, pg.url)
@@ -113,11 +124,31 @@ with sync_playwright() as p:
 
     pg.goto(BASE + "/jobs?view=matches"); pg.wait_for_timeout(800)
     check("legacy /jobs?view=matches -> /jobs/matches", pg.url.endswith("/jobs/matches"), pg.url)
+    # ---- Jobs: one page, three lenses, one selection
+    pg.goto(BASE + "/jobs"); pg.wait_for_selector("role=tablist", timeout=10000)
+    check("jobs: one h1 and a three-way lens switch", pg.get_by_role("heading", level=1).count() == 1 and [t.inner_text() for t in pg.get_by_role("tab").all()] == ["All discovered", "Matched", "Needs review"], str([t.inner_text() for t in pg.get_by_role("tab").all()]))
+    pg.get_by_role("checkbox", name="Select Staff Engineer").first.click(); pg.wait_for_timeout(300)
+    check("jobs: selecting a job shows the selection bar", pg.get_by_role("region", name="Selected jobs").count() == 1 and "1 job selected" in pg.get_by_role("region", name="Selected jobs").inner_text())
+    pg.get_by_role("tab", name="Matched").click(); pg.wait_for_timeout(700)
+    check("jobs: switching to Matched keeps the URL contract and the selection", pg.url.endswith("/jobs/matches") and "1 job selected" in pg.get_by_role("region", name="Selected jobs").inner_text(), pg.url)
+    pg.get_by_role("tab", name="Needs review").click(); pg.wait_for_timeout(700)
+    check("jobs: Needs review uses ?lens=review", pg.url.endswith("/jobs/matches?lens=review") and pg.get_by_role("tab", name="Needs review").get_attribute("aria-selected") == "true", pg.url)
+    pg.get_by_role("button", name="Clear selection").click(); pg.wait_for_timeout(200)
+    pg.goto(BASE + "/jobs/matches?lens=review"); pg.wait_for_selector("role=tablist", timeout=10000)
+    check("jobs: deep link to the review lens selects it", pg.get_by_role("tab", name="Needs review").get_attribute("aria-selected") == "true")
+    pg.goto(BASE + "/ai-matches"); pg.wait_for_timeout(800)
+    check("jobs: legacy /ai-matches still lands on Matched", pg.url.endswith("/jobs/matches") and pg.get_by_role("tab", name="Matched").get_attribute("aria-selected") == "true", pg.url)
     pg.goto(BASE + "/schedules"); pg.wait_for_timeout(800)
     check("/schedules -> campaigns safety deep link", pg.url.endswith("/automation/campaigns/safety"), pg.url)
+    pg.wait_for_timeout(600)
+    check("safety deep link scrolls to the safety section and focuses it", pg.evaluate("document.activeElement && document.activeElement.id") == "campaign-safety")
+    check("campaigns has no tab bar, only a Jump-to row", pg.get_by_role("tab").count() == 0 and pg.get_by_role("navigation", name="On this page").count() == 1)
+    check("all three campaign sections are on the page", all(pg.locator("#" + i).count() == 1 for i in ["campaign-rules", "campaign-safety", "campaign-activity"]))
+    pg.get_by_role("link", name="Activity").first.click(); pg.wait_for_timeout(500)
+    check("Jump to Activity moves focus there and keeps the URL", pg.evaluate("document.activeElement.id") == "campaign-activity" and pg.url.endswith("/automation/campaigns/safety"), pg.url)
 
     # axe on each primary page
-    for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]:
+    for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/resumes", "/settings/preferences", "/settings/connections", "/settings/account"]:
         pg.goto(BASE + path); pg.wait_for_timeout(900)
         pg.evaluate(AXE)
         res = pg.evaluate("axe.run(document, {resultTypes:['violations']}).then(r => r.violations.map(v => ({id:v.id, impact:v.impact, n:v.nodes.length})))")
@@ -213,11 +244,11 @@ with sync_playwright() as p:
     pg = new_page(1280)
     pg.goto(BASE + "/insights"); pg.wait_for_selector("role=tablist", timeout=10000)
     tabs = pg.get_by_role("tab").all_inner_texts()
-    check("insights: six sections", len(tabs) == 6, tabs)
-    pg.get_by_role("tab", name="Sources").click(); pg.wait_for_timeout(300)
-    check("insights: choosing Sources updates the URL and selection", "view=sources" in pg.url and pg.get_by_role("tab", name="Sources").get_attribute("aria-selected") == "true", pg.url)
+    check("insights: three views", len(tabs) == 3, tabs)
+    pg.get_by_role("tab", name="Breakdowns").click(); pg.wait_for_timeout(300)
+    check("insights: choosing Breakdowns updates the URL and selection", "view=breakdowns" in pg.url and pg.get_by_role("tab", name="Breakdowns").get_attribute("aria-selected") == "true", pg.url)
     pg.goto(BASE + "/insights?view=scoring"); pg.wait_for_timeout(800)
-    check("insights: ?view=scoring opens that section", pg.get_by_role("tab", name="Scoring weights").get_attribute("aria-selected") == "true")
+    check("insights: ?view=scoring opens that section", pg.get_by_role("tab", name="Scoring").get_attribute("aria-selected") == "true")
     pg.context.close()
 
     # ---- Platform connections: cards render with their action
@@ -229,7 +260,7 @@ with sync_playwright() as p:
     # ---- unsaved-changes guard on Profile
     pg = new_page(1280)
     dialogs = []
-    pg.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
+    pg.on("dialog", lambda d: (dialogs.append(d.message), d.accept() if d.type == "beforeunload" else d.dismiss()))
     pg.goto(BASE + "/settings/profile"); pg.wait_for_timeout(900)
     pg.get_by_role("link", name="Home").first.click(); pg.wait_for_timeout(300)
     check("profile: no prompt when nothing was edited", not dialogs and pg.url.endswith("/home"), pg.url)
@@ -243,7 +274,7 @@ with sync_playwright() as p:
     # ---- mobile + tablet overflow and drawer
     for w in (375, 768):
         pg = new_page(w, 800)
-        for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/connections", "/settings/account"]:
+        for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/resumes", "/settings/preferences", "/settings/connections", "/settings/account"]:
             pg.goto(BASE + path); pg.wait_for_timeout(700)
             sw = pg.evaluate("document.documentElement.scrollWidth"); iw = pg.evaluate("window.innerWidth")
             check(f"{w}px no horizontal page scroll on {path}", sw <= iw + 1, f"scrollWidth={sw} innerWidth={iw}")

@@ -15,6 +15,8 @@ interface Props {
   handleApplySingle: (jobId: string) => void;
   onNavigate: ((tab: any) => void) | undefined;
   record: { open: (id: string) => void };
+  selectedJobIds: Set<string>;
+  onToggleSelect: (jobId: string) => void;
   setDecisionFilter: (v: string) => void;
   setMinScoreFilter: (n: number) => void;
   setSearchQuery: (v: string) => void;
@@ -30,6 +32,8 @@ export const MatchesGrid: React.FC<Props> = ({
   handleApplySingle,
   onNavigate,
   record,
+  selectedJobIds,
+  onToggleSelect,
   setDecisionFilter,
   setMinScoreFilter,
   setSearchQuery,
@@ -40,9 +44,9 @@ export const MatchesGrid: React.FC<Props> = ({
       <div className="text-center py-24 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
         <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
         <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
-          Evaluating &amp; Loading AI Matches...
+          Loading your matches…
         </div>
-        <p className="text-xs text-slate-400">Analyzing skills overlap, semantic vectors, and LLM reasoning...</p>
+        <p className="text-xs text-slate-400">This can take a few seconds.</p>
       </div>
     ) : filteredAndSortedMatches.length === 0 ? (
       <div className="text-center py-20 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-8 shadow-sm space-y-4 max-w-xl mx-auto">
@@ -51,11 +55,11 @@ export const MatchesGrid: React.FC<Props> = ({
         </div>
         <div>
           <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            {allMatches.length === 0 ? 'No AI Evaluated Matches Yet' : 'No Matches Fit Current Filter'}
+            {allMatches.length === 0 ? 'No scored jobs yet' : 'No jobs fit these filters'}
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
             {allMatches.length === 0
-              ? 'You have discovered jobs ready to be analyzed against your resume. Click below to run the 5-stage AI cascade evaluation.'
+              ? 'Score your discovered jobs against your profile and resume to see how well each one fits.'
               : 'Try adjusting your minimum score slider, clearing the search query, or resetting filters.'}
           </p>
         </div>
@@ -66,7 +70,7 @@ export const MatchesGrid: React.FC<Props> = ({
               onClick={handleEvaluateAll}
               disabled={isEvaluatingAll}>
               <Sparkles className="w-4 h-4 text-amber-300 fill-amber-300" />
-              <span>Run AI Matching</span>
+              <span>Score my jobs</span>
             </Button>
           ) : (
             <button type="button"
@@ -96,6 +100,13 @@ export const MatchesGrid: React.FC<Props> = ({
               <div className="space-y-4">
                 {/* Card Header: Decision badge + Score */}
                 <div className="flex items-start justify-between gap-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedJobIds.has(m.job_id)}
+                    onChange={() => onToggleSelect(m.job_id)}
+                    aria-label={`Select ${m.job_title || 'position'} at ${m.company || 'company'}`}
+                    className="mt-1.5 h-4 w-4 shrink-0 cursor-pointer rounded text-indigo-600 focus:ring-indigo-500"
+                  />
                   <div className="space-y-1.5 flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
@@ -307,7 +318,7 @@ export const MatchesGrid: React.FC<Props> = ({
                     className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 flex items-center space-x-1.5 transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    <span>{applyingJobId === m.job_id ? 'Applying...' : 'Apply Now'}</span>
+                    <span>{applyingJobId === m.job_id ? 'Queuing…' : 'Queue to apply'}</span>
                   </button>
                 </div>
               </div>

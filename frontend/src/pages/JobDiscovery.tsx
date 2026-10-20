@@ -15,17 +15,25 @@ import { AutomationRunStatus, Job, Resume, MatchResult } from '../types';
 import { DiscoveredJobsHeader } from './jobs/DiscoveredJobsHeader';
 import { DiscoveredJobsGrid } from './jobs/DiscoveredJobsGrid';
 import { JobsPagination } from './jobs/JobsPagination';
+import { parseDaysFromFreshness } from './jobs/jobFreshness';
+import { useDiscoveryDefaults } from './jobs/useDiscoveryDefaults';
+import { useSelectionControl, type JobIdSet, type SetJobIds } from './jobs/useSelectionControl';
 
 interface JobDiscoveryProps {
   activeRun?: AutomationRunStatus | null;
   onRefreshStatus?: () => void;
   onNavigate?: (tab: any) => void;
+  /** Shared with the other Jobs lenses so the selection survives switching between them. */
+  selectedJobIds?: JobIdSet;
+  onSelectedJobIdsChange?: SetJobIds;
 }
 
 export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   activeRun = null,
   onRefreshStatus = () => {},
   onNavigate,
+  selectedJobIds: selectedFromParent,
+  onSelectedJobIdsChange,
 }) => {
   const { showSuccess, showError, showWarning } = useToast();
   const actions = useJobActions({ onNavigate });
@@ -46,7 +54,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   // Queue & Selection Management
-  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
+  const [selectedJobIds, setSelectedJobIds] = useSelectionControl(selectedFromParent, onSelectedJobIdsChange);
   const [isStartingQueue, setIsStartingQueue] = useState(false);
 
   // Pre-flight setup data & guardrails
@@ -98,18 +106,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     loadAppliedJobs
   );
 
-  useEffect(() => {
-    // Load candidate profile defaults
-    api.getProfile().then((prof) => {
-      if (prof) {
-        if (prof.headline) setRoles(prof.headline);
-        if (prof.location) setLocation(prof.location);
-        if (prof.total_experience_months !== undefined && prof.total_experience_months !== null) {
-          setExperience(Math.floor(prof.total_experience_months / 12));
-        }
-      }
-    }).catch(() => {});
-  }, []);
+  useDiscoveryDefaults(setRoles, setLocation, setExperience);
 
   // Pagination & Debouncing
   const [page, setPage] = useState(1);
@@ -163,15 +160,6 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
         setLoading(false);
       }
     }
-  };
-
-  const parseDaysFromFreshness = (val: string): number => {
-    if (val === '1h' || val === '3h' || val === '6h' || val === '12h' || val === '24h') return 1;
-    if (val === '3d') return 3;
-    if (val === '7d') return 7;
-    if (val === '14d') return 14;
-    if (val === '30d' || val === 'all') return 30;
-    return 1;
   };
 
   const handleTriggerDiscovery = async () => {
@@ -263,11 +251,18 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     });
   };
 
+  const allSelected = displayedJobs.length > 0 && displayedJobs.every((j) => selectedJobIds.has(j.id));
+
   const handleSelectAll = () => {
-    if (selectedJobIds.size === displayedJobs.length) {
-      setSelectedJobIds(new Set());
+    if (allSelected) {
+      // Only deselect what is on screen; jobs chosen in another view stay selected.
+      setSelectedJobIds((prev) => {
+        const next = new Set(prev);
+        displayedJobs.forEach((j) => next.delete(j.id));
+        return next;
+      });
     } else {
-      setSelectedJobIds(new Set(displayedJobs.map((j) => j.id)));
+      setSelectedJobIds((prev) => new Set([...prev, ...displayedJobs.map((j) => j.id)]));
     }
   };
 
@@ -278,8 +273,9 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
 
   // Trigger automation for selected jobs
   const handleLaunchQueue = async (selectedOnlyJobs?: Job[]) => {
-    const targetJobs = selectedOnlyJobs || displayedJobs.filter((j) => selectedJobIds.has(j.id));
-    if (targetJobs.length === 0) {
+    // Queue everything selected (it may include jobs picked in another view or on another page).
+    const targetIds = selectedOnlyJobs ? selectedOnlyJobs.map((j) => j.id) : [...selectedJobIds];
+    if (targetIds.length === 0) {
       showWarning('Please select at least 1 job to launch auto-apply.');
       return;
     }
@@ -291,8 +287,8 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     }
 
     if (!hasResume) {
-      showWarning('Please upload a PDF resume in Candidate Profile before auto-applying.');
-      if (onNavigate) onNavigate('profile');
+      showWarning('Please upload a PDF resume in Settings › Resumes & answers before auto-applying.');
+      if (onNavigate) onNavigate('resumes');
       return;
     }
 
@@ -302,10 +298,10 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
 
     try {
       setIsStartingQueue(true);
-      setLiveQueueJobIds(new Set(targetJobs.map((j) => j.id)));
-      setLiveApplyingJobId(targetJobs[0].id);
+      setLiveQueueJobIds(new Set(targetIds));
+      setLiveApplyingJobId(targetIds[0]);
 
-      const queued = await actions.queueJobs(targetJobs.map((j) => j.id), 'JOB_DISCOVERY');
+      const queued = await actions.queueJobs(targetIds, 'JOB_DISCOVERY');
       if (queued) {
         setSelectedJobIds(new Set());
         onRefreshStatus();
@@ -367,7 +363,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
 
       {/* Discovered Jobs Header & Bulk Selection Controls */}
       <div className="space-y-4">
-        <DiscoveredJobsHeader totalCount={totalCount} pageSize={pageSize} page={page} displayedJobs={displayedJobs} handleSelectAll={handleSelectAll} handleSelectTopN={handleSelectTopN} selectedCount={selectedCount} jobs={jobs} showConfirmClear={showConfirmClear} setShowConfirmClear={setShowConfirmClear} isClearing={isClearing} handleClearAll={handleClearAll} />
+        <DiscoveredJobsHeader totalCount={totalCount} pageSize={pageSize} page={page} displayedJobs={displayedJobs} allSelected={allSelected} handleSelectAll={handleSelectAll} handleSelectTopN={handleSelectTopN} selectedCount={selectedCount} jobs={jobs} showConfirmClear={showConfirmClear} setShowConfirmClear={setShowConfirmClear} isClearing={isClearing} handleClearAll={handleClearAll} />
 
         <DiscoveredJobsGrid loading={loading} displayedJobs={displayedJobs} filterMinFit={filterMinFit} selectedJobIds={selectedJobIds} appliedJobMap={appliedJobMap} liveSubmittedJobIds={liveSubmittedJobIds} liveQueueJobIds={liveQueueJobIds} liveApplyingJobId={liveApplyingJobId} activeRun={activeRun} matchesMap={matchesMap} evaluatingJobIds={evaluatingJobIds} deletingId={deletingId} toggleJobSelection={toggleJobSelection} record={record} handleEvaluateSingle={handleEvaluateSingle} handleSingleJobApply={handleSingleJobApply} handleDeleteJob={handleDeleteJob} onNavigate={onNavigate} />
 
@@ -380,6 +376,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
         isStartingQueue={isStartingQueue}
         selectedCount={selectedCount}
         setSelectedJobIds={setSelectedJobIds}
+        busy={isStartingQueue}
       />
 
       <JobDetailDrawer

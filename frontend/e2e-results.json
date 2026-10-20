@@ -36,9 +36,29 @@
    "detail": "http://localhost:4173/settings/connections"
   },
   {
-   "name": "Settings sub-tabs present",
+   "name": "Settings sub-pages present",
    "ok": true,
    "detail": ""
+  },
+  {
+   "name": "Preferences edit shows the sticky save bar",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "moving Preferences -> Profile keeps URL change and does not prompt",
+   "ok": true,
+   "detail": "[]http://localhost:4173/settings/profile"
+  },
+  {
+   "name": "unsaved edit still pending after the move",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "leaving the profile form with unsaved edits still asks first",
+   "ok": true,
+   "detail": "['You have unsaved changes. Leave this page and discard them?']http://localhost:4173/settings/profile"
   },
   {
    "name": "deep link /applications/app1 opens drawer and keeps URL",
@@ -66,7 +86,57 @@
    "detail": "http://localhost:4173/jobs/matches"
   },
   {
+   "name": "jobs: one h1 and a three-way lens switch",
+   "ok": true,
+   "detail": "['All discovered', 'Matched', 'Needs review']"
+  },
+  {
+   "name": "jobs: selecting a job shows the selection bar",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "jobs: switching to Matched keeps the URL contract and the selection",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/matches"
+  },
+  {
+   "name": "jobs: Needs review uses ?lens=review",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/matches?lens=review"
+  },
+  {
+   "name": "jobs: deep link to the review lens selects it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "jobs: legacy /ai-matches still lands on Matched",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/matches"
+  },
+  {
    "name": "/schedules -> campaigns safety deep link",
+   "ok": true,
+   "detail": "http://localhost:4173/automation/campaigns/safety"
+  },
+  {
+   "name": "safety deep link scrolls to the safety section and focuses it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "campaigns has no tab bar, only a Jump-to row",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "all three campaign sections are on the page",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "Jump to Activity moves focus there and keeps the URL",
    "ok": true,
    "detail": "http://localhost:4173/automation/campaigns/safety"
   },
@@ -206,14 +276,14 @@
    "detail": ""
   },
   {
-   "name": "insights: six sections",
+   "name": "insights: three views",
    "ok": true,
-   "detail": "['Overview', 'Sources', 'Resumes', 'Campaigns', 'Skills', 'Scoring weights']"
+   "detail": "['Overview', 'Breakdowns', 'Scoring']"
   },
   {
-   "name": "insights: choosing Sources updates the URL and selection",
+   "name": "insights: choosing Breakdowns updates the URL and selection",
    "ok": true,
-   "detail": "http://localhost:4173/insights?view=sources"
+   "detail": "http://localhost:4173/insights?view=breakdowns"
   },
   {
    "name": "insights: ?view=scoring opens that section",
@@ -272,6 +342,16 @@
   },
   {
    "name": "375px no horizontal page scroll on /settings/profile",
+   "ok": true,
+   "detail": "scrollWidth=375 innerWidth=375"
+  },
+  {
+   "name": "375px no horizontal page scroll on /settings/resumes",
+   "ok": true,
+   "detail": "scrollWidth=375 innerWidth=375"
+  },
+  {
+   "name": "375px no horizontal page scroll on /settings/preferences",
    "ok": true,
    "detail": "scrollWidth=375 innerWidth=375"
   },
@@ -346,6 +426,16 @@
    "detail": "scrollWidth=768 innerWidth=768"
   },
   {
+   "name": "768px no horizontal page scroll on /settings/resumes",
+   "ok": true,
+   "detail": "scrollWidth=768 innerWidth=768"
+  },
+  {
+   "name": "768px no horizontal page scroll on /settings/preferences",
+   "ok": true,
+   "detail": "scrollWidth=768 innerWidth=768"
+  },
+  {
    "name": "768px no horizontal page scroll on /settings/connections",
    "ok": true,
    "detail": "scrollWidth=768 innerWidth=768"
@@ -390,6 +480,11 @@
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -406,16 +501,18 @@
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
@@ -468,6 +565,14 @@
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "375px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "375px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "768px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "768px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -500,6 +605,8 @@
   "/automation/live": [],
   "/insights": [],
   "/settings/profile": [],
+  "/settings/resumes": [],
+  "/settings/preferences": [],
   "/settings/connections": [],
   "/settings/account": []
  }

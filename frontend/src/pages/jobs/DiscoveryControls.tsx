@@ -37,11 +37,11 @@ export const DiscoveryControls: React.FC<DiscoveryControlsProps> = ({
             <Compass className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-              Live Job Discovery Scout
-            </h1>
+            <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+              Find new jobs
+            </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Automated real-time scanner across job portals and direct ATS boards
+              Search a job site for roles that match what you are looking for
             </p>
           </div>
         </div>

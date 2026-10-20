@@ -55,3 +55,13 @@ The application layer imports nothing from `app.infrastructure`; `tests/unit/tes
 - `app/infrastructure/bootstrap.py` registers the real ones when the app starts.
 - Run, event and heartbeat storage lives in `SqlRunPersistence`; the dashboard and analytics queries live in `infrastructure/database/read_models/`.
 - Resume and reconcile start browser work in the background through `DeferredExecuteUseCase`; `?wait=true` runs it inside the request.
+
+## Frontend routes and pages
+
+Six areas: Home, Jobs, Applications, Automation, Insights, Settings. One `h1` per page.
+
+- Jobs: one page with three lenses (`/jobs`, `/jobs/matches`, `/jobs/matches?lens=review`). The selection survives lens changes. The lens is a UI layer over `GET /jobs` and `GET /jobs/matches`.
+- Settings: `/settings/profile`, `/settings/resumes`, `/settings/preferences`, `/settings/connections`, `/settings/account`.
+- Automation: campaign rules, safety and activity are stacked sections with a jump bar, not tabs.
+- Insights: `?view=overview|breakdowns|scoring`; older `?view=sources|resumes|campaigns|skills` open Breakdowns at that section.
+- Application status shown to the user (`display_status`, `needs_attention`) is computed on the server in `domain/applications/display_status.py`; the frontend only falls back to a local copy if the field is missing.

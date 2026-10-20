@@ -23,7 +23,7 @@ interface CriteriaCardProps {
   safety: SafetySettings;
   selectedResumeId: string;
   selectedSources: string[];
-  setActiveCampaignTab: (t: 'rules' | 'safety' | 'logs') => void;
+  onJumpToSection: (section: 'rules' | 'safety' | 'logs') => void;
   setApplicationMode: (m: 'AUTO' | 'APPROVAL') => void;
   setFreshnessHours: (n: number) => void;
   setMaxApplications: (n: number) => void;
@@ -55,7 +55,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
   safety,
   selectedResumeId,
   selectedSources,
-  setActiveCampaignTab,
+  onJumpToSection,
   setApplicationMode,
   setFreshnessHours,
   setMaxApplications,
@@ -95,9 +95,9 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
               >
                 {role}
                 <button type="button"
-                  aria-label="Close"
+                  aria-label={`Remove role ${role}`}
                   onClick={() => handleRemoveRole(role)}
-                  className="ml-1.5 hover:text-indigo-900 dark:hover:text-white cursor-pointer"
+                  className="ml-1.5 hover:text-indigo-900 dark:hover:text-white cursor-pointer hit-area"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -130,9 +130,9 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
               >
                 {loc}
                 <button type="button"
-                  aria-label="Close"
+                  aria-label={`Remove location ${loc}`}
                   onClick={() => handleRemoveLocation(loc)}
-                  className="ml-1.5 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                  className="ml-1.5 hover:text-slate-900 dark:hover:text-white cursor-pointer hit-area"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -337,7 +337,7 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
           <button
             type="button"
-            onClick={() => setActiveCampaignTab('safety')}
+            onClick={() => onJumpToSection('safety')}
             className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center space-x-2 transition-transform active:scale-95 cursor-pointer border border-slate-200 dark:border-slate-700"
           >
             <Clock className="w-4 h-4 text-indigo-500" />
