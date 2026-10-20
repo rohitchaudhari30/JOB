@@ -86,7 +86,7 @@ with sync_playwright() as p:
 
     # ---- desktop
     pg = new_page(1280)
-    pg.goto(BASE + "/dashboard"); pg.wait_for_selector("text=Command Center", timeout=10000)
+    pg.goto(BASE + "/dashboard"); pg.wait_for_selector("h1:has-text(\"Home\")", timeout=10000)
     check("legacy /dashboard redirects to /home", pg.url.endswith("/home"), pg.url)
     nav_items = pg.locator("nav[aria-label='Primary navigation'] a").all_inner_texts()
     check("sidebar has 6 items", len(nav_items) == 6, nav_items)
@@ -244,11 +244,11 @@ with sync_playwright() as p:
     pg = new_page(1280)
     pg.goto(BASE + "/insights"); pg.wait_for_selector("role=tablist", timeout=10000)
     tabs = pg.get_by_role("tab").all_inner_texts()
-    check("insights: six sections", len(tabs) == 6, tabs)
-    pg.get_by_role("tab", name="Sources").click(); pg.wait_for_timeout(300)
-    check("insights: choosing Sources updates the URL and selection", "view=sources" in pg.url and pg.get_by_role("tab", name="Sources").get_attribute("aria-selected") == "true", pg.url)
+    check("insights: three views", len(tabs) == 3, tabs)
+    pg.get_by_role("tab", name="Breakdowns").click(); pg.wait_for_timeout(300)
+    check("insights: choosing Breakdowns updates the URL and selection", "view=breakdowns" in pg.url and pg.get_by_role("tab", name="Breakdowns").get_attribute("aria-selected") == "true", pg.url)
     pg.goto(BASE + "/insights?view=scoring"); pg.wait_for_timeout(800)
-    check("insights: ?view=scoring opens that section", pg.get_by_role("tab", name="Scoring weights").get_attribute("aria-selected") == "true")
+    check("insights: ?view=scoring opens that section", pg.get_by_role("tab", name="Scoring").get_attribute("aria-selected") == "true")
     pg.context.close()
 
     # ---- Platform connections: cards render with their action

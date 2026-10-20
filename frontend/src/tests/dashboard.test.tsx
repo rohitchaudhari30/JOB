@@ -79,7 +79,7 @@ describe('Dashboard (Operational Command Center)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Command Center')).toBeDefined();
+      expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeDefined();
       expect(screen.getByText('Applications Today')).toBeDefined();
       expect(screen.getByText('8')).toBeDefined();
       expect(screen.getByText('/ 25')).toBeDefined();

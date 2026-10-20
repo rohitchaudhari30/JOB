@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { TrendingUp, RefreshCw, Calendar, Filter } from 'lucide-react';
 import { api } from '../services/api';
 import {
   FunnelOverview,
@@ -17,27 +16,43 @@ import { SourcesSection } from './analytics/SourcesSection';
 import { CampaignsSection } from './analytics/CampaignsSection';
 import { SkillsSection } from './analytics/SkillsSection';
 import { ScoringSection } from './analytics/ScoringSection';
+import { InsightsFilterBar, describeRange, type DateRangePreset } from './analytics/InsightsFilterBar';
+import { PageHeader } from '../components/ui/PageHeader';
+import { Tabs, TabPanel } from '../components/ui/Tabs';
 
 interface AnalyticsProps {
   onNavigate?: (tab: any) => void;
 }
 
-type DateRangePreset = 'TODAY' | '7D' | '30D' | '90D' | 'CUSTOM' | 'ALL_TIME';
-
-const INSIGHT_TABS = [
+const GROUPS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'sources', label: 'Sources' },
-  { id: 'resumes', label: 'Resumes' },
-  { id: 'campaigns', label: 'Campaigns' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'scoring', label: 'Scoring weights' },
-] as const;
-type InsightView = (typeof INSIGHT_TABS)[number]['id'];
+  { id: 'breakdowns', label: 'Breakdowns' },
+  { id: 'scoring', label: 'Scoring' },
+];
+type InsightView = 'overview' | 'breakdowns' | 'scoring';
+
+/** Older links used one tab per breakdown (?view=sources …). They now open Breakdowns at that section. */
+const LEGACY_SECTION = new Set(['sources', 'resumes', 'campaigns', 'skills']);
 
 export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
   const { showError } = useToast();
-  const [viewParam, setView] = useQueryParam('view', 'overview');
-  const view: InsightView = (INSIGHT_TABS.some((t) => t.id === viewParam) ? viewParam : 'overview') as InsightView;
+  const [viewParam, setViewParam] = useQueryParam('view', 'overview');
+  const view: InsightView = LEGACY_SECTION.has(viewParam)
+    ? 'breakdowns'
+    : (GROUPS.some((g) => g.id === viewParam) ? viewParam : 'overview') as InsightView;
+  const setView = (id: string) => setViewParam(id);
+
+  // Open the section an older link pointed at (once, after the Breakdowns view has rendered).
+  const legacyTarget = React.useRef(LEGACY_SECTION.has(viewParam) ? viewParam : null);
+  useEffect(() => {
+    const target = legacyTarget.current;
+    if (!target || view !== 'breakdowns') return;
+    const el = document.getElementById(`insights-${target}`);
+    if (!el) return;
+    legacyTarget.current = null;
+    el.scrollIntoView?.({ block: 'start' });
+    el.focus({ preventScroll: true });
+  });
 
   const [datePreset, setDatePreset] = useState<DateRangePreset>('30D');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -139,143 +154,54 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
   }, [resumes]);
 
   return (
-    <div className="space-y-8 animate-fadeIn pb-16">
-      {/* 1. Header & Date Range Selection Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-2 border-b border-slate-200/60 dark:border-slate-800">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/40 flex items-center justify-center shadow-xs">
-              <TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                  Analytics &amp; Strategy
-                </h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  Decision Workspace
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 font-medium">
-                Historical funnel conversion, resume variant comparison, platform attribution, and matching optimization.
-              </p>
-            </div>
-          </div>
-        </div>
+    <div className="space-y-6 animate-fadeIn pb-16">
+      <PageHeader
+        title="Insights"
+        description="How your job search is going: where applications come from, what is working, and how matches are scored."
+      />
 
-        {/* Date Presets & Platform Filter Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Preset Buttons */}
-          <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700 shadow-xs">
-            {(
-              [
-                { id: 'TODAY', label: 'Today' },
-                { id: '7D', label: '7D' },
-                { id: '30D', label: '30D' },
-                { id: '90D', label: '90D' },
-                { id: 'CUSTOM', label: 'Custom' },
-                { id: 'ALL_TIME', label: 'All Time' },
-              ] as { id: DateRangePreset; label: string }[]
-            ).map((preset) => (
-              <button type="button"
-                key={preset.id}
-                onClick={() => setDatePreset(preset.id)}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  datePreset === preset.id
-                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Platform Filter Dropdown */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs text-xs font-semibold text-slate-700 dark:text-slate-300">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <select aria-label="Platform"
-              value={selectedPlatform}
-              onChange={(e) => setSelectedPlatform(e.target.value)}
-              className="bg-transparent outline-none cursor-pointer text-xs font-semibold"
-            >
-              <option value="ALL">All Platforms</option>
-              <option value="NAUKRI">Naukri.com</option>
-              <option value="LINKEDIN">LinkedIn</option>
-              <option value="DIRECT">Direct ATS</option>
-            </select>
-          </div>
-
-          {/* Refresh Button */}
-          <button type="button" aria-label="Refresh"
-            onClick={() => fetchAnalyticsData(true)}
-            disabled={refreshing || loading}
-            title="Refresh Analytics Telemetry"
-            className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-600 dark:text-slate-300 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
-          </button>
-        </div>
+      <div className="space-y-2">
+        <InsightsFilterBar
+          datePreset={datePreset}
+          setDatePreset={setDatePreset}
+          customStartDate={customStartDate}
+          customEndDate={customEndDate}
+          setCustomStartDate={setCustomStartDate}
+          setCustomEndDate={setCustomEndDate}
+          selectedPlatform={selectedPlatform}
+          setSelectedPlatform={setSelectedPlatform}
+          onRefresh={() => fetchAnalyticsData(true)}
+          busy={refreshing || loading}
+        />
+        <p role="status" className="text-xs text-slate-600 dark:text-slate-400">
+          Showing: <strong>{describeRange(datePreset, customStartDate, customEndDate, selectedPlatform)}</strong>. Applies to every view below.
+        </p>
       </div>
 
-      {/* Custom Date Range Picker Fields (if CUSTOM selected) */}
-      {datePreset === 'CUSTOM' && (
-        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-4 text-xs animate-fadeIn">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-indigo-500" />
-            <span className="font-bold text-slate-700 dark:text-slate-300">Custom Date Range:</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-slate-500 font-medium">From:</label>
-            <input
-              type="date"
-              value={customStartDate}
-              onChange={(e) => setCustomStartDate(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-white outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-slate-500 font-medium">To:</label>
-            <input
-              type="date"
-              value={customEndDate}
-              onChange={(e) => setCustomEndDate(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-800 dark:text-white outline-none"
-            />
-          </div>
+      <Tabs items={GROUPS} value={view} onChange={setView} label="Insights views" idPrefix="insights" />
+
+      <TabPanel idPrefix="insights" id={view} active>
+        <div className="space-y-6">
+          {view === 'overview' && <OverviewSection funnel={funnel} onNavigate={onNavigate} />}
+          {view === 'breakdowns' && (
+            <>
+              <section id="insights-sources" tabIndex={-1} aria-label="Sources" className="scroll-mt-4 focus:outline-none">
+                <SourcesSection funnel={funnel} sources={sources} />
+              </section>
+              <section id="insights-resumes" tabIndex={-1} aria-label="Resumes" className="scroll-mt-4 focus:outline-none">
+                <ResumesSection resumes={resumes} highestInterviewResume={highestInterviewResume} />
+              </section>
+              <section id="insights-campaigns" tabIndex={-1} aria-label="Campaigns" className="scroll-mt-4 focus:outline-none">
+                <CampaignsSection campaigns={campaigns} onNavigate={onNavigate} />
+              </section>
+              <section id="insights-skills" tabIndex={-1} aria-label="Skills" className="scroll-mt-4 focus:outline-none">
+                <SkillsSection skills={skills} />
+              </section>
+            </>
+          )}
+          {view === 'scoring' && <ScoringSection weightTuning={weightTuning} aiStatus={aiStatus} onNavigate={onNavigate} />}
         </div>
-      )}
-
-      {/* Insights sections (URL: ?view=) */}
-      <div role="tablist" aria-label="Insight sections" className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">
-        {INSIGHT_TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            id={`insight-tab-${t.id}`}
-            aria-selected={view === t.id}
-            aria-controls="insight-panel"
-            onClick={() => setView(t.id)}
-            className={`whitespace-nowrap px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px cursor-pointer transition-colors ${
-              view === t.id
-                ? 'border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-300'
-                : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div id="insight-panel" role="tabpanel" aria-labelledby={`insight-tab-${view}`} className="space-y-6">
-        {view === 'overview' && <OverviewSection funnel={funnel} onNavigate={onNavigate} />}
-        {view === 'resumes' && <ResumesSection resumes={resumes} highestInterviewResume={highestInterviewResume} />}
-        {view === 'sources' && <SourcesSection funnel={funnel} sources={sources} />}
-        {view === 'campaigns' && <CampaignsSection campaigns={campaigns} onNavigate={onNavigate} />}
-        {view === 'skills' && <SkillsSection skills={skills} />}
-        {view === 'scoring' && <ScoringSection weightTuning={weightTuning} aiStatus={aiStatus} onNavigate={onNavigate} />}
-      </div>
+      </TabPanel>
     </div>
   );
 };

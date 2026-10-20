@@ -276,14 +276,14 @@
    "detail": ""
   },
   {
-   "name": "insights: six sections",
+   "name": "insights: three views",
    "ok": true,
-   "detail": "['Overview', 'Sources', 'Resumes', 'Campaigns', 'Skills', 'Scoring weights']"
+   "detail": "['Overview', 'Breakdowns', 'Scoring']"
   },
   {
-   "name": "insights: choosing Sources updates the URL and selection",
+   "name": "insights: choosing Breakdowns updates the URL and selection",
    "ok": true,
-   "detail": "http://localhost:4173/insights?view=sources"
+   "detail": "http://localhost:4173/insights?view=breakdowns"
   },
   {
    "name": "insights: ?view=scoring opens that section",
@@ -501,7 +501,6 @@
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",

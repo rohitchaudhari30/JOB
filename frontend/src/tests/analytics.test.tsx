@@ -107,14 +107,13 @@ describe('Analytics (Strategic Decision Workspace)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Analytics & Strategy')).toBeDefined();
-      expect(screen.getByText('Decision Workspace')).toBeDefined();
-      expect(screen.getByText('Today')).toBeDefined();
-      expect(screen.getByText('7D')).toBeDefined();
-      expect(screen.getByText('30D')).toBeDefined();
-      expect(screen.getByText('90D')).toBeDefined();
-      expect(screen.getByText('Custom')).toBeDefined();
-      expect(screen.getByText('All Time')).toBeDefined();
+      expect(screen.getByRole('heading', { level: 1, name: 'Insights' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Today' })).toBeDefined();
+      expect(screen.getByRole('button', { name: '7 days' })).toBeDefined();
+      expect(screen.getByRole('button', { name: '30 days' })).toBeDefined();
+      expect(screen.getByRole('button', { name: '90 days' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Custom' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'All time' })).toBeDefined();
     });
   });
 
@@ -153,7 +152,7 @@ describe('Analytics (Strategic Decision Workspace)', () => {
       </ToastProvider>
     );
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Resumes' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Breakdowns' }));
     await waitFor(() => {
       expect(screen.getByText('Resume Performance Comparison')).toBeDefined();
       expect(screen.getByText('Highest Observed Interview Rate')).toBeDefined();
@@ -175,7 +174,7 @@ describe('Analytics (Strategic Decision Workspace)', () => {
       </ToastProvider>
     );
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Scoring weights' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Scoring' }));
     await waitFor(() => {
       expect(screen.getByText('AI Matching Strategy & Optimization')).toBeDefined();
       expect(screen.getByText('Configure Matching Strategy')).toBeDefined();
@@ -195,15 +194,15 @@ describe('Analytics (Strategic Decision Workspace)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Custom')).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Custom' })).toBeDefined();
     });
 
-    fireEvent.click(screen.getByText('Custom'));
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Custom Date Range:')).toBeDefined();
-      expect(screen.getByText('From:')).toBeDefined();
-      expect(screen.getByText('To:')).toBeDefined();
+      expect(screen.getByText('Custom period')).toBeDefined();
+      expect(screen.getByLabelText('From')).toBeDefined();
+      expect(screen.getByLabelText('To')).toBeDefined();
     });
   });
 
@@ -215,8 +214,19 @@ describe('Analytics (Strategic Decision Workspace)', () => {
     );
     expect((await screen.findByRole('tab', { name: 'Overview' })).getAttribute('aria-selected')).toBe('true');
     expect(screen.queryByText('Resume Performance Comparison')).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: 'Campaigns' }));
-    expect(screen.getByRole('tab', { name: 'Campaigns' }).getAttribute('aria-selected')).toBe('true');
-    expect(window.location.search).toContain('view=campaigns');
+    fireEvent.click(screen.getByRole('tab', { name: 'Breakdowns' }));
+    expect(screen.getByRole('tab', { name: 'Breakdowns' }).getAttribute('aria-selected')).toBe('true');
+    expect(window.location.search).toContain('view=breakdowns');
+  });
+
+  it('opens Breakdowns for an older ?view=campaigns link', async () => {
+    window.history.replaceState({}, '', '/insights?view=campaigns');
+    render(
+      <ToastProvider>
+        <Analytics />
+      </ToastProvider>
+    );
+    expect((await screen.findByRole('tab', { name: 'Breakdowns' })).getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('insights-campaigns')).not.toBeNull();
   });
 });

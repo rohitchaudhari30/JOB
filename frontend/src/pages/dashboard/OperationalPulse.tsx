@@ -121,7 +121,7 @@ export const OperationalPulse: React.FC<Props> = ({ overview, connections, onNav
         </div>
 
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-          <span>Encrypted Session Tokens</span>
+          <span>Saved platform sessions</span>
           <button type="button"
             onClick={() => onNavigate('connections')}
             className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
