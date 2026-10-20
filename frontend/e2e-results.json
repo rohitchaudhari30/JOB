@@ -91,6 +91,26 @@
    "detail": "http://localhost:4173/automation/campaigns/safety"
   },
   {
+   "name": "safety deep link scrolls to the safety section and focuses it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "campaigns has no tab bar, only a Jump-to row",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "all three campaign sections are on the page",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "Jump to Activity moves focus there and keeps the URL",
+   "ok": true,
+   "detail": "http://localhost:4173/automation/campaigns/safety"
+  },
+  {
    "name": "modal: New Campaign opens as a dialog",
    "ok": true,
    "detail": ""
@@ -454,15 +474,12 @@
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
-  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",

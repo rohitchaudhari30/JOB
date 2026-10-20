@@ -94,15 +94,15 @@ export const RunHeader: React.FC<Props> = ({
               className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>Resume Run</span>
+              <span>Resume run</span>
             </button>
           ) : (
             <button type="button"
               onClick={handlePause}
               className="px-4 py-2.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
             >
-              <Pause className="w-4 h-4" />
-              <span>Pause</span>
+              <Pause className="w-4 h-4" aria-hidden="true" />
+              <span>Pause run</span>
             </button>
           )}
 
@@ -111,7 +111,7 @@ export const RunHeader: React.FC<Props> = ({
             className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer shadow-sm"
           >
             <Square className="w-3.5 h-3.5 fill-white" />
-            <span>Stop Run</span>
+            <span>Stop run</span>
           </button>
         </div>
       ) : (

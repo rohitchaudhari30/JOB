@@ -21,7 +21,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useCampaignLaunch } from './campaigns/useCampaignLaunch';
 import { useCampaignRules } from './campaigns/useCampaignRules';
 import { useCampaignTransitions } from './campaigns/useCampaignTransitions';
-import { CampaignTabBar } from './campaigns/CampaignTabBar';
+import { CampaignJumpBar, SECTION_IDS, jumpToCampaignSection } from './campaigns/CampaignJumpBar';
 import { PreflightBar } from './campaigns/PreflightBar';
 
 interface DirectApplyProps {
@@ -69,7 +69,6 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [pacingStatus, setPacingStatus] = useState<CampaignPacingStatus | null>(null);
   const [campaignLogs, setCampaignLogs] = useState<CampaignActivityLog[]>([]);
-  const [activeCampaignTab, setActiveCampaignTab] = useState<'rules' | 'safety' | 'logs'>('rules');
   const [showNewCampaignModal, setShowNewCampaignModal] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState('');
   const [campaignActionLoading, setCampaignActionLoading] = useState(false);
@@ -78,10 +77,12 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
 
   useEffect(() => {
     loadSetupData();
-    if (initialTab === 'schedules') {
-      setActiveCampaignTab('safety');
-    }
-  }, [initialTab]);
+  }, []);
+
+  // /automation/campaigns/safety opens the same page scrolled to the safety section.
+  useEffect(() => {
+    if (!loading && initialTab === 'schedules') jumpToCampaignSection('safety');
+  }, [loading, initialTab]);
 
   // Pacing/logs refresh every 5 s while a campaign is selected; paused when the tab is hidden.
   usePolling(
@@ -323,65 +324,58 @@ export const DirectApply: React.FC<DirectApplyProps> = ({ onNavigate, initialTab
 
       <CampaignCockpit connections={connections} pacingStatus={pacingStatus} safety={safety} selectedCampaign={selectedCampaign} onNavigate={onNavigate} />
 
-      {/* Campaign Feature Tabs */}
-      <CampaignTabBar activeCampaignTab={activeCampaignTab} setActiveCampaignTab={setActiveCampaignTab} logCount={campaignLogs.length} />
+      <CampaignJumpBar logCount={campaignLogs.length} />
 
-      {/* Rules Tab Body */}
-      {activeCampaignTab === 'rules' && (
-        <>
-          {/* Pre-flight System Health Bar */}
-      <PreflightBar profile={profile} resumes={resumes} selectedResumeId={selectedResumeId} connectedSourcesCount={connectedSourcesCount} />
+      <section id={SECTION_IDS.rules} tabIndex={-1} aria-label="What to apply to" className="space-y-6 scroll-mt-4 focus:outline-none">
+        <PreflightBar profile={profile} resumes={resumes} selectedResumeId={selectedResumeId} connectedSourcesCount={connectedSourcesCount} />
 
-      <CriteriaCard
-        applicationMode={applicationMode}
-        freshnessHours={freshnessHours}
-        handleAddLocation={handleAddLocation}
-        handleAddRole={handleAddRole}
-        handleRemoveLocation={handleRemoveLocation}
-        handleRemoveRole={handleRemoveRole}
-        handleStartApply={handleStartApply}
-        locations={locations}
-        maxApplications={maxApplications}
-        minMatchScore={minMatchScore}
-        newLocationInput={newLocationInput}
-        newRoleInput={newRoleInput}
-        profile={profile}
-        resumes={resumes}
-        safety={safety}
-        selectedResumeId={selectedResumeId}
-        selectedSources={selectedSources}
-        setActiveCampaignTab={setActiveCampaignTab}
-        setApplicationMode={setApplicationMode}
-        setFreshnessHours={setFreshnessHours}
-        setMaxApplications={setMaxApplications}
-        setMinMatchScore={setMinMatchScore}
-        setNewLocationInput={setNewLocationInput}
-        setNewRoleInput={setNewRoleInput}
-        setSelectedResumeId={setSelectedResumeId}
-        starting={starting}
-        targetRoles={targetRoles}
-        toggleSource={toggleSource}
-      />
-      </>
-      )}
+        <CriteriaCard
+          applicationMode={applicationMode}
+          freshnessHours={freshnessHours}
+          handleAddLocation={handleAddLocation}
+          handleAddRole={handleAddRole}
+          handleRemoveLocation={handleRemoveLocation}
+          handleRemoveRole={handleRemoveRole}
+          handleStartApply={handleStartApply}
+          locations={locations}
+          maxApplications={maxApplications}
+          minMatchScore={minMatchScore}
+          newLocationInput={newLocationInput}
+          newRoleInput={newRoleInput}
+          profile={profile}
+          resumes={resumes}
+          safety={safety}
+          selectedResumeId={selectedResumeId}
+          selectedSources={selectedSources}
+          onJumpToSection={jumpToCampaignSection}
+          setApplicationMode={setApplicationMode}
+          setFreshnessHours={setFreshnessHours}
+          setMaxApplications={setMaxApplications}
+          setMinMatchScore={setMinMatchScore}
+          setNewLocationInput={setNewLocationInput}
+          setNewRoleInput={setNewRoleInput}
+          setSelectedResumeId={setSelectedResumeId}
+          starting={starting}
+          targetRoles={targetRoles}
+          toggleSource={toggleSource}
+        />
+      </section>
 
-      {/* Schedule & Safety Policy Tab Body */}
-      {activeCampaignTab === 'safety' && (
+      <section id={SECTION_IDS.safety} tabIndex={-1} aria-label="When and how fast" className="scroll-mt-4 focus:outline-none">
         <SafetyScheduleTab
           settings={safety}
           saving={campaignActionLoading}
           onChange={(patch) => setSafety((prev) => ({ ...prev, ...patch }))}
           onSave={handleSaveCampaignConfig}
         />
-      )}
+      </section>
 
-      {/* Activity Stream Tab Body */}
-      {activeCampaignTab === 'logs' && (
+      <section id={SECTION_IDS.logs} tabIndex={-1} aria-label="Activity" className="scroll-mt-4 focus:outline-none">
         <ActivityStream
           logs={campaignLogs}
           onRefresh={() => selectedCampaign && loadCampaignPacingAndLogs(selectedCampaign.id)}
         />
-      )}
+      </section>
 
       {/* Modern Backdrop Modal for [+ New Campaign] */}
       {showNewCampaignModal && (

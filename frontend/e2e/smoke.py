@@ -126,6 +126,12 @@ with sync_playwright() as p:
     check("legacy /jobs?view=matches -> /jobs/matches", pg.url.endswith("/jobs/matches"), pg.url)
     pg.goto(BASE + "/schedules"); pg.wait_for_timeout(800)
     check("/schedules -> campaigns safety deep link", pg.url.endswith("/automation/campaigns/safety"), pg.url)
+    pg.wait_for_timeout(600)
+    check("safety deep link scrolls to the safety section and focuses it", pg.evaluate("document.activeElement && document.activeElement.id") == "campaign-safety")
+    check("campaigns has no tab bar, only a Jump-to row", pg.get_by_role("tab").count() == 0 and pg.get_by_role("navigation", name="On this page").count() == 1)
+    check("all three campaign sections are on the page", all(pg.locator("#" + i).count() == 1 for i in ["campaign-rules", "campaign-safety", "campaign-activity"]))
+    pg.get_by_role("link", name="Activity").first.click(); pg.wait_for_timeout(500)
+    check("Jump to Activity moves focus there and keeps the URL", pg.evaluate("document.activeElement.id") == "campaign-activity" and pg.url.endswith("/automation/campaigns/safety"), pg.url)
 
     # axe on each primary page
     for path in ["/home", "/jobs", "/jobs/matches", "/applications", "/automation/campaigns", "/automation/live", "/insights", "/settings/profile", "/settings/resumes", "/settings/preferences", "/settings/connections", "/settings/account"]:

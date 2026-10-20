@@ -8,6 +8,8 @@ import { RunHeader } from './live/RunHeader';
 import { CompletionBanner } from './live/CompletionBanner';
 import { BrowserViewport } from './live/BrowserViewport';
 import { OtpModal } from './live/OtpModal';
+import { PausedBanner } from './live/PausedBanner';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useLiveStream } from './live/useLiveStream';
 import { LiveTelemetryPanel } from '../components/LiveTelemetryPanel';
 
@@ -24,6 +26,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
 }) => {
   const { showError, showSuccess } = useToast();
   const [otpModalOpen, setOtpModalOpen] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
   const [otpValue, setOtpValue] = useState('');
   const [sourceType] = useState('naukri');
   const [isStarting, setIsStarting] = useState(false);
@@ -128,7 +131,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
       wsClient.sendCommand('PAUSE', activeRun.run_id);
       onRefreshStatus();
     } catch (e: any) {
-      console.error('Pause failed:', e);
+      showError(`Could not pause the run: ${e.response?.data?.detail || e.message}`);
     }
   };
 
@@ -141,7 +144,7 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
       setOtpValue('');
       onRefreshStatus();
     } catch (e: any) {
-      console.error('Resume failed:', e);
+      showError(`Could not resume the run: ${e.response?.data?.detail || e.message}`);
     }
   };
 
@@ -152,7 +155,9 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
       wsClient.sendCommand('STOP', activeRun.run_id);
       onRefreshStatus();
     } catch (e: any) {
-      console.error('Stop failed:', e);
+      showError(`Could not stop the run: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setConfirmStop(false);
     }
   };
 
@@ -162,7 +167,19 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Top Mission Control Status Header - No Duplicate Filters */}
-      <RunHeader isRunning={isRunning} isPaused={isPaused} isStarting={isStarting} viewMode={viewMode} setViewMode={setViewMode} handleStartProfileRun={handleStartProfileRun} handlePause={handlePause} handleResume={handleResume} handleStop={handleStop} onNavigate={onNavigate} />
+      <RunHeader isRunning={isRunning} isPaused={isPaused} isStarting={isStarting} viewMode={viewMode} setViewMode={setViewMode} handleStartProfileRun={handleStartProfileRun} handlePause={handlePause} handleResume={handleResume} handleStop={() => setConfirmStop(true)} onNavigate={onNavigate} />
+
+      {isRunning && isPaused && <PausedBanner onEnterCode={() => setOtpModalOpen(true)} />}
+
+      <ConfirmDialog
+        open={confirmStop}
+        title="Stop this run?"
+        message="The browser run ends now. Applications already submitted are kept; anything in progress is not submitted."
+        confirmLabel="Stop run"
+        destructive
+        onConfirm={handleStop}
+        onCancel={() => setConfirmStop(false)}
+      />
 
       {completedSummary && (
         <CompletionBanner completedSummary={completedSummary} onDismiss={() => { setCompletedSummary(null); setCurrentExecutionState('IDLE'); onRefreshStatus(); }} onNavigate={onNavigate} />
