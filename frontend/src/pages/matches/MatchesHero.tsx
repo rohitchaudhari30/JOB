@@ -18,11 +18,11 @@ export const MatchesHero: React.FC<Props> = ({ loading, isEvaluatingAll, handleE
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              AI Job Matches
-            </h1>
+            <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
+              Scored jobs
+            </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Compatibility scoring and skill alignment based on your profile and preferences.
+              How well each job fits your profile, skills and preferences.
             </p>
           </div>
         </div>
@@ -34,9 +34,8 @@ export const MatchesHero: React.FC<Props> = ({ loading, isEvaluatingAll, handleE
           onClick={loadAllMatches}
           disabled={loading}
           className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all cursor-pointer shadow-xs"
-          title="Refresh AI Matches"
-
-          aria-label="Refresh AI Matches"
+          title="Refresh matches"
+          aria-label="Refresh matches"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
         </button>
@@ -49,12 +48,12 @@ export const MatchesHero: React.FC<Props> = ({ loading, isEvaluatingAll, handleE
           {isEvaluatingAll ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>Running AI Matching...</span>
+              <span>Scoring…</span>
             </>
           ) : (
             <>
               <Sparkles className="w-4 h-4 text-amber-300 fill-amber-300" />
-              <span>Run AI Matching</span>
+              <span>Score my jobs</span>
             </>
           )}
         </button>

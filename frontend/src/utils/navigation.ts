@@ -110,10 +110,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Jobs',
     entry: 'discovery',
     members: ['discovery', 'matches'],
-    sections: [
-      { tab: 'discovery', label: 'Discover' },
-      { tab: 'matches', label: 'AI matches' },
-    ],
+    // One page: the All / Matched / Needs review lens switch lives inside it (pages/JobsWorkspace.tsx).
   },
   { id: 'applications', label: 'Applications', entry: 'crm', members: ['crm'] },
   {

@@ -86,6 +86,36 @@
    "detail": "http://localhost:4173/jobs/matches"
   },
   {
+   "name": "jobs: one h1 and a three-way lens switch",
+   "ok": true,
+   "detail": "['All discovered', 'Matched', 'Needs review']"
+  },
+  {
+   "name": "jobs: selecting a job shows the selection bar",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "jobs: switching to Matched keeps the URL contract and the selection",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/matches"
+  },
+  {
+   "name": "jobs: Needs review uses ?lens=review",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/matches?lens=review"
+  },
+  {
+   "name": "jobs: deep link to the review lens selects it",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "jobs: legacy /ai-matches still lands on Matched",
+   "ok": true,
+   "detail": "http://localhost:4173/jobs/matches"
+  },
+  {
    "name": "/schedules -> campaigns safety deep link",
    "ok": true,
    "detail": "http://localhost:4173/automation/campaigns/safety"
@@ -452,6 +482,9 @@
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
@@ -471,7 +504,8 @@
   "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
-  "1280px error: WebSocket connection to 'ws://localhost:4173/ws' failed: Connection closed before receiving a handshake response",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
+  "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",
   "1280px error: Failed to load resource: net::ERR_TUNNEL_CONNECTION_FAILED",

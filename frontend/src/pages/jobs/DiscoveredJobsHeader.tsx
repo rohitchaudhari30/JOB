@@ -7,6 +7,7 @@ interface Props {
   pageSize: number;
   page: number;
   displayedJobs: Job[];
+  allSelected: boolean;
   handleSelectAll: () => void;
   handleSelectTopN: (n: number) => void;
   selectedCount: number;
@@ -22,6 +23,7 @@ export const DiscoveredJobsHeader: React.FC<Props> = ({
   pageSize,
   page,
   displayedJobs,
+  allSelected,
   handleSelectAll,
   handleSelectTopN,
   selectedCount,
@@ -35,7 +37,7 @@ export const DiscoveredJobsHeader: React.FC<Props> = ({
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center space-x-3">
         <h2 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-          Discovered Job Repository ({totalCount} total{totalCount > pageSize ? ` · page ${page}` : ''})
+          Jobs found ({totalCount} total{totalCount > pageSize ? ` · page ${page}` : ''})
         </h2>
         {displayedJobs.length > 0 && (
           <div className="flex items-center space-x-2">
@@ -43,7 +45,7 @@ export const DiscoveredJobsHeader: React.FC<Props> = ({
               onClick={handleSelectAll}
               className="text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 flex items-center space-x-1 cursor-pointer"
             >
-              {selectedCount === displayedJobs.length ? (
+              {allSelected ? (
                 <>
                   <CheckSquare className="w-3.5 h-3.5" />
                   <span>Deselect All</span>

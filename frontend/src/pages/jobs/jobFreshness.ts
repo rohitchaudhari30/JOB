@@ -60,3 +60,13 @@ export const formatRelativeTime = (job: Job): { label: string; badgeStyle: strin
     isLive: false,
   };
 };
+
+/** Number of days to ask the server for, given the "posted within" choice (anything longer than a day maps to whole days). */
+export const parseDaysFromFreshness = (val: string): number => {
+  if (val === '1h' || val === '3h' || val === '6h' || val === '12h' || val === '24h') return 1;
+  if (val === '3d') return 3;
+  if (val === '7d') return 7;
+  if (val === '14d') return 14;
+  if (val === '30d' || val === 'all') return 30;
+  return 1;
+};

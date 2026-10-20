@@ -19,8 +19,7 @@ import { Button } from './components/ui/Button';
 // Pages load on demand so the first screen downloads less code (FE-03).
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const LiveAutomation = lazy(() => import('./pages/LiveAutomation').then((m) => ({ default: m.LiveAutomation })));
-const AIMatches = lazy(() => import('./pages/AIMatches').then((m) => ({ default: m.AIMatches })));
-const JobDiscovery = lazy(() => import('./pages/JobDiscovery').then((m) => ({ default: m.JobDiscovery })));
+const JobsWorkspace = lazy(() => import('./pages/JobsWorkspace').then((m) => ({ default: m.JobsWorkspace })));
 const ApplicationCRM = lazy(() => import('./pages/ApplicationCRM').then((m) => ({ default: m.ApplicationCRM })));
 const PROFILE_VIEW_TABS: ReadonlySet<string> = new Set(['profile', 'resumes', 'preferences']);
 const ProfileManager = lazy(() => import('./pages/ProfileManager').then((m) => ({ default: m.ProfileManager })));
@@ -360,9 +359,9 @@ export const App: React.FC = () => {
               onNavigate={handleTabChange}
             />
           )}
-          {activeTab === 'matches' && <AIMatches onNavigate={handleTabChange} />}
-          {activeTab === 'discovery' && (
-            <JobDiscovery
+          {(activeTab === 'discovery' || activeTab === 'matches') && (
+            <JobsWorkspace
+              tab={activeTab}
               activeRun={activeRun}
               onRefreshStatus={loadActiveRun}
               onNavigate={handleTabChange}

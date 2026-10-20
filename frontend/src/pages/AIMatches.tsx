@@ -12,14 +12,30 @@ import { MatchesHero } from './matches/MatchesHero';
 import { MatchesKpis } from './matches/MatchesKpis';
 import { MatchesToolbar } from './matches/MatchesToolbar';
 import { MatchesGrid } from './matches/MatchesGrid';
+import { SelectionBar } from './jobs/SelectionBar';
+import { useSelectionControl, type JobIdSet, type SetJobIds } from './jobs/useSelectionControl';
 
 const PAGE_SIZE = 100;
 
 interface AIMatchesProps {
   onNavigate?: (tab: any) => void;
+  /** "review" = only matches that need the person's decision. */
+  lens?: 'matched' | 'review';
+  onLensChange?: (lens: 'matched' | 'review') => void;
+  /** Shared with the other Jobs lenses so the selection survives switching between them. */
+  selectedJobIds?: JobIdSet;
+  onSelectedJobIdsChange?: SetJobIds;
 }
 
-export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
+export const AIMatches: React.FC<AIMatchesProps> = ({
+  onNavigate,
+  lens = 'matched',
+  onLensChange,
+  selectedJobIds: selectedFromParent,
+  onSelectedJobIdsChange,
+}) => {
+  const [selectedJobIds, setSelectedJobIds] = useSelectionControl(selectedFromParent, onSelectedJobIdsChange);
+  const [queueing, setQueueing] = useState(false);
   const actions = useJobActions({ onNavigate });
   const readiness = actions.readiness;
   const record = useRecordRoute('/jobs/matches', 'matches');
@@ -28,13 +44,51 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [serverTotal, setServerTotal] = useState(0);
   const [minScoreFilter, setMinScoreFilter] = useState<number>(0);
-  const [decisionFilter, setDecisionFilter] = useState<string>('ALL');
+  const [decisionFilter, setDecisionFilterState] = useState<string>(lens === 'review' ? 'REQUIRE_APPROVAL' : 'ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('score_desc');
 
   useEffect(() => {
     loadAllMatches();
   }, []);
+
+  // The lens and the fit filter are two views of the same choice: "Needs review" is the
+  // REQUIRE_APPROVAL fit. Changing either one keeps the other (and the URL) in step.
+  useEffect(() => {
+    setDecisionFilterState((cur) => {
+      if (lens === 'review') return 'REQUIRE_APPROVAL';
+      return cur === 'REQUIRE_APPROVAL' ? 'ALL' : cur;
+    });
+  }, [lens]);
+
+  const setDecisionFilter = (value: string) => {
+    setDecisionFilterState(value);
+    if (value === 'REQUIRE_APPROVAL' && lens !== 'review') onLensChange?.('review');
+    else if (value !== 'REQUIRE_APPROVAL' && lens === 'review') onLensChange?.('matched');
+  };
+
+  const toggleSelect = (jobId: string) =>
+    setSelectedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+
+  const handleQueueSelected = async () => {
+    const ids = [...selectedJobIds];
+    if (ids.length === 0) return;
+    setQueueing(true);
+    try {
+      const result = await actions.queueJobs(ids, 'AI_MATCHES');
+      if (result && result.queued_count > 0) {
+        setSelectedJobIds(new Set());
+        if (onNavigate) setTimeout(() => onNavigate('applications'), 600);
+      }
+    } finally {
+      setQueueing(false);
+    }
+  };
 
   const loadAllMatches = async () => {
     try {
@@ -138,7 +192,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
   }, [allMatches, serverTotal]);
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn pb-24">
       <ReadinessBanner
         missing={readiness.missing}
         platformLabel="Your job platform"
@@ -151,7 +205,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
 
       <MatchesToolbar allMatches={allMatches} filteredAndSortedMatches={filteredAndSortedMatches} minScoreFilter={minScoreFilter} setMinScoreFilter={setMinScoreFilter} decisionFilter={decisionFilter} setDecisionFilter={setDecisionFilter} searchQuery={searchQuery} setSearchQuery={setSearchQuery} sortBy={sortBy} setSortBy={setSortBy} />
 
-      <MatchesGrid loading={loading} allMatches={allMatches} filteredAndSortedMatches={filteredAndSortedMatches} isEvaluatingAll={isEvaluatingAll} applyingJobId={applyingJobId} handleEvaluateAll={handleEvaluateAll} handleApplySingle={handleApplySingle} onNavigate={onNavigate} record={record} setDecisionFilter={setDecisionFilter} setMinScoreFilter={setMinScoreFilter} setSearchQuery={setSearchQuery} />
+      <MatchesGrid loading={loading} allMatches={allMatches} filteredAndSortedMatches={filteredAndSortedMatches} isEvaluatingAll={isEvaluatingAll} applyingJobId={applyingJobId} handleEvaluateAll={handleEvaluateAll} handleApplySingle={handleApplySingle} onNavigate={onNavigate} record={record} selectedJobIds={selectedJobIds} onToggleSelect={toggleSelect} setDecisionFilter={setDecisionFilter} setMinScoreFilter={setMinScoreFilter} setSearchQuery={setSearchQuery} />
 
       {allMatches.length < serverTotal && (
         <div className="flex flex-col items-center gap-2 py-2">
@@ -163,6 +217,14 @@ export const AIMatches: React.FC<AIMatchesProps> = ({ onNavigate }) => {
           </Button>
         </div>
       )}
+
+      <SelectionBar
+        defaultResume={undefined}
+        handleLaunchQueue={handleQueueSelected}
+        isStartingQueue={queueing}
+        selectedCount={selectedJobIds.size}
+        setSelectedJobIds={setSelectedJobIds}
+      />
 
       <JobDetailDrawer
         model={drawerModel}

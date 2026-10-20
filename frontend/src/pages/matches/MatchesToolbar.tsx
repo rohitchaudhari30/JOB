@@ -75,16 +75,16 @@ export const MatchesToolbar: React.FC<Props> = ({
 
           {/* Decision Filter */}
           <select
-            aria-label="Filter by AI decision"
+            aria-label="Filter by fit"
             value={decisionFilter}
             onChange={(e) => setDecisionFilter(e.target.value)}
             className="px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
           >
-            <option value="ALL">All Decisions</option>
-            <option value="REQUIRE_APPROVAL">REQUIRE_APPROVAL (&ge;75%)</option>
-            <option value="SAVE">SAVE (60-74%)</option>
-            <option value="AUTO_APPLY">AUTO_APPLY (&ge;90%)</option>
-            <option value="REJECT">REJECT (&lt;60%)</option>
+            <option value="ALL">All fits</option>
+            <option value="REQUIRE_APPROVAL">Needs your review (75%+)</option>
+            <option value="SAVE">Saved match (60–74%)</option>
+            <option value="AUTO_APPLY">Auto-apply ready (90%+)</option>
+            <option value="REJECT">Below threshold (under 60%)</option>
           </select>
 
           {/* Sort Filter */}
