@@ -1,3 +1,4 @@
+import { TailorButton } from '../jobs/tailor/TailorButton';
 import React from 'react';
 import { Sparkles, Brain, Send, Building, MapPin, ExternalLink, RefreshCw, Check, X, Flame } from 'lucide-react';
 import type { MatchResult } from '../../types';
@@ -311,6 +312,8 @@ export const MatchesGrid: React.FC<Props> = ({
                       <span>Job Link</span>
                     </a>
                   )}
+
+                  <TailorButton jobId={m.job_id} jobTitle={m.job_title || m.job?.title || 'this job'} className="py-2 rounded-xl" />
 
                   <button type="button"
                     onClick={() => handleApplySingle(m.job_id)}

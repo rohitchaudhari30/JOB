@@ -1,3 +1,4 @@
+import { TailorButton } from './tailor/TailorButton';
 import React from 'react';
 import {
   Building,
@@ -276,6 +277,8 @@ export const JobCard: React.FC<JobCardProps> = ({
           >
             <ExternalLink className="w-4 h-4" aria-hidden="true" />
           </a>
+
+          <TailorButton jobId={job.id} jobTitle={job.title} />
 
           {isCurrentlyApplying ? (
             <button type="button"
