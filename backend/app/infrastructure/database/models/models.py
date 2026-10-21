@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.domain.applications.entities import ApplicationOutcomeStatus, WorkflowStateEnum
+from app.domain.resume_tailoring.status import TailoringStatus
 
 
 def _allowed_values(column: str, enum_cls) -> str:
@@ -172,6 +173,82 @@ class ResumeModel(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     user = relationship("UserModel", back_populates="resumes")
+
+
+class TailoredResumeModel(Base):
+    """A job-specific copy of a master resume. Never stored in `resumes`, so it can never become a default."""
+
+    __tablename__ = "tailored_resumes"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    master_resume_id = Column(String(36), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True, index=True)
+    master_label_snapshot = Column(String(255), nullable=True)
+    master_file_hash = Column(String(64), nullable=False)
+    job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_description_hash = Column(String(64), nullable=False)
+    job_title_snapshot = Column(String(255), nullable=True)
+    company_snapshot = Column(String(255), nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+    status = Column(String(32), default=TailoringStatus.QUEUED.value, nullable=False, index=True)
+    mode = Column(String(24), default="EDIT", nullable=False)  # EDIT (DOCX) | SUGGESTIONS_ONLY (PDF)
+    input_hash = Column(String(64), nullable=False, index=True)
+    analysis = Column(JSON, nullable=True)
+    edit_plan = Column(JSON, nullable=True)
+    approved_edit_ids = Column(JSON, nullable=True)
+    validation = Column(JSON, nullable=True)
+    file_path = Column(String(512), nullable=True)
+    pdf_file_path = Column(String(512), nullable=True)
+    file_name = Column(String(255), nullable=True)
+    file_hash = Column(String(64), nullable=True)
+    provider = Column(String(32), nullable=True)
+    model_name = Column(String(64), nullable=True)
+    prompt_version = Column(String(16), nullable=True)
+    error_code = Column(String(48), nullable=True)
+    error_message = Column(Text, nullable=True)
+    attempt_count = Column(Integer, default=0, nullable=False)
+    lease_owner = Column(String(64), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "master_resume_id", "job_id", "version", name="uq_tailored_version"),
+        CheckConstraint(_allowed_values("status", TailoringStatus), name="ck_tailored_resumes_status"),
+        CheckConstraint("mode IN ('EDIT', 'SUGGESTIONS_ONLY')", name="ck_tailored_resumes_mode"),
+        # One unfinished request per (user, master, job): a double click returns the same one.
+        Index(
+            "uq_tailored_one_in_flight",
+            "user_id",
+            "master_resume_id",
+            "job_id",
+            unique=True,
+            sqlite_where=text("status IN ('QUEUED','ANALYZING','AWAITING_INPUT','GENERATE_QUEUED','GENERATING','READY_FOR_REVIEW')"),
+            postgresql_where=text("status IN ('QUEUED','ANALYZING','AWAITING_INPUT','GENERATE_QUEUED','GENERATING','READY_FOR_REVIEW')"),
+        ),
+        Index("ix_tailored_user_job", "user_id", "job_id"),
+    )
+
+
+class ResumeConfirmedFactModel(Base):
+    """Something the user confirmed they really have done. Evidence for tailored copies only."""
+
+    __tablename__ = "resume_confirmed_facts"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    master_resume_id = Column(String(36), ForeignKey("resumes.id", ondelete="CASCADE"), nullable=False, index=True)
+    term = Column(String(120), nullable=False)
+    normalized_term = Column(String(120), nullable=False)
+    details = Column(Text, nullable=False)
+    source = Column(String(24), default="USER_CONFIRMED", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "master_resume_id", "normalized_term", name="uq_confirmed_fact_term"),
+    )
 
 
 class SavedAnswerModel(Base):
@@ -360,6 +437,8 @@ class ApplicationModel(Base):
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
     resume_id = Column(String(36), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
+    # A saved, job-specific copy of the resume that is sent instead of the master file (nullable).
+    tailored_resume_id = Column(String(36), ForeignKey("tailored_resumes.id", ondelete="SET NULL"), nullable=True)
     idempotency_key = Column(String(255), unique=True, nullable=False, index=True)
     workflow_state = Column(String(32), default="DISCOVERED", nullable=False, index=True)
     outcome_status = Column(String(32), default="NOT_SUBMITTED", nullable=False, index=True)

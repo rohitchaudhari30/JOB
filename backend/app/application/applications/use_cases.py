@@ -126,6 +126,19 @@ class ExecuteApplicationUseCase:
         self._form_engine = form_engine or new_form_engine()
         self._ai_provider = ai_provider
 
+    async def _tailored_file_path(self, app: Application) -> str:
+        ref = await self._resume_repo.get_tailored_upload(app.tailored_resume_id)
+        if (
+            ref is None
+            or ref.user_id != app.user_id
+            or ref.job_id != app.job_id
+            or ref.status != "SAVED"
+            or not ref.file_path
+            or not os.path.isfile(ref.file_path)
+        ):
+            raise ValidationException("The tailored resume chosen for this application is no longer available.")
+        return ref.file_path
+
     async def execute(self, application_id: str, run_id: Optional[str] = None, headless: bool = True) -> Application:
         app = await self._app_repo.get_by_id(application_id)
         if not app:
@@ -157,6 +170,9 @@ class ExecuteApplicationUseCase:
             if resume.file_path and not os.path.isfile(resume.file_path) and not resume.file_path.startswith("mock://"):
                 raise ValidationException(f"Resume file [{resume.file_path}] is inaccessible or missing on disk.")
             resume_file_path = resume.file_path
+        if getattr(app, "tailored_resume_id", None):
+            # The user saved a job-specific copy for this job: that exact file is what gets uploaded.
+            resume_file_path = await self._tailored_file_path(app)
 
         # Guard against concurrent or duplicate execution on completed, in-flight, or uncertain applications
         if app.workflow_state == WorkflowStateEnum.APPLIED:
@@ -975,6 +991,16 @@ class RetryApplicationUseCase:
             if res.file_path and not os.path.isfile(res.file_path) and not res.file_path.startswith("mock://"):
                 app.workflow_state = WorkflowStateEnum.FAILED
                 app.failure_reason = f"Attached resume file [{res.file_path}] is missing on disk."
+                return await _safe_save_app(self._app_repo, app, expected_state=current_state)
+
+        if self._resume_repo and getattr(app, "tailored_resume_id", None):
+            ref = await self._resume_repo.get_tailored_upload(app.tailored_resume_id)
+            if (
+                ref is None or ref.user_id != app.user_id or ref.job_id != app.job_id or ref.status != "SAVED"
+                or not ref.file_path or not os.path.isfile(ref.file_path)
+            ):
+                app.workflow_state = WorkflowStateEnum.FAILED
+                app.failure_reason = "The tailored resume chosen for this application is no longer available."
                 return await _safe_save_app(self._app_repo, app, expected_state=current_state)
 
         # 3. Campaign Safety & Quota Re-Validation

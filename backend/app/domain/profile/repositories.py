@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from app.domain.resume_tailoring.entities import TailoredUploadRef
 from typing import List
 from app.domain.profile.entities import (
     CandidateProfile,
@@ -64,6 +65,13 @@ class ResumeRepository(ABC):
     @abstractmethod
     async def can_delete(self, resume_id: str, user_id: str) -> tuple[bool, str | None]:
         pass
+
+    async def find_saved_tailored_for_job(self, user_id: str, job_id: str) -> "TailoredUploadRef | None":
+        """The user's latest saved job-specific copy for this job, if any (default: none)."""
+        return None
+
+    async def get_tailored_upload(self, tailored_id: str) -> "TailoredUploadRef | None":
+        return None
 
 
 class SavedAnswerRepository(ABC):

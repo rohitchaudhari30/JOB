@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import Base
-from app.infrastructure.database.models.models import ApplicationModel, ResumeModel
+from app.infrastructure.database.models.models import ApplicationModel, ResumeModel, TailoredResumeModel
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,11 @@ async def _files_to_remove(session: AsyncSession, user_id: str) -> list[str]:
     paths = []
     resume_rows = await session.execute(select(ResumeModel.file_path).where(ResumeModel.user_id == user_id))
     paths += [p for (p,) in resume_rows if p]
+    tailored_rows = await session.execute(
+        select(TailoredResumeModel.file_path, TailoredResumeModel.pdf_file_path).where(TailoredResumeModel.user_id == user_id)
+    )
+    for docx_path, pdf_path in tailored_rows:
+        paths += [p for p in (docx_path, pdf_path) if p]
     app_rows = await session.execute(
         select(ApplicationModel.screenshot_file_path, ApplicationModel.trace_file_path).where(
             ApplicationModel.user_id == user_id
@@ -85,3 +90,4 @@ async def erase_user(session: AsyncSession, user_id: str) -> None:
         except OSError:
             pass
     shutil.rmtree(os.path.join(settings.STORAGE_DIR, "resumes", user_id), ignore_errors=True)
+    shutil.rmtree(os.path.join(settings.STORAGE_DIR, "tailored_resumes", user_id), ignore_errors=True)

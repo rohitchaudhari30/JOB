@@ -38,13 +38,14 @@ class GeminiProvider(AIProvider):
     def provider_name(self) -> str:
         return "gemini"
 
-    async def _call_gemini(self, system_instruction: str, prompt: str) -> str:
+    async def _call_gemini(self, system_instruction: str, prompt: str, max_tokens: int | None = None) -> str:
         if not self._client:
             raise AIProviderException("gemini", "Gemini API key is not configured.")
         try:
             config = types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 response_mime_type="application/json",
+                max_output_tokens=max_tokens,
             )
             # In google-genai SDK, generate_content or async client can be used
             response = await self._client.aio.models.generate_content(
@@ -56,6 +57,10 @@ class GeminiProvider(AIProvider):
         except Exception as e:
             logger.error(f"Gemini API call failed: {e}")
             raise AIProviderException("gemini", str(e))
+
+    async def generate_structured(self, system_prompt: str, user_prompt: str, max_tokens: int | None = None) -> str:
+        """Raw JSON text for a caller that validates the structure itself."""
+        return await self._call_gemini(system_prompt, user_prompt, max_tokens=max_tokens)
 
     async def analyze_resume(self, raw_text: str) -> ParsedResumeDTO:
         sys_inst = (

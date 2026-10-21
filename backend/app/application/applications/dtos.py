@@ -23,6 +23,7 @@ class ApplicationResponseDTO(BaseModel):
     user_id: str
     job_id: str
     resume_id: Optional[str] = None
+    tailored_resume_id: Optional[str] = None
     idempotency_key: str
     workflow_state: WorkflowStateEnum
     applied_at: Optional[datetime] = None
@@ -66,6 +67,7 @@ class CreateApplicationDTO(BaseModel):
     campaign_id: Optional[str] = None
     source: Optional[str] = "DIRECT_APPLY"
     auto_execute: bool = False
+    use_tailored: bool = True  # send the user's saved job-specific copy of the resume, if there is one
 
 
 class BatchQueueApplicationsDTO(BaseModel):
@@ -74,6 +76,7 @@ class BatchQueueApplicationsDTO(BaseModel):
     campaign_id: Optional[str] = None
     source: Optional[str] = "CAMPAIGN"
     auto_execute: bool = False
+    use_tailored: bool = True
 
 
 class ApproveApplicationDTO(BaseModel):

@@ -148,12 +148,20 @@ class ApplicationOrchestrator:
         # 5. Determine initial state based on approval rules or command override
         initial_state = command.initial_state or WorkflowStateEnum.APPROVED
 
+        # 5b. A saved job-specific copy of the resume (made by the user for this job) is sent instead of the master.
+        tailored_resume_id = None
+        if command.use_tailored:
+            tailored = await self._resume_repo.find_saved_tailored_for_job(command.user_id, command.job_id)
+            if tailored:
+                tailored_resume_id = tailored.id
+
         # 6. Create Application record
         app = Application(
             id=f"app_{uuid.uuid4().hex[:12]}",
             user_id=command.user_id,
             job_id=command.job_id,
             resume_id=val_result.effective_resume_id,
+            tailored_resume_id=tailored_resume_id,
             idempotency_key=idempotency_key,
             workflow_state=initial_state,
             created_at=datetime.now(timezone.utc),
@@ -171,6 +179,7 @@ class ApplicationOrchestrator:
                     "source": command.source.value,
                     "campaign_id": command.campaign_id,
                     "resume_id": val_result.effective_resume_id,
+                    "tailored_resume_id": tailored_resume_id,
                     "auto_execute": command.auto_execute,
                 },
                 created_at=datetime.now(timezone.utc),
@@ -207,6 +216,7 @@ class ApplicationOrchestrator:
                 campaign_id=command.campaign_id,
                 resume_id=command.resume_id,
                 auto_execute=command.auto_execute,
+                use_tailored=command.use_tailored,
             )
             res = await self.queue_application(sub_command)
             results.append(res)

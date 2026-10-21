@@ -25,6 +25,7 @@ from app.infrastructure.database.models.models import (
     JobModel,
     JobSourceModel,
     ResumeModel,
+    TailoredResumeModel,
 )
 from main import app
 
@@ -141,6 +142,8 @@ BODIES = {
     ("PUT", "/api/v1/campaigns/{campaign_id}"): CAMPAIGN_BODY | {"name": "HIJACKED"},
     ("POST", "/api/v1/automation/runs/{run_id}/stop"): {"reason": "intruder"},
     ("PATCH", "/api/v1/resumes/{resume_id}/default"): {},
+    ("POST", "/api/v1/tailored-resumes/{tailored_id}/answers"): {"answers": [{"question_id": "r1", "has_it": False}]},
+    ("POST", "/api/v1/tailored-resumes/{tailored_id}/generate"): {"approved_edit_ids": ["e1"]},
 }
 
 
@@ -222,9 +225,23 @@ async def seed_a(client: AsyncClient, db_session: AsyncSession, monkeypatch, tmp
     exec_id = f"cexec_{uuid.uuid4().hex[:10]}"
     db_session.add(CampaignExecutionModel(id=exec_id, campaign_id=campaign_id, user_id=user_a, status="RUNNING",
                                           started_at=datetime.now(timezone.utc)))
+    # A's job-specific resume copy: a real Word file on disk plus its row, ready for review.
+    from tests.support.resume_docs import make_resume
+
+    tailored_dir = tmp_path / "tailored_resumes" / user_a
+    tailored_dir.mkdir(parents=True, exist_ok=True)
+    tailored_file = make_resume(tailored_dir / f"{uuid.uuid4().hex}.docx")
+    tailored_id = f"tail_{uuid.uuid4().hex[:10]}"
+    db_session.add(TailoredResumeModel(
+        id=tailored_id, user_id=user_a, master_resume_id=resume.json()["id"], master_file_hash="0" * 64, job_id=job_id,
+        job_description_hash="0" * 64, input_hash=uuid.uuid4().hex, status="READY_FOR_REVIEW", mode="EDIT",
+        edit_plan={"edits": [{"id": "e1"}]}, validation={"passed": True}, file_path=str(tailored_file),
+        file_name="alice-tailored.docx", company_snapshot="Co", job_title_snapshot="Role",
+    ))
     await db_session.commit()
 
     return {
+        "tailored_id": tailored_id,
         "application_id": app_id,
         "campaign_id": campaign_id,
         "execution_id": exec_id,
@@ -255,6 +272,7 @@ async def fingerprint(db: AsyncSession, client: AsyncClient, headers_a: dict, id
         "run": run and run.status,
         "live_session": live and (live.status.value, live.is_paused, live.cancel_requested),
         "execution": ex and ex.status,
+        "tailored": (await db.get(TailoredResumeModel, ids["tailored_id"])) and (await db.get(TailoredResumeModel, ids["tailored_id"])).status,
         "resume": (await db.get(ResumeModel, ids["resume_id"])) is not None and None or bool(await db.get(ResumeModel, ids["resume_id"])),
         "schedule": ids["schedule_id"] in scheduler_worker._configs,
         "experiences": sorted(e["id"] for e in profile["experiences"]),
@@ -274,7 +292,7 @@ async def test_every_id_route_is_classified():
     """A new route with an id in its path must be added to the sweep (or explained), never silently skipped."""
     import re
 
-    known = {"application_id", "campaign_id", "execution_id", "run_id", "schedule_id", "resume_id", "exp_id", "edu_id"}
+    known = {"application_id", "campaign_id", "execution_id", "run_id", "schedule_id", "resume_id", "exp_id", "edu_id", "tailored_id"}
     unclassified = []
     for method, path, _ in operations():
         for param in re.findall(r"{(\w+)}", path):
@@ -293,7 +311,7 @@ async def test_user_b_cannot_read_or_change_user_a_records(client: AsyncClient, 
 
     for method, template, _ in operations():
         params = re.findall(r"{(\w+)}", template)
-        known = {"application_id", "campaign_id", "execution_id", "run_id", "schedule_id", "resume_id", "exp_id", "edu_id"}
+        known = {"application_id", "campaign_id", "execution_id", "run_id", "schedule_id", "resume_id", "exp_id", "edu_id", "tailored_id"}
         if not params or any(p not in known for p in params):
             continue
         ids = await seed_a(client, db_session, monkeypatch, tmp_path, users)  # fresh records for every route

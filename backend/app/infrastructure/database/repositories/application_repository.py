@@ -93,6 +93,7 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             user_id=model.user_id,
             job_id=model.job_id,
             resume_id=model.resume_id,
+            tailored_resume_id=model.tailored_resume_id,
             idempotency_key=model.idempotency_key,
             workflow_state=WorkflowStateEnum(model.workflow_state),
             outcome_status=outcome_status,
@@ -195,6 +196,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             }
             if application.resume_id:
                 update_values["resume_id"] = application.resume_id
+            if application.tailored_resume_id:
+                update_values["tailored_resume_id"] = application.tailored_resume_id
 
             stmt = (
                 update(ApplicationModel)
@@ -233,6 +236,7 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                 user_id=application.user_id,
                 job_id=application.job_id,
                 resume_id=application.resume_id,
+                tailored_resume_id=application.tailored_resume_id,
                 idempotency_key=application.idempotency_key,
                 workflow_state=application.workflow_state.value,
                 outcome_status=outcome_val,
@@ -262,6 +266,8 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                 if application.resume_id != model.resume_id or not model.resume_label_snapshot:
                     model.resume_label_snapshot = await self._resume_label(application.resume_id)
                 model.resume_id = application.resume_id
+            if application.tailored_resume_id:
+                model.tailored_resume_id = application.tailored_resume_id
 
         await self._finish_write()
         return await self.get_by_id(application.id)  # type: ignore

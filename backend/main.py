@@ -21,6 +21,7 @@ from app.api.v1.jobs import router as jobs_router
 from app.api.v1.matching import router as matching_router, matching_weights_alias_router
 from app.api.v1.profile import router as profile_router
 from app.api.v1.resumes import router as resumes_router
+from app.api.v1.tailoring import router as tailoring_router
 from app.api.v1.ws import router as ws_router
 from app.core.config import settings
 from app.core.database import init_db, reconcile_orphaned_runs
@@ -61,9 +62,12 @@ async def lifespan(app: FastAPI):
     await restore_saved_schedules()
     from app.workers.matching_worker import matching_worker
     matching_worker.start()
+    from app.workers.tailoring_worker import tailoring_worker
+    tailoring_worker.start()
     yield
     logger.info(f"Shutting down {settings.APP_NAME}...")
     matching_worker.stop()
+    tailoring_worker.stop()
     scheduler_worker.shutdown()
     await browser_manager.shutdown()
 
@@ -122,6 +126,7 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(profile_router, prefix="/api/v1")
 app.include_router(connections_router, prefix="/api/v1")
 app.include_router(resumes_router, prefix="/api/v1")
+app.include_router(tailoring_router, prefix="/api/v1")
 app.include_router(matching_router, prefix="/api/v1")
 app.include_router(matching_weights_alias_router, prefix="/api/v1")
 app.include_router(jobs_router, prefix="/api/v1")

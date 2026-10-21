@@ -13,6 +13,7 @@ EDIT_TYPES = (EDIT_REWORD, EDIT_REORDER)
 CATEGORY_SAFE = "A"       # wording of something already in the resume
 CATEGORY_CONFIRMED = "B"  # uses a fact the user confirmed
 
+PROMPT_VERSION = "t1"  # bump when the prompt or the rules change so old results are not reused
 MAX_EDITS = 20
 MAX_TEXT = 1200
 
