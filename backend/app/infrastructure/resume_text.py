@@ -17,9 +17,10 @@ def extract_resume_text(file_path: str) -> str:
             pages = [page.extract_text() or "" for page in PdfReader(file_path).pages]
             text = "\n".join(pages)
         elif extension == ".docx":
-            from docx import Document
+            # Body, tables, text boxes, headers and footers (not just top-level paragraphs).
+            from app.infrastructure.documents.docx_map import docx_full_text
 
-            text = "\n".join(paragraph.text for paragraph in Document(file_path).paragraphs)
+            text = docx_full_text(file_path)
         elif extension in (".txt", ".md"):
             with open(file_path, "r", encoding="utf-8", errors="ignore") as handle:
                 text = handle.read()
