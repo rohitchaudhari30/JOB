@@ -3,6 +3,8 @@ import { ExternalLink } from 'lucide-react';
 import { Drawer } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Application } from '../../types';
+import { api } from '../../services/api';
+import { saveBlob } from '../jobs/tailor/tailorLogic';
 
 export interface ApplicationDrawerView {
   title: string;
@@ -58,6 +60,22 @@ export const ApplicationDrawer: React.FC<ApplicationDrawerProps> = ({
             {app.location && <Row label="Location">{app.location}</Row>}
             {view.matchScore !== undefined && <Row label="Match score">{Math.round(view.matchScore)}%</Row>}
             <Row label="Created">{fmt(app.created_at)}</Row>
+            <Row label="Resume sent">
+              {app.tailored_resume_id ? (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  Tailored for this job
+                  <button
+                    type="button"
+                    className="underline text-xs font-semibold"
+                    onClick={async () => saveBlob(await api.downloadTailored(app.tailored_resume_id as string, 'docx'), 'tailored-resume.docx')}
+                  >
+                    Download
+                  </button>
+                </span>
+              ) : (
+                'Your master resume'
+              )}
+            </Row>
             {app.applied_at && <Row label="Applied">{fmt(app.applied_at)}</Row>}
             {app.failure_reason && <Row label="Reason">{app.failure_reason}</Row>}
             {app.error_category && <Row label="Error category">{app.error_category}</Row>}

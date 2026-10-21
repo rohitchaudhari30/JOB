@@ -469,3 +469,12 @@ Build this as a **DOCX-first, evidence-gated, human-approved** feature entered f
 Do not promise exact visual preservation; promise "same styles, same structure, same page count, checked", show every changed line with its evidence, and keep the original resume as the default whenever validation does not pass.
 
 Please answer the questions in section 18 (especially 1, 2 and 5) before phase T1 starts.
+
+## Implementation status addendum
+
+Implemented on branch `claude/resume-tailoring-impl` with the defaults: DOCX edited, PDF suggestions only, LibreOffice layout check, 7-day draft retention, Groq/Gemini providers.
+
+- v1 ships only **REWORD** and **REORDER** edits (the plan's §9.2 listed more; adding or deleting lines is deliberately not offered).
+- Complex DOCX content (hyperlinks, text boxes, fields, tracked changes, tabs, headers/footers) is locked, not edited.
+- Not verified here: rendering in Microsoft Word, real Groq/Gemini output quality (tests script only the AI call), PostgreSQL, real devices.
+- The UI has no per-application opt-out; the backend supports `use_tailored=false`, and discarding the saved copy reverts to the master.

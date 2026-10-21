@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Drawer } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { StatusChip } from '../../components/ui/StatusChip';
 import type { Job, MatchResult } from '../../types';
+import { api } from '../../services/api';
+import { TailorResumeDialog } from './tailor/TailorResumeDialog';
 import { getMatchScore, getRecommendationScore } from '../../utils/matchScores';
 
 /** Normalised view of a job (+ optional match) shared by both Jobs views. */
@@ -91,6 +93,22 @@ export const JobDetailDrawer: React.FC<JobDetailDrawerProps> = ({
 }) => {
   const m = model?.match || null;
   const rec = m ? getRecommendationScore(m) : null;
+  const jobId = model?.jobId;
+  const [tailorOpen, setTailorOpen] = useState(false);
+  const [savedCopy, setSavedCopy] = useState(false);
+  const refreshSaved = useCallback(async () => {
+    if (!jobId) return;
+    try {
+      setSavedCopy((await api.listTailoredForJob(jobId)).some((i) => i.status === 'SAVED'));
+    } catch {
+      setSavedCopy(false);
+    }
+  }, [jobId]);
+  useEffect(() => {
+    setSavedCopy(false);
+    setTailorOpen(false);
+    void refreshSaved();
+  }, [refreshSaved]);
   return (
     <Drawer open={Boolean(model)} onClose={onClose} title={model ? `${model.title} · ${model.company}` : 'Job'}>
       {model && (
@@ -172,9 +190,17 @@ export const JobDetailDrawer: React.FC<JobDetailDrawerProps> = ({
             </section>
           )}
 
+          {savedCopy && (
+            <p role="status" className="text-xs text-emerald-800 dark:text-emerald-300">
+              A tailored resume is saved for this job. It will be sent when you queue the application.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" size="sm" loading={queueing} onClick={() => onQueue(model.jobId)}>
               Queue application
+            </Button>
+            <Button size="sm" onClick={() => setTailorOpen(true)}>
+              Tailor resume for this job
             </Button>
             <Button size="sm" loading={evaluating} onClick={() => onEvaluate(model.jobId)}>
               {m ? 'Re-evaluate' : 'Evaluate fit'}
@@ -192,6 +218,15 @@ export const JobDetailDrawer: React.FC<JobDetailDrawerProps> = ({
             )}
           </div>
         </div>
+      )}
+      {model && (
+        <TailorResumeDialog
+          open={tailorOpen}
+          jobId={model.jobId}
+          jobTitle={model.title}
+          onClose={() => setTailorOpen(false)}
+          onChanged={() => void refreshSaved()}
+        />
       )}
     </Drawer>
   );

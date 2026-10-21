@@ -65,3 +65,13 @@ Six areas: Home, Jobs, Applications, Automation, Insights, Settings. One `h1` pe
 - Automation: campaign rules, safety and activity are stacked sections with a jump bar, not tabs.
 - Insights: `?view=overview|breakdowns|scoring`; older `?view=sources|resumes|campaigns|skills` open Breakdowns at that section.
 - Application status shown to the user (`display_status`, `needs_attention`) is computed on the server in `domain/applications/display_status.py`; the frontend only falls back to a local copy if the field is missing.
+
+## Job-specific resume tailoring
+
+- Domain: `app/domain/resume_tailoring/` (document map, edit plan, integrity rules, status machine, ports).
+- Application: `app/application/resume_tailoring/` (`TailoringService`, analysis, generation). It talks to the DB, files and AI only through ports.
+- Infrastructure: `app/infrastructure/documents/` (DOCX map, run-level editor, fidelity checks, LibreOffice layout check), `infrastructure/ai/tailoring_ai.py`, `tailored_resume_repository.py`.
+- Worker: `app/workers/tailoring_worker.py` (lease-based, retries, hourly draft expiry).
+- API (`app/api/v1/tailoring.py`): `POST /jobs/{id}/tailor`, `GET /jobs/{id}/tailored-resumes`, `GET|DELETE /tailored-resumes/{id}`, `POST .../answers|generate|save|cancel`, `GET .../download?format=docx|pdf`.
+- The master resume is never modified. Applications pick the saved tailored copy for their job (`applications.tailored_resume_id`), and apply re-validates owner, job, status and file before using it.
+- Frontend: `src/pages/jobs/tailor/` (dialog opened from the job drawer).

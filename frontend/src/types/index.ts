@@ -6,3 +6,4 @@ export * from './automation';
 export * from './analytics';
 export * from './campaigns';
 export * from './dashboard';
+export * from './tailoring';

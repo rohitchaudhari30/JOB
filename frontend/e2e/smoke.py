@@ -29,6 +29,11 @@ OVERVIEW = {"today_applied_count": 3, "effective_daily_limit": 25, "quota_remain
                        "action_label": "Reconnect", "action_url": "/settings/connections", "severity": "HIGH"}],
   "readiness": [{"key": "platform", "title": "Job Platform Connected", "is_ready": False, "action_label": "Connect Portal", "action_url": "/settings/connections"}],
   "top_matches": [{"job_id": "job1", "title": "Staff Engineer", "company": "Acme", "location": "Remote", "platform": "LinkedIn", "match_score": 94.5, "decision": "AUTO_APPLY"}]}
+TAILORED = {"id": "t1", "status": "AWAITING_INPUT", "mode": "EDIT", "job_id": "job1", "version": 1, "approved_edit_ids": [], "has_file": False, "has_pdf": False,
+  "analysis": {"mode": "EDIT", "requirements": [], "questions": [{"id": "q1", "requirement": "Go", "ask": "Do you have hands-on Go experience?"}], "gaps": [],
+               "strengths": [], "match_note": "Good fit.", "editable_lines": 12, "locked_lines": 4, "layout_check_available": True},
+  "edit_plan": {"edits": [{"id": "e1", "type": "REWORD", "block_id": "body:3", "before": "Built dashboards", "after": "Built analytics dashboards",
+                           "evidence": [{"quote": "Built dashboards"}], "reason": "Job asks for analytics", "category": "A"}], "suggestions": [], "rejected": []}}
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082")
 JOB = {"id": "job1", "source_id": "s1", "source_type": "linkedin", "external_job_id": "x1", "title": "Staff Engineer", "company": "Acme",
        "location": "Remote", "apply_url": "https://example.com/apply", "raw_description": "Build things.", "is_active": True,
@@ -56,7 +61,9 @@ def handler(route):
     elif path == "/jobs/matches": body = [MATCH]
     elif path == "/jobs": body = {"items": [JOB], "total": 1}
     elif path == "/jobs/discover": body = {}
-    elif path == "/resumes": body = []
+    elif path == "/resumes": body = [{"id": "r1", "label": "Main", "target_role": "Eng", "file_name": "cv.docx", "is_default": True}]
+    elif path == "/jobs/job1/tailored-resumes": body = []
+    elif path == "/jobs/job1/tailor" and m == "POST": body = TAILORED
     elif path == "/applications": body = [APP]
     elif path == "/applications/stats": body = STATS
     elif path == "/applications/applied-map": body = {}
@@ -177,6 +184,16 @@ with sync_playwright() as p:
     pg.evaluate(AXE)
     res = pg.evaluate("axe.run(document.querySelector('[role=dialog]'), {resultTypes:['violations']}).then(r => r.violations.map(v => v.id))")
     check("jobs: drawer has no axe violations", res == [], res)
+    pg.get_by_role("button", name="Tailor resume for this job").click()
+    pg.get_by_role("button", name="Analyse this job").wait_for(timeout=5000)
+    pg.get_by_role("button", name="Analyse this job").click()
+    pg.get_by_text("Do you have hands-on Go experience?").wait_for(timeout=5000)
+    check("tailor: analysis step shows the question and the proposed change", pg.get_by_text("Built analytics dashboards").count() >= 1)
+    pg.evaluate(AXE)
+    res = pg.evaluate("axe.run(document.querySelectorAll('[role=dialog]')[1], {resultTypes:['violations']}).then(r => r.violations.map(v => v.id))")
+    check("tailor: dialog has no axe violations", res == [], res)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    check("tailor: Esc closes only the tailor dialog", pg.get_by_role("dialog").count() == 1)
     pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
     check("jobs: Esc closes the drawer and returns to /jobs", pg.get_by_role("dialog").count() == 0 and pg.url.endswith("/jobs"), pg.url)
     pg.goto(BASE + "/jobs/matches"); pg.wait_for_selector("text=Showing 1 of 250", timeout=10000)
