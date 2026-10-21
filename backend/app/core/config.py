@@ -87,6 +87,12 @@ class Settings(BaseSettings):
     # Hiding automation from websites may break their terms of use (COMP-01), so it is opt-in.
     BROWSER_STEALTH_ENABLED: bool = False
     MAX_RESUME_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB maximum
+    # Job-specific resume tailoring
+    TAILORING_MAX_TOKENS: int = 4096            # room for a full edit plan (the shared limit is 2048)
+    TAILORING_MIN_JOB_DESCRIPTION_CHARS: int = 300
+    TAILORING_DRAFT_RETENTION_DAYS: int = 7     # unsaved drafts are removed after this
+    TAILORING_MAX_CONCURRENCY: int = 2
+    TAILORING_MAX_ATTEMPTS: int = 2             # one retry for a provider failure or a malformed reply
     ALLOWED_RESUME_EXTENSIONS: str = ".pdf,.docx"
 
     # Rate Limiting & Safety

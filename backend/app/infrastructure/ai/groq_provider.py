@@ -30,7 +30,7 @@ class GroqProvider(AIProvider):
     def provider_name(self) -> str:
         return "groq"
 
-    async def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
+    async def _call_llm(self, system_prompt: str, user_prompt: str, max_tokens: int | None = None) -> str:
         if not self._client:
             raise AIProviderException("groq", "Groq API key is not configured.")
         try:
@@ -41,13 +41,17 @@ class GroqProvider(AIProvider):
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=settings.GROQ_TEMPERATURE,
-                max_tokens=settings.GROQ_MAX_TOKENS,
+                max_tokens=max_tokens or settings.GROQ_MAX_TOKENS,
                 response_format={"type": "json_object"},
             )
             return response.choices[0].message.content or "{}"
         except Exception as e:
             logger.error(f"Groq API call failed: {e}")
             raise AIProviderException("groq", str(e))
+
+    async def generate_structured(self, system_prompt: str, user_prompt: str, max_tokens: int | None = None) -> str:
+        """Raw JSON text for a caller that validates the structure itself."""
+        return await self._call_llm(system_prompt, user_prompt, max_tokens=max_tokens)
 
     async def analyze_resume(self, raw_text: str) -> ParsedResumeDTO:
         system_prompt = (

@@ -97,3 +97,4 @@ class Application:
     platform: str | None = None
     match_score: float | None = None
     questions: List[ApplicationQuestion] = field(default_factory=list)
+    tailored_resume_id: str | None = None

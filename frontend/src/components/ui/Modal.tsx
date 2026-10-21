@@ -4,6 +4,9 @@ import { createPortal } from 'react-dom';
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** Open modals, innermost last. Only the innermost one reacts to the keyboard (a dialog opened from a drawer). */
+const openStack: symbol[] = [];
+
 export interface ModalProps {
   open: boolean;
   onClose: () => void;
@@ -46,7 +49,10 @@ export const Modal: React.FC<ModalProps> = ({
     const first = panel?.querySelector<HTMLElement>('[data-autofocus]') ?? panel?.querySelector<HTMLElement>(FOCUSABLE);
     (first || panel)?.focus();
 
+    const me = Symbol('modal');
+    openStack.push(me);
     const onKeyDown = (e: KeyboardEvent) => {
+      if (openStack[openStack.length - 1] !== me) return;
       if (e.key === 'Escape' && dismissible) {
         e.stopPropagation();
         onCloseRef.current();
@@ -73,6 +79,8 @@ export const Modal: React.FC<ModalProps> = ({
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      const at = openStack.indexOf(me);
+      if (at >= 0) openStack.splice(at, 1);
       returnFocusTo.current?.focus?.();
     };
   }, [open, dismissible]);

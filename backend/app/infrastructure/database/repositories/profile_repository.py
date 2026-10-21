@@ -24,7 +24,9 @@ from app.infrastructure.database.models.models import (
     ExperienceModel,
     ResumeModel,
     SavedAnswerModel,
+    TailoredResumeModel,
 )
+from app.domain.resume_tailoring.entities import TailoredUploadRef
 
 
 class SqlAlchemyProfileRepository(CandidateProfileRepository):
@@ -226,6 +228,32 @@ class SqlAlchemyResumeRepository(ResumeRepository):
             is_default=model.is_default,
             created_at=model.created_at,
         )
+
+    @staticmethod
+    def _tailored_ref(m: TailoredResumeModel) -> TailoredUploadRef:
+        label = f"Tailored: {m.master_label_snapshot or 'resume'} for {m.company_snapshot or 'this job'}"
+        return TailoredUploadRef(
+            id=m.id, user_id=m.user_id, job_id=m.job_id, status=m.status, file_path=m.file_path, label=label[:255]
+        )
+
+    async def find_saved_tailored_for_job(self, user_id: str, job_id: str) -> TailoredUploadRef | None:
+        stmt = (
+            select(TailoredResumeModel)
+            .where(
+                TailoredResumeModel.user_id == user_id,
+                TailoredResumeModel.job_id == job_id,
+                TailoredResumeModel.status == "SAVED",
+                TailoredResumeModel.file_path.is_not(None),
+            )
+            .order_by(TailoredResumeModel.approved_at.desc())
+            .limit(1)
+        )
+        m = (await self._session.execute(stmt)).scalars().first()
+        return self._tailored_ref(m) if m else None
+
+    async def get_tailored_upload(self, tailored_id: str) -> TailoredUploadRef | None:
+        m = await self._session.get(TailoredResumeModel, tailored_id)
+        return self._tailored_ref(m) if m else None
 
     async def get_by_id(self, resume_id: str) -> Resume | None:
         stmt = select(ResumeModel).where(ResumeModel.id == resume_id)

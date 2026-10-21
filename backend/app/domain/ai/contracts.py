@@ -93,6 +93,11 @@ class AIProvider(ABC):
         pass
 
 
+    async def generate_structured(self, system_prompt: str, user_prompt: str, max_tokens: int | None = None) -> str:
+        """Optional: raw JSON text for callers that validate the structure themselves."""
+        raise NotImplementedError(f"{self.provider_name} does not support structured generation.")
+
+
 class AIGateway(ABC):
     @abstractmethod
     async def analyze_resume(self, raw_text: str) -> ParsedResumeDTO:
@@ -118,3 +123,9 @@ class AIGateway(ABC):
         max_words: int = 100
     ) -> GeneratedAnswerDTO:
         pass
+
+    async def generate_structured(
+        self, operation: str, system_prompt: str, user_prompt: str, max_tokens: int | None = None, user_id: str | None = None
+    ) -> tuple[str, str]:
+        """Raw JSON text and the provider that produced it. Optional on a gateway."""
+        raise NotImplementedError("This gateway does not support structured generation.")

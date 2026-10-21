@@ -69,6 +69,7 @@ def _to_response_dto(app: Application) -> ApplicationResponseDTO:
         user_id=app.user_id,
         job_id=app.job_id,
         resume_id=app.resume_id,
+        tailored_resume_id=app.tailored_resume_id,
         idempotency_key=app.idempotency_key,
         workflow_state=app.workflow_state,
         applied_at=app.applied_at,
@@ -311,6 +312,7 @@ async def create_application(
         campaign_id=req.campaign_id,
         resume_id=req.resume_id,
         auto_execute=req.auto_execute,
+        use_tailored=req.use_tailored,
     )
     result = await orchestrator.queue_application(cmd)
     if not result.is_queued or not result.application:
@@ -360,6 +362,7 @@ async def batch_queue_applications(
         campaign_id=req.campaign_id,
         resume_id=req.resume_id,
         auto_execute=req.auto_execute,
+        use_tailored=req.use_tailored,
     )
     result = await orchestrator.batch_queue_applications(cmd)
     return {

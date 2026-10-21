@@ -30,8 +30,10 @@ class QueueApplicationCommand:
     campaign_id: Optional[str] = None
     resume_id: Optional[str] = None
     auto_execute: bool = False
+    use_tailored: bool = True
     metadata: Optional[Dict[str, Any]] = None
     initial_state: Optional[WorkflowStateEnum] = None
+    use_tailored: bool = True
 
 
 @dataclass
@@ -45,3 +47,4 @@ class BatchQueueApplicationCommand:
     campaign_id: Optional[str] = None
     resume_id: Optional[str] = None
     auto_execute: bool = False
+    use_tailored: bool = True

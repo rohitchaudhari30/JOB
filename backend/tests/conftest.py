@@ -74,6 +74,12 @@ async def test_database(request, monkeypatch):
         monkeypatch.setattr(matching_worker, "AsyncSessionLocal", factory)
     except ImportError:
         pass
+    try:
+        import app.workers.tailoring_worker as tailoring_worker
+
+        monkeypatch.setattr(tailoring_worker, "AsyncSessionLocal", factory)
+    except ImportError:
+        pass
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

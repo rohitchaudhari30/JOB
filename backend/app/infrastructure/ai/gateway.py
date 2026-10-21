@@ -37,6 +37,7 @@ class MultiTierAIGateway(AIGateway):
         self._primary = primary_provider or GroqProvider()
         self._fallback = fallback_provider or GeminiProvider()
         self._session = session
+        self.last_provider_used: str = self._primary.provider_name
 
     @classmethod
     def is_rate_limit_active(cls) -> bool:
@@ -137,6 +138,7 @@ class MultiTierAIGateway(AIGateway):
                 logger.error(f"All AI Providers failed for {operation}: {error_msg}")
                 raise AIProviderException("all_providers", error_msg)
         finally:
+            self.last_provider_used = provider_used
             latency_ms = int((time.time() - start_time) * 1000)
             await self._log_telemetry(
                 user_id=user_id,
@@ -177,6 +179,15 @@ class MultiTierAIGateway(AIGateway):
             await self._session.flush()
         except Exception as e:
             logger.warning(f"Failed to record AI request telemetry: {e}")
+
+    async def generate_structured(
+        self, operation: str, system_prompt: str, user_prompt: str, max_tokens: int | None = None, user_id: str | None = None
+    ) -> tuple[str, str]:
+        """Raw JSON text and the name of the provider that answered (primary first, then fallback)."""
+        text = await self._execute_with_fallback(
+            operation, "generate_structured", system_prompt, user_prompt, max_tokens=max_tokens, user_id=user_id
+        )
+        return text, self.last_provider_used
 
     async def analyze_resume(self, raw_text: str) -> ParsedResumeDTO:
         return await self._execute_with_fallback("ANALYZE_RESUME", "analyze_resume", raw_text)

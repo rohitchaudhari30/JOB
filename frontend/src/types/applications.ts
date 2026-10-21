@@ -15,6 +15,8 @@ export interface Application {
   user_id: string;
   job_id: string;
   resume_id?: string;
+  /** A saved job-specific copy of the resume that was (or will be) sent instead of the master. */
+  tailored_resume_id?: string | null;
   idempotency_key: string;
   workflow_state: WorkflowState;
   outcome_status?: string;

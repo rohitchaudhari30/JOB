@@ -15,13 +15,13 @@ from app.core.database import Base
 from app.infrastructure.database.repositories.user_data_eraser import _owned_table_filters
 
 EXPORT_TABLES = (
-    "candidate_profiles", "candidate_skills", "experiences", "educations", "resumes", "saved_answers",
+    "candidate_profiles", "candidate_skills", "experiences", "educations", "resumes", "tailored_resumes", "resume_confirmed_facts", "saved_answers",
     "applications", "application_events", "application_questions", "match_results",
     "campaigns", "campaign_rules", "campaign_safety_policies", "campaign_schedules",
     "campaign_executions", "automation_runs",
 )
 # Dropped from every exported row.
-HIDDEN_COLUMNS = {"file_path", "screenshot_file_path", "trace_file_path", "hashed_password", "encrypted_storage_state"}
+HIDDEN_COLUMNS = {"file_path", "pdf_file_path", "lease_owner", "screenshot_file_path", "trace_file_path", "hashed_password", "encrypted_storage_state"}
 ROW_CAP_PER_TABLE = 50_000
 
 
