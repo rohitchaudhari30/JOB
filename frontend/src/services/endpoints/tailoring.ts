@@ -3,8 +3,11 @@ import type { Application } from '../../types/applications';
 import type { SavedTailoredSummary, TailoredResume, TailoringAnswer } from '../../types/tailoring';
 
 export const tailoringApi = {
-  startTailoring: async (jobId: string, masterResumeId?: string): Promise<TailoredResume> => {
-    const res = await apiClient.post(`/jobs/${jobId}/tailor`, { master_resume_id: masterResumeId ?? null });
+  startTailoring: async (jobId: string, masterResumeId?: string, jobDescription?: string): Promise<TailoredResume> => {
+    const res = await apiClient.post(`/jobs/${jobId}/tailor`, {
+      master_resume_id: masterResumeId ?? null,
+      job_description: jobDescription || null,
+    });
     return res.data;
   },
   getTailored: async (id: string): Promise<TailoredResume> => {

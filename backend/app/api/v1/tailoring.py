@@ -23,6 +23,7 @@ async def get_tailoring_service(session: Annotated[AsyncSession, Depends(get_db_
 
 class StartTailoringRequest(BaseModel):
     master_resume_id: Optional[str] = None
+    job_description: Optional[str] = Field(default=None, max_length=40000)
 
 
 class AnswerItem(BaseModel):
@@ -72,7 +73,7 @@ async def start_tailoring(
     current_user: Annotated[User, Depends(get_current_user)],
     service: Annotated[TailoringService, Depends(get_tailoring_service)],
 ):
-    return _view(await service.start(current_user.id, job_id, req.master_resume_id))
+    return _view(await service.start(current_user.id, job_id, req.master_resume_id, req.job_description))
 
 
 @router.get("/jobs/{job_id}/tailored-resumes")

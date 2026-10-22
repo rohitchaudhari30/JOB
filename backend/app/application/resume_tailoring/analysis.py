@@ -4,6 +4,7 @@ import logging
 import os
 from typing import Any, Dict, List
 
+from app.domain.resume_tailoring.job_text import effective_job_text
 from app.domain.resume_tailoring.document import DocumentMap
 from app.domain.resume_tailoring.entities import MODE_SUGGESTIONS_ONLY, TailoredResume
 from app.domain.resume_tailoring.plan import PlanSchemaError, edit_to_dict, parse_edit_plan
@@ -76,7 +77,8 @@ async def run_analysis(deps: TailoringDeps, item: TailoredResume, max_attempts: 
         return fail(item, "FILE_MISSING", "The resume file could not be found on the server.")
     if deps.toolkit.file_hash(resume.file_path) != item.master_file_hash:
         return stale(item, "Your resume file changed after this was started. Start again.")
-    if sha256_text(job.raw_description) != item.job_description_hash:
+    job_text = effective_job_text(item.job_description_override, job)
+    if sha256_text(job_text) != item.job_description_hash:
         return stale(item, "The job description changed after this was started. Start again.")
 
     fmt = file_format(resume.file_path)
@@ -89,7 +91,7 @@ async def run_analysis(deps: TailoringDeps, item: TailoredResume, max_attempts: 
     required = [s for s in (parsed.get("mandatory_skills") or []) if isinstance(s, str)]
     preferred = [s for s in (parsed.get("preferred_skills") or []) if isinstance(s, str)]
     if not required and not preferred:
-        required, preferred = await deps.ai.extract_job_requirements(item.user_id, job.raw_description)
+        required, preferred = await deps.ai.extract_job_requirements(item.user_id, job_text)
 
     answers = (item.analysis or {}).get("answers", {})
     requirements = classify_requirements(required, preferred, doc, facts, answers)
@@ -98,7 +100,7 @@ async def run_analysis(deps: TailoringDeps, item: TailoredResume, max_attempts: 
     edits, unreadable, meta = [], [], {}
     for attempt in range(2):
         raw, meta = await deps.ai.propose_edits(
-            user_id=item.user_id, job_title=job.title, company=job.company, job_description=job.raw_description,
+            user_id=item.user_id, job_title=job.title, company=job.company, job_description=job_text,
             requirements=[{"text": r["text"], "kind": r["kind"], "status": r["status"]} for r in requirements],
             document=doc, facts=facts, previous_error=previous_error,
         )
