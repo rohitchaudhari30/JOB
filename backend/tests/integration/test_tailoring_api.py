@@ -644,3 +644,20 @@ async def test_a_daily_cap_stops_runaway_ai_use_but_not_repeat_clicks(client, db
     third = await client.post(f"/api/v1/jobs/{jobs[2]}/tailor", json={}, headers=w.headers)
     assert third.status_code == 429, third.text
     assert "limit" in third.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_job_removes_its_tailored_files_instead_of_orphaning_them(client, db_session, world, ai):
+    w = world
+    tid = await saved_copy(client, w, ai)
+    row = await db_session.get(TailoredResumeModel, tid)
+    path = row.file_path
+    assert os.path.isfile(path)
+    from app.infrastructure.database.repositories.job_repository import SqlAlchemyJobRepository
+
+    assert await SqlAlchemyJobRepository(db_session).delete(w.job_id) is True  # what the admin-only delete runs
+    await db_session.commit()
+    assert not os.path.exists(path)
+    db_session.expire_all()
+    assert await db_session.get(TailoredResumeModel, tid) is None
+    assert (await client.get("/api/v1/tailored-resumes", headers=w.headers)).json() == []
