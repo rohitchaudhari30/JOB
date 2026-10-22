@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { Resume } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
+import { TailoredResumesSection } from './TailoredResumesSection';
 
 interface ResumeLibraryTabProps {
   resumes: Resume[];
@@ -94,6 +95,7 @@ export const ResumeLibraryTab: React.FC<ResumeLibraryTabProps> = ({ resumes, onR
   };
 
   return (
+    <>
         <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <div>
@@ -294,5 +296,8 @@ export const ResumeLibraryTab: React.FC<ResumeLibraryTabProps> = ({ resumes, onR
             </div>
           </form>
         </div>
+
+      <TailoredResumesSection />
+    </>
   );
 };

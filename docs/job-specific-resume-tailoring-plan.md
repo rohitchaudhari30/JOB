@@ -477,4 +477,6 @@ Implemented on branch `claude/resume-tailoring-impl` with the defaults: DOCX edi
 - v1 ships only **REWORD** and **REORDER** edits (the plan's §9.2 listed more; adding or deleting lines is deliberately not offered).
 - Complex DOCX content (hyperlinks, text boxes, fields, tracked changes, tabs, headers/footers) is locked, not edited.
 - Not verified here: rendering in Microsoft Word, real Groq/Gemini output quality (tests script only the AI call), PostgreSQL, real devices.
-- The UI has no per-application opt-out; the backend supports `use_tailored=false`, and discarding the saved copy reverts to the master.
+- Per-application choice: the application panel can switch between the saved copy and the master resume while the choice is still editable. Copies saved after queueing are attached automatically at approve/retry/execute.
+- Saved copies are listed under Settings → Resumes, and job/match cards show "Tailored ✓".
+- Still manual by design: nothing is tailored automatically, because every change needs the user's approval.

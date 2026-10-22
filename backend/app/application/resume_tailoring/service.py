@@ -101,6 +101,9 @@ class TailoringService:
     async def list_for_job(self, user_id: str, job_id: str) -> List[TailoredResume]:
         return await self._d.tailored.list_for_job(user_id, job_id)
 
+    async def list_saved(self, user_id: str) -> List[TailoredResume]:
+        return await self._d.tailored.list_saved(user_id)
+
     # ---- answers -------------------------------------------------------------------------
     async def answer(self, user_id: str, tailored_id: str, answers: List[Dict[str, Any]]) -> TailoredResume:
         item = await self._owned(user_id, tailored_id)

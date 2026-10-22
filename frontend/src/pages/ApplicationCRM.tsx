@@ -304,6 +304,15 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
               closeDrawer();
               setSelectedAppForReconciliation(a);
             }}
+            onResumeChoice={async (a, useTailored) => {
+              try {
+                const updated = await api.setResumeChoice(a.id, useTailored);
+                setApplications((prev) => prev.map((x) => (x.id === a.id ? { ...x, ...updated } : x)));
+                showSuccess(useTailored ? 'This application will send your tailored resume.' : 'This application will send your master resume.');
+              } catch (e: any) {
+                showError(e?.response?.data?.detail || 'Could not change the resume for this application.');
+              }
+            }}
           />
         );
       })()}

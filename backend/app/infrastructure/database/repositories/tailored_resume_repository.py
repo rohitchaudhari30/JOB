@@ -113,6 +113,14 @@ class SqlAlchemyTailoredResumeRepository(TailoredResumeRepository):
         )
         return [self._to_entity(m) for m in (await self._session.execute(stmt)).scalars().all()]
 
+    async def list_saved(self, user_id: str) -> List[TailoredResume]:
+        stmt = (
+            select(TailoredResumeModel)
+            .where(TailoredResumeModel.user_id == user_id, TailoredResumeModel.status == "SAVED")
+            .order_by(TailoredResumeModel.approved_at.desc())
+        )
+        return [self._to_entity(m) for m in (await self._session.execute(stmt)).scalars().all()]
+
     async def next_version(self, user_id: str, master_resume_id: str, job_id: str) -> int:
         stmt = select(func.max(TailoredResumeModel.version)).where(
             TailoredResumeModel.user_id == user_id,

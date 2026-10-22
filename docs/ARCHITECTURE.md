@@ -72,6 +72,7 @@ Six areas: Home, Jobs, Applications, Automation, Insights, Settings. One `h1` pe
 - Application: `app/application/resume_tailoring/` (`TailoringService`, analysis, generation). It talks to the DB, files and AI only through ports.
 - Infrastructure: `app/infrastructure/documents/` (DOCX map, run-level editor, fidelity checks, LibreOffice layout check), `infrastructure/ai/tailoring_ai.py`, `tailored_resume_repository.py`.
 - Worker: `app/workers/tailoring_worker.py` (lease-based, retries, hourly draft expiry).
-- API (`app/api/v1/tailoring.py`): `POST /jobs/{id}/tailor`, `GET /jobs/{id}/tailored-resumes`, `GET|DELETE /tailored-resumes/{id}`, `POST .../answers|generate|save|cancel`, `GET .../download?format=docx|pdf`.
+- API (`app/api/v1/tailoring.py`): `POST /jobs/{id}/tailor`, `GET /jobs/{id}/tailored-resumes`, `GET|DELETE /tailored-resumes/{id}`, `POST .../answers|generate|save|cancel`, `GET .../download?format=docx|pdf`, `GET /tailored-resumes` (saved copies, summary rows), and `PUT /applications/{id}/resume-choice` (`use_tailored` true/false).
 - The master resume is never modified. Applications pick the saved tailored copy for their job (`applications.tailored_resume_id`), and apply re-validates owner, job, status and file before using it.
 - Frontend: `src/pages/jobs/tailor/` (dialog opened from the job drawer).
+- Which file an application sends: `applications.tailored_resume_id` (saved copy) or the master. A copy saved after the application was created is attached at approve, retry and execute time (`application/applications/tailored_choice.py`), unless the user chose the master (`applications.tailored_opt_out`, migration 0009). The choice is editable only before the portal is touched or after a stop that allows a retry.

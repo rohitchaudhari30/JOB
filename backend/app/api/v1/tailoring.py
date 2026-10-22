@@ -84,6 +84,27 @@ async def list_tailored_for_job(
     return [_view(i) for i in await service.list_for_job(current_user.id, job_id)]
 
 
+@router.get("/tailored-resumes")
+async def list_saved_tailored(
+    current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[TailoringService, Depends(get_tailoring_service)],
+):
+    """The user's saved tailored resumes (one summary row each), newest first."""
+    return [
+        {
+            "id": i.id,
+            "job_id": i.job_id,
+            "job_title": i.job_title_snapshot,
+            "company": i.company_snapshot,
+            "master_label": i.master_label_snapshot,
+            "file_name": i.file_name,
+            "has_pdf": bool(i.pdf_file_path),
+            "approved_at": i.approved_at,
+        }
+        for i in await service.list_saved(current_user.id)
+    ]
+
+
 @router.get("/tailored-resumes/{tailored_id}")
 async def get_tailored(
     tailored_id: str,

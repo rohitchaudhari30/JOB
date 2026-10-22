@@ -162,6 +162,7 @@ class ApplicationOrchestrator:
             job_id=command.job_id,
             resume_id=val_result.effective_resume_id,
             tailored_resume_id=tailored_resume_id,
+            tailored_opt_out=True if not command.use_tailored else None,
             idempotency_key=idempotency_key,
             workflow_state=initial_state,
             created_at=datetime.now(timezone.utc),

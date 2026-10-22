@@ -4,7 +4,8 @@ import { Drawer } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Application } from '../../types';
 import { api } from '../../services/api';
-import { saveBlob } from '../jobs/tailor/tailorLogic';
+import { saveBlob, CHOICE_EDITABLE } from '../jobs/tailor/tailorLogic';
+import { useHasSavedTailored } from '../jobs/tailor/savedTailoredStore';
 
 export interface ApplicationDrawerView {
   title: string;
@@ -23,6 +24,8 @@ interface ApplicationDrawerProps {
   onRationale: (app: Application) => void;
   onScreenshot: (app: Application) => void;
   onReconcile: (app: Application) => void;
+  /** Switch this application between the saved tailored copy and the master resume. */
+  onResumeChoice?: (app: Application, useTailored: boolean) => void;
 }
 
 const fmt = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '—');
@@ -46,8 +49,11 @@ export const ApplicationDrawer: React.FC<ApplicationDrawerProps> = ({
   onRationale,
   onScreenshot,
   onReconcile,
+  onResumeChoice,
 }) => {
   const open = Boolean(app && view);
+  const hasSaved = useHasSavedTailored(app?.job_id ?? '');
+  const canChoose = Boolean(app && onResumeChoice && hasSaved && CHOICE_EDITABLE.has(String(app.workflow_state)));
   return (
     <Drawer open={open} onClose={onClose} title={view ? `${view.title} · ${view.company}` : 'Application'}>
       {app && view && (
@@ -84,6 +90,19 @@ export const ApplicationDrawer: React.FC<ApplicationDrawerProps> = ({
             )}
             {app.next_retry_at && <Row label="Next retry">{fmt(app.next_retry_at)}</Row>}
           </dl>
+
+          {canChoose && app && onResumeChoice && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
+              <span>
+                {app.tailored_resume_id
+                  ? 'This application will send your tailored resume.'
+                  : 'This application will send your master resume. A tailored copy is saved for this job.'}
+              </span>
+              <Button size="sm" onClick={() => onResumeChoice(app, !app.tailored_resume_id)}>
+                {app.tailored_resume_id ? 'Send master resume instead' : 'Use tailored resume'}
+              </Button>
+            </div>
+          )}
 
           {view.needsVerification && (
             <div role="note" className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-sm text-amber-900 dark:bg-amber-950/30 dark:border-amber-700/50 dark:text-amber-200">

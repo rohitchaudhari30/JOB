@@ -7,6 +7,7 @@ import { AnalysisStep } from './AnalysisStep';
 import { ReviewStep } from './ReviewStep';
 import { useTailoring } from './useTailoring';
 import { saveBlob, workingText } from './tailorLogic';
+import { refreshSavedTailored } from './savedTailoredStore';
 
 interface Props {
   open: boolean;
@@ -45,8 +46,9 @@ export const TailorResumeDialog: React.FC<Props> = ({ open, jobId, jobTitle, onC
     }
   };
 
-  const save = async () => { await t.save(); onChanged?.(); };
-  const discard = async () => { await t.discard(); onChanged?.(); };
+  const changed = async () => { await refreshSavedTailored(); onChanged?.(); };
+  const save = async () => { await t.save(); await changed(); };
+  const discard = async () => { await t.discard(); await changed(); };
   const status = item?.status;
   const deadEnd = status === 'FAILED' || status === 'STALE' || status === 'CANCELLED';
 

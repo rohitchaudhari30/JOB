@@ -41,3 +41,10 @@ export const CHECK_LABELS: Record<string, string> = {
   protected_facts: 'Name, contact, dates and numbers intact',
   layout: 'Page layout',
 };
+
+/** Application states in which the resume choice can still change (mirrors the server's rule). */
+export const CHOICE_EDITABLE: ReadonlySet<string> = new Set([
+  'DISCOVERED', 'MATCHING', 'MATCHED', 'SHORTLISTED', 'APPROVAL_REQUIRED', 'APPROVED',
+  'PAUSED_OTP', 'PAUSED_CAPTCHA', 'PAUSED_USER_INPUT', 'PAUSED_AUTH_EXPIRED', 'PAUSED_SESSION', 'PAUSED_LIMIT',
+  'RETRY_QUEUED', 'FAILED',
+]);

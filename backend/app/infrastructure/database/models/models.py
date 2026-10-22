@@ -439,6 +439,7 @@ class ApplicationModel(Base):
     resume_id = Column(String(36), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
     # A saved, job-specific copy of the resume that is sent instead of the master file (nullable).
     tailored_resume_id = Column(String(36), ForeignKey("tailored_resumes.id", ondelete="SET NULL"), nullable=True)
+    tailored_opt_out = Column(Boolean, nullable=True)
     idempotency_key = Column(String(255), unique=True, nullable=False, index=True)
     workflow_state = Column(String(32), default="DISCOVERED", nullable=False, index=True)
     outcome_status = Column(String(32), default="NOT_SUBMITTED", nullable=False, index=True)

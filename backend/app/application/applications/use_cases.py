@@ -1,4 +1,5 @@
 import asyncio
+from app.application.applications.tailored_choice import attach_saved_tailored
 from app.core.url_safety import unsafe_url_reason
 from datetime import datetime, timezone, timedelta
 import hashlib
@@ -160,6 +161,7 @@ class ExecuteApplicationUseCase:
                 candidate_name = user.full_name
                 candidate_email = user.email
 
+        await attach_saved_tailored(app, self._resume_repo)
         resume_file_path = None
         if app.resume_id:
             resume = await self._resume_repo.get_by_id(app.resume_id)
@@ -854,6 +856,9 @@ class ApproveApplicationUseCase:
                 app.failure_reason = "Attached resume does not belong to user."
                 return await self._app_repo.save(app)
 
+        # 3b. A copy saved after this application was created is picked up now.
+        await attach_saved_tailored(app, self._resume_repo)
+
         # 4. Campaign Safety & Pacing Re-Validation
         if self._campaign_repo:
             user_campaigns = await self._campaign_repo.list_by_user(app.user_id, limit=1)
@@ -993,6 +998,7 @@ class RetryApplicationUseCase:
                 app.failure_reason = f"Attached resume file [{res.file_path}] is missing on disk."
                 return await _safe_save_app(self._app_repo, app, expected_state=current_state)
 
+        await attach_saved_tailored(app, self._resume_repo)
         if self._resume_repo and getattr(app, "tailored_resume_id", None):
             ref = await self._resume_repo.get_tailored_upload(app.tailored_resume_id)
             if (

@@ -144,6 +144,7 @@ BODIES = {
     ("PATCH", "/api/v1/resumes/{resume_id}/default"): {},
     ("POST", "/api/v1/tailored-resumes/{tailored_id}/answers"): {"answers": [{"question_id": "r1", "has_it": False}]},
     ("POST", "/api/v1/tailored-resumes/{tailored_id}/generate"): {"approved_edit_ids": ["e1"]},
+    ("PUT", "/api/v1/applications/{application_id}/resume-choice"): {"use_tailored": False},
 }
 
 

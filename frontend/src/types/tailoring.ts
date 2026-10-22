@@ -93,3 +93,14 @@ export interface TailoringAnswer {
   has_it: boolean;
   details?: string;
 }
+
+export interface SavedTailoredSummary {
+  id: string;
+  job_id: string;
+  job_title?: string | null;
+  company?: string | null;
+  master_label?: string | null;
+  file_name?: string | null;
+  has_pdf: boolean;
+  approved_at?: string | null;
+}
