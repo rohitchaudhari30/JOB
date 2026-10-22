@@ -1,3 +1,4 @@
+import { clearSavedTailored } from './pages/jobs/tailor/savedTailoredStore';
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Navbar } from './components/Navbar';
@@ -158,6 +159,7 @@ export const App: React.FC = () => {
   };
 
   const handleAccountDeleted = () => {
+    clearSavedTailored();
     setAuthToken(null);
     setUser(null);
     wsClient.disconnect();
@@ -166,6 +168,7 @@ export const App: React.FC = () => {
 
   const handleLogout = () => {
     void api.logout(); // revoke tokens on the server; runs before we clear them below
+    clearSavedTailored();
     setAuthToken(null);
     setUser(null);
     wsClient.disconnect();

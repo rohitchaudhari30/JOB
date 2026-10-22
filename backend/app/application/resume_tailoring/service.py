@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import settings
-from app.core.exceptions import ConflictException, EntityNotFoundException, ValidationException
+from app.core.exceptions import ConflictException, EntityNotFoundException, PlatformException, ValidationException
 from app.domain.resume_tailoring.entities import MODE_EDIT, MODE_SUGGESTIONS_ONLY, TailoredResume
 from app.domain.resume_tailoring.plan import PROMPT_VERSION
 from app.domain.resume_tailoring.rules import normalize
@@ -79,6 +79,14 @@ class TailoringService:
         reusable = await self._d.tailored.find_reusable(user_id, input_hash)
         if reusable:
             return reusable
+
+        limit = settings.TAILORING_MAX_STARTS_PER_DAY
+        if limit > 0 and await self._d.tailored.count_started_since(user_id, now() - timedelta(hours=24)) >= limit:
+            raise PlatformException(
+                f"You have reached today's limit of {limit} tailoring requests. Try again tomorrow.",
+                status_code=429,
+                details={"code": "DAILY_LIMIT", "limit": limit},
+            )
 
         stamp = now()
         item = TailoredResume(

@@ -111,7 +111,7 @@ describe('saved copies on cards, in the application panel and in settings', () =
 
   beforeEach(async () => {
     const store = await import('../pages/jobs/tailor/savedTailoredStore');
-    store.resetSavedTailoredForTests();
+    store.clearSavedTailored();
   });
 
   it('the card button says Tailored ✓ when a copy is saved for that job', async () => {
@@ -149,5 +149,21 @@ describe('saved copies on cards, in the application panel and in settings', () =
     fireEvent.click(screen.getByRole('button', { name: /remove/i }));
     await waitFor(() => expect(m.discardTailored).toHaveBeenCalledWith('t9'));
     expect(await screen.findByText(/none yet/i)).toBeTruthy();
+  });
+});
+
+describe('saved list is cleared when the user changes', () => {
+  it('clearSavedTailored empties the list and a late response from before the clear is ignored', async () => {
+    const store = await import('../pages/jobs/tailor/savedTailoredStore');
+    store.clearSavedTailored();
+    let release: (v: any[]) => void = () => {};
+    m.listSavedTailored = vi.fn().mockReturnValue(new Promise((r) => { release = r; }));
+    const { TailorButton } = await import('../pages/jobs/tailor/TailorButton');
+    render(<TailorButton jobId="j1" jobTitle="Analyst" />);
+    await waitFor(() => expect(m.listSavedTailored).toHaveBeenCalled());
+    store.clearSavedTailored(); // logout while the request is still in flight
+    release([{ id: 't9', job_id: 'j1', has_pdf: false }]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole('button', { name: /tailored ✓/i })).toBeNull();
   });
 });

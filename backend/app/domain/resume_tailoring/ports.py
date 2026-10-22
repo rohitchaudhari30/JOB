@@ -33,6 +33,9 @@ class TailoredResumeRepository(ABC):
     async def list_for_job(self, user_id: str, job_id: str) -> List[TailoredResume]: ...
 
     @abstractmethod
+    async def count_started_since(self, user_id: str, since: datetime) -> int: ...
+
+    @abstractmethod
     async def list_saved(self, user_id: str) -> List[TailoredResume]: ...
 
     @abstractmethod
