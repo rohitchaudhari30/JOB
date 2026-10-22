@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '../../../components/ui/Button';
 import { StatusChip } from '../../../components/ui/StatusChip';
+import { suggestionsText } from './tailorLogic';
 import type { TailoredResume, TailoringAnswer, TailoringEdit } from '../../../types/tailoring';
 
 interface Props {
@@ -65,6 +66,15 @@ export const AnalysisStep: React.FC<Props> = ({ item, busy, onAnswer, onGenerate
   const edits = item.edit_plan?.edits ?? [];
   const suggestions = item.edit_plan?.suggestions ?? [];
   const rejected = item.edit_plan?.rejected ?? [];
+  const [copied, setCopied] = useState('');
+  const copySuggestions = async () => {
+    try {
+      await navigator.clipboard.writeText(suggestionsText(suggestions));
+      setCopied('Copied. Paste them into your own resume.');
+    } catch {
+      setCopied('Could not copy. Select the text above and copy it manually.');
+    }
+  };
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set(edits.map((e) => e.id)));
 
@@ -149,6 +159,12 @@ export const AnalysisStep: React.FC<Props> = ({ item, busy, onAnswer, onGenerate
         {canEdit && edits.length === 0 && <p className="text-sm text-slate-700 dark:text-slate-300">No safe wording changes were found for this job. Your resume already reads well for it, or the changes would have needed information it does not contain.</p>}
         {canEdit && edits.length > 0 && <ChangeList edits={edits} selected={selected} onToggle={toggle} />}
         {!canEdit && suggestions.length > 0 && <ChangeList edits={suggestions} />}
+        {!canEdit && suggestions.some((s) => s.type === 'REWORD') && (
+          <div className="flex items-center gap-3">
+            <Button size="sm" onClick={copySuggestions}>Copy suggestions</Button>
+            <span role="status" className="text-xs text-slate-700 dark:text-slate-300">{copied}</span>
+          </div>
+        )}
         {!canEdit && suggestions.length === 0 && <p className="text-sm text-slate-700 dark:text-slate-300">No wording suggestions were found for this job.</p>}
         {!canEdit && <p role="note" className="text-xs text-slate-600 dark:text-slate-400">PDF files cannot be edited without changing their layout. Upload a Word version to get a tailored file.</p>}
         {rejected.length > 0 && (
