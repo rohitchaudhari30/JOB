@@ -24,6 +24,7 @@ class ApplicationResponseDTO(BaseModel):
     job_id: str
     resume_id: Optional[str] = None
     tailored_resume_id: Optional[str] = None
+    tailored_opt_out: bool = False
     idempotency_key: str
     workflow_state: WorkflowStateEnum
     applied_at: Optional[datetime] = None
@@ -82,6 +83,10 @@ class BatchQueueApplicationsDTO(BaseModel):
 class ApproveApplicationDTO(BaseModel):
     resume_id: Optional[str] = None
     auto_execute: bool = True
+
+
+class ResumeChoiceDTO(BaseModel):
+    use_tailored: bool
 
 
 class ResumeApplicationDTO(BaseModel):

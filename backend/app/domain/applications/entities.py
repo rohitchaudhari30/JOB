@@ -98,3 +98,5 @@ class Application:
     match_score: float | None = None
     questions: List[ApplicationQuestion] = field(default_factory=list)
     tailored_resume_id: str | None = None
+    # True when the user chose to send the master resume even though a tailored copy exists.
+    tailored_opt_out: bool | None = None

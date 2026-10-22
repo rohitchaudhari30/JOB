@@ -26,6 +26,7 @@ from app.application.applications.dtos import (
     CreateApplicationDTO,
     PaginatedApplicationsDTO,
     ReconcileApplicationDTO,
+    ResumeChoiceDTO,
     ResumeApplicationDTO,
     StopApplicationDTO,
     TakeControlDTO,
@@ -70,6 +71,7 @@ def _to_response_dto(app: Application) -> ApplicationResponseDTO:
         job_id=app.job_id,
         resume_id=app.resume_id,
         tailored_resume_id=app.tailored_resume_id,
+        tailored_opt_out=bool(app.tailored_opt_out),
         idempotency_key=app.idempotency_key,
         workflow_state=app.workflow_state,
         applied_at=app.applied_at,
@@ -192,6 +194,22 @@ async def get_application(
 ):
     app = await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
     return _to_response_dto(app)
+
+
+@router.put("/{application_id}/resume-choice", response_model=ApplicationResponseDTO)
+async def set_resume_choice(
+    application_id: str,
+    req: ResumeChoiceDTO,
+    current_user: Annotated[User, Depends(get_current_user)],
+    app_repo: Annotated[SqlAlchemyApplicationRepository, Depends(get_application_repository)],
+    resume_repo: Annotated[SqlAlchemyResumeRepository, Depends(get_resume_repository)],
+):
+    """Choose whether this application sends the saved tailored copy or the master resume."""
+    from app.application.applications.tailored_choice import SetResumeChoiceUseCase
+
+    await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
+    saved = await SetResumeChoiceUseCase(app_repo, resume_repo).execute(current_user.id, application_id, req.use_tailored)
+    return _to_response_dto(saved)
 
 
 @router.get("/{application_id}/screenshot")

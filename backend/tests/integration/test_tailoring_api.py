@@ -539,3 +539,94 @@ async def test_account_deletion_removes_tailored_files_and_rows(client, db_sessi
     await db_session.commit()
     assert not os.path.exists(path) and not os.path.isdir(os.path.join(settings.STORAGE_DIR, "tailored_resumes", user_id))
     assert (await db_session.execute(select(TailoredResumeModel))).scalars().all() == []
+
+
+# ------------------------------------------------------------ choosing the resume per application
+async def saved_copy(client, w, ai) -> str:
+    ai.script = standard_plan
+    tid = (await start(client, w)).json()["id"]
+    await run_worker()
+    await client.post(f"/api/v1/tailored-resumes/{tid}/generate", json={"approved_edit_ids": ["e1"]}, headers=w.headers)
+    await run_worker()
+    assert (await client.post(f"/api/v1/tailored-resumes/{tid}/save", headers=w.headers)).status_code == 200
+    return tid
+
+
+@pytest.mark.asyncio
+async def test_a_copy_saved_after_queueing_is_picked_up_and_the_user_can_choose_the_master(client, db_session, world, ai):
+    from app.application.applications.tailored_choice import attach_saved_tailored
+    from app.infrastructure.database.repositories.application_repository import SqlAlchemyApplicationRepository
+    from app.infrastructure.database.repositories.profile_repository import SqlAlchemyResumeRepository
+
+    w = world
+    queued = await client.post("/api/v1/applications", json={"job_id": w.job_id, "auto_execute": False}, headers=w.headers)
+    app_id = queued.json()["id"]
+    assert queued.json()["tailored_resume_id"] is None  # nothing saved yet
+
+    tid = await saved_copy(client, w, ai)
+    apps, resumes = SqlAlchemyApplicationRepository(db_session), SqlAlchemyResumeRepository(db_session)
+
+    # Saved later: the application attaches it when it is approved, retried or executed.
+    app = await apps.get_by_id(app_id)
+    assert await attach_saved_tailored(app, resumes) is True
+    assert app.tailored_resume_id == tid
+
+    # The user can choose the master resume; that choice sticks and a later attach does not undo it.
+    res = await client.put(f"/api/v1/applications/{app_id}/resume-choice", json={"use_tailored": False}, headers=w.headers)
+    assert res.status_code == 200, res.text
+    assert res.json()["tailored_resume_id"] is None and res.json()["tailored_opt_out"] is True
+    app = await apps.get_by_id(app_id)
+    assert await attach_saved_tailored(app, resumes) is False and app.tailored_resume_id is None
+
+    # ...and can switch back to the tailored copy.
+    res = await client.put(f"/api/v1/applications/{app_id}/resume-choice", json={"use_tailored": True}, headers=w.headers)
+    assert res.json()["tailored_resume_id"] == tid and res.json()["tailored_opt_out"] is False
+    assert (await client.get(f"/api/v1/applications/{app_id}", headers=w.headers)).json()["tailored_resume_id"] == tid
+
+
+@pytest.mark.asyncio
+async def test_resume_choice_rules(client, db_session, world, ai):
+    w = world
+    queued = await client.post("/api/v1/applications", json={"job_id": w.job_id, "auto_execute": False}, headers=w.headers)
+    app_id = queued.json()["id"]
+    url = f"/api/v1/applications/{app_id}/resume-choice"
+
+    # No saved copy for the job: the tailored option is refused clearly.
+    res = await client.put(url, json={"use_tailored": True}, headers=w.headers)
+    assert res.status_code == 409
+
+    await saved_copy(client, w, ai)
+    # Someone else's application is not found for them.
+    other = await signup(client, name="mallory")
+    assert (await client.put(url, json={"use_tailored": False}, headers=other)).status_code in (403, 404)
+
+    # Once the application is being sent or is done, the choice is locked.
+    await db_session.execute(
+        __import__("sqlalchemy").update(ApplicationModel).where(ApplicationModel.id == app_id).values(workflow_state="APPLIED")
+    )
+    await db_session.commit()
+    assert (await client.put(url, json={"use_tailored": False}, headers=w.headers)).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_queueing_with_use_tailored_false_records_the_choice(client, db_session, world, ai):
+    w = world
+    tid = await saved_copy(client, w, ai)
+    res = await client.post(
+        "/api/v1/applications", json={"job_id": w.job_id, "auto_execute": False, "use_tailored": False}, headers=w.headers
+    )
+    assert res.status_code in (200, 201), res.text
+    assert res.json()["tailored_resume_id"] is None and res.json()["tailored_opt_out"] is True
+    assert tid  # the copy still exists for other uses
+
+
+@pytest.mark.asyncio
+async def test_saved_tailored_resumes_are_listed_for_their_owner_only(client, db_session, world, ai):
+    w = world
+    assert (await client.get("/api/v1/tailored-resumes", headers=w.headers)).json() == []
+    tid = await saved_copy(client, w, ai)
+    rows = (await client.get("/api/v1/tailored-resumes", headers=w.headers)).json()
+    assert [r["id"] for r in rows] == [tid]
+    assert rows[0]["job_id"] == w.job_id and rows[0]["company"] and rows[0]["approved_at"]
+    other = await signup(client, name="mallory")
+    assert (await client.get("/api/v1/tailored-resumes", headers=other)).json() == []
