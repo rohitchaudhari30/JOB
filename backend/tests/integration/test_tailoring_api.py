@@ -661,3 +661,30 @@ async def test_deleting_a_job_removes_its_tailored_files_instead_of_orphaning_th
     db_session.expire_all()
     assert await db_session.get(TailoredResumeModel, tid) is None
     assert (await client.get("/api/v1/tailored-resumes", headers=w.headers)).json() == []
+
+
+@pytest.mark.asyncio
+async def test_a_short_saved_description_can_be_replaced_by_text_the_user_pastes(client, db_session, world, ai):
+    w = world
+    short_job = await add_job(db_session, description="Data Engineer - Reports and Dashboards.")
+    url = f"/api/v1/jobs/{short_job}/tailor"
+
+    refused = await client.post(url, json={}, headers=w.headers)
+    assert refused.status_code == 400 and refused.json()["details"]["code"] == "JOB_DESCRIPTION_TOO_SHORT"
+    assert "paste" in refused.json()["detail"].lower()
+
+    too_short = await client.post(url, json={"job_description": "Python role."}, headers=w.headers)
+    assert too_short.status_code == 400 and "pasted text is too short" in too_short.json()["detail"].lower()
+
+    ai.script = standard_plan
+    started = await client.post(url, json={"job_description": JOB_TEXT}, headers=w.headers)
+    assert started.status_code == 202, started.text
+    tid = started.json()["id"]
+    await run_worker()
+    item = await get(client, w.headers, tid)
+    assert item["status"] == "AWAITING_INPUT", item.get("error_message")  # analysed from the pasted text
+
+    # The saved posting itself is untouched; the pasted text belongs to this request only.
+    row = await db_session.get(JobModel, short_job)
+    assert row.raw_description == "Data Engineer - Reports and Dashboards."
+    assert "Required: Python" in (await db_session.get(TailoredResumeModel, tid)).job_description_override

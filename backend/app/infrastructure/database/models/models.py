@@ -187,6 +187,7 @@ class TailoredResumeModel(Base):
     master_file_hash = Column(String(64), nullable=False)
     job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
     job_description_hash = Column(String(64), nullable=False)
+    job_description_override = Column(Text, nullable=True)
     job_title_snapshot = Column(String(255), nullable=True)
     company_snapshot = Column(String(255), nullable=True)
     version = Column(Integer, default=1, nullable=False)

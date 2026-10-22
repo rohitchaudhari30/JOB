@@ -20,7 +20,7 @@ _FIELDS = [
     "version", "master_label_snapshot", "job_title_snapshot", "company_snapshot", "analysis", "edit_plan",
     "approved_edit_ids", "validation", "file_path", "pdf_file_path", "file_name", "file_hash", "provider", "model_name",
     "prompt_version", "error_code", "error_message", "attempt_count", "lease_owner", "lease_expires_at", "created_at",
-    "updated_at", "approved_at", "expires_at",
+    "updated_at", "approved_at", "expires_at", "job_description_override",
 ]
 _ACTIVE_APPLICATION_STATES = (
     "APPROVED", "QUEUED", "APPLYING", "FORM_DETECTED", "FORM_FILLED", "SUBMITTING", "PAUSED_OTP", "PAUSED_CAPTCHA",

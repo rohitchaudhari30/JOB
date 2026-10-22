@@ -5,10 +5,18 @@ import type { Resume } from '../../../types';
 
 interface Props {
   busy: boolean;
-  onStart: (masterResumeId?: string) => void;
+  /** True when the saved posting has no usable description: the user must paste it. */
+  needsDescription?: boolean;
+  onStart: (masterResumeId?: string, jobDescription?: string) => void;
 }
 
-export const SetupStep: React.FC<Props> = ({ busy, onStart }) => {
+const MIN_PASTED_CHARS = 150;
+
+export const SetupStep: React.FC<Props> = ({ busy, needsDescription: asked = false, onStart }) => {
+  const [pasted, setPasted] = useState('');
+  // Once asked, keep the box open (the error clears while the next request runs).
+  const [needsDescription, setNeedsDescription] = useState(false);
+  useEffect(() => { if (asked) setNeedsDescription(true); }, [asked]);
   const [resumes, setResumes] = useState<Resume[] | null>(null);
   const [selected, setSelected] = useState('');
   const [loadError, setLoadError] = useState(false);
@@ -66,7 +74,33 @@ export const SetupStep: React.FC<Props> = ({ busy, onStart }) => {
       <p className="text-xs text-slate-600 dark:text-slate-400">
         Your resume and this job description are sent to our AI provider to suggest wording. Nothing is added to your resume without evidence from it or your confirmation.
       </p>
-      <Button variant="primary" loading={busy} disabled={!selected} onClick={() => onStart(selected)}>Analyse this job</Button>
+      {needsDescription && (
+        <div className="space-y-1.5">
+          <label htmlFor="tailor-jd" className="text-xs font-bold text-slate-800 dark:text-slate-200">
+            Job description (copy it from the job posting)
+          </label>
+          <textarea
+            id="tailor-jd"
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            rows={8}
+            maxLength={40000}
+            placeholder="Paste the full job description here…"
+            className="w-full rounded-xl border border-slate-300 bg-white p-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            Used only for this tailored copy; the saved job is not changed. {pasted.trim().length}/{MIN_PASTED_CHARS}+ characters.
+          </p>
+        </div>
+      )}
+      <Button
+        variant="primary"
+        loading={busy}
+        disabled={!selected || (needsDescription && pasted.trim().length < MIN_PASTED_CHARS)}
+        onClick={() => onStart(selected, needsDescription ? pasted.trim() : undefined)}
+      >
+        Analyse this job
+      </Button>
     </div>
   );
 };

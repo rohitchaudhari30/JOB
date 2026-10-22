@@ -44,7 +44,7 @@ describe('TailorResumeDialog', () => {
     m.getTailored.mockResolvedValue({ ...base, status: 'QUEUED' });
     renderDialog();
     fireEvent.click(await screen.findByRole('button', { name: /analyse this job/i }));
-    await waitFor(() => expect(m.startTailoring).toHaveBeenCalledWith('j1', 'r1'));
+    await waitFor(() => expect(m.startTailoring).toHaveBeenCalledWith('j1', 'r1', undefined));
     expect((await screen.findByRole('status')).textContent).toMatch(/reading your resume/i);
   });
 
@@ -76,6 +76,27 @@ describe('TailorResumeDialog', () => {
     expect(await screen.findByText(/job description is too short/i, {}, { timeout: 5000 })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /start again/i }));
     expect(await screen.findByRole('button', { name: /analyse this job/i })).toBeTruthy();
+  });
+});
+
+describe('jobs whose saved description is too short', () => {
+  beforeEach(() => { vi.clearAllMocks(); m.listTailoredForJob.mockResolvedValue([]); });
+
+  it('asks the user to paste it, then starts with the pasted text', async () => {
+    m.listResumes.mockResolvedValue([{ id: 'r1', label: 'Main', is_default: true, file_name: 'cv.docx' }]);
+    const tooShort = { response: { data: { detail: "This job's saved description is too short to tailor against. Paste the job description from the posting and try again.", details: { code: 'JOB_DESCRIPTION_TOO_SHORT' } } } };
+    m.startTailoring.mockRejectedValueOnce(tooShort).mockResolvedValue({ ...base, status: 'QUEUED' });
+    m.getTailored.mockResolvedValue({ ...base, status: 'QUEUED' });
+    renderDialog();
+    fireEvent.click(await screen.findByRole('button', { name: /analyse this job/i }));
+    const box = await screen.findByLabelText(/job description/i);
+    const go = screen.getByRole('button', { name: /analyse this job/i }) as HTMLButtonElement;
+    expect(go.disabled).toBe(true); // nothing pasted yet
+    const text = 'Data Engineer role building reports and dashboards with Python, SQL and Spark. '.repeat(3);
+    fireEvent.change(box, { target: { value: text } });
+    await waitFor(() => expect((screen.getByRole('button', { name: /analyse this job/i }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: /analyse this job/i }));
+    await waitFor(() => expect(m.startTailoring).toHaveBeenLastCalledWith('j1', 'r1', text.trim()));
   });
 });
 

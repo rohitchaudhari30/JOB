@@ -37,6 +37,8 @@ class TailoredResume:
     error_code: Optional[str] = None
     error_message: Optional[str] = None
     attempt_count: int = 0
+    # Job text pasted by the user when the saved posting has no usable description (used instead of the job's own).
+    job_description_override: Optional[str] = None
     lease_owner: Optional[str] = None
     lease_expires_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

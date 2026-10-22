@@ -89,9 +89,10 @@ class Settings(BaseSettings):
     MAX_RESUME_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB maximum
     # Job-specific resume tailoring
     TAILORING_MAX_TOKENS: int = 4096            # room for a full edit plan (the shared limit is 2048)
-    TAILORING_MIN_JOB_DESCRIPTION_CHARS: int = 300
+    TAILORING_MIN_JOB_DESCRIPTION_CHARS: int = 150
     TAILORING_DRAFT_RETENTION_DAYS: int = 7     # unsaved drafts are removed after this
     TAILORING_MAX_CONCURRENCY: int = 2
+    TAILORING_MAX_PASTED_DESCRIPTION_CHARS: int = 20000
     TAILORING_MAX_STARTS_PER_DAY: int = 30      # new requests per user per 24 h (each one calls the AI)
     TAILORING_MAX_ATTEMPTS: int = 2             # one retry for a provider failure or a malformed reply
     ALLOWED_RESUME_EXTENSIONS: str = ".pdf,.docx"

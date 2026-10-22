@@ -54,7 +54,7 @@ export const TailorResumeDialog: React.FC<Props> = ({ open, jobId, jobTitle, onC
 
   let body: React.ReactNode;
   if (loadingExisting) body = <p role="status" className="text-sm text-slate-600 dark:text-slate-300">Loading…</p>;
-  else if (!item) body = <SetupStep busy={busy} onStart={t.start} />;
+  else if (!item) body = <SetupStep busy={busy} needsDescription={error?.code === 'JOB_DESCRIPTION_TOO_SHORT'} onStart={t.start} />;
   else if (working) {
     body = (
       <div className="space-y-3">

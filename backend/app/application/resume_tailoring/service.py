@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.config import settings
 from app.core.exceptions import ConflictException, EntityNotFoundException, PlatformException, ValidationException
+from app.domain.resume_tailoring.job_text import effective_job_text
 from app.domain.resume_tailoring.entities import MODE_EDIT, MODE_SUGGESTIONS_ONLY, TailoredResume
 from app.domain.resume_tailoring.plan import PROMPT_VERSION
 from app.domain.resume_tailoring.rules import normalize
@@ -44,12 +45,22 @@ class TailoringService:
             self._d.on_work_queued()
 
     # ---- start ---------------------------------------------------------------------------
-    async def start(self, user_id: str, job_id: str, master_resume_id: Optional[str]) -> TailoredResume:
+    async def start(
+        self, user_id: str, job_id: str, master_resume_id: Optional[str], job_description: Optional[str] = None
+    ) -> TailoredResume:
         job = await self._d.jobs.get_by_id(job_id)
         if job is None:
             raise EntityNotFoundException("Job", job_id)
-        if len((job.raw_description or "").strip()) < settings.TAILORING_MIN_JOB_DESCRIPTION_CHARS:
-            raise _problem("This job has no usable description to tailor against. Open the posting for details.", "JOB_DESCRIPTION_TOO_SHORT")
+        pasted = (job_description or "").strip()[: settings.TAILORING_MAX_PASTED_DESCRIPTION_CHARS] or None
+        job_text = effective_job_text(pasted, job)
+        minimum = settings.TAILORING_MIN_JOB_DESCRIPTION_CHARS
+        if len(job_text.strip()) < minimum:
+            raise _problem(
+                "This job's saved description is too short to tailor against. Paste the job description from the "
+                "posting and try again." if not pasted else
+                f"The pasted text is too short. Paste the full job description (at least {minimum} characters).",
+                "JOB_DESCRIPTION_TOO_SHORT",
+            )
 
         if master_resume_id:
             resume = await self._d.resumes.get_by_id(master_resume_id)
@@ -70,7 +81,7 @@ class TailoringService:
             raise _problem("This PDF has no readable text (it may be a scan). Upload a Word version.", "NO_READABLE_TEXT")
 
         file_hash = self._d.toolkit.file_hash(resume.file_path)
-        job_hash = sha256_text(job.raw_description)
+        job_hash = sha256_text(job_text)
         input_hash = sha256_text(f"{user_id}|{file_hash}|{job_id}|{job_hash}|{PROMPT_VERSION}")
 
         in_flight = await self._d.tailored.find_in_flight(user_id, resume.id, job_id)
@@ -91,7 +102,7 @@ class TailoringService:
         stamp = now()
         item = TailoredResume(
             id=str(uuid.uuid4()), user_id=user_id, master_resume_id=resume.id, master_file_hash=file_hash,
-            job_id=job_id, job_description_hash=job_hash, input_hash=input_hash,
+            job_id=job_id, job_description_hash=job_hash, job_description_override=pasted, input_hash=input_hash,
             mode=MODE_EDIT if fmt == "docx" else MODE_SUGGESTIONS_ONLY,
             version=await self._d.tailored.next_version(user_id, resume.id, job_id),
             master_label_snapshot=resume.label, job_title_snapshot=job.title, company_snapshot=job.company,
@@ -183,7 +194,7 @@ class TailoringService:
         if self._d.toolkit.file_hash(resume.file_path) != item.master_file_hash:
             return "Your resume file changed after this copy was made."
         job = await self._d.jobs.get_by_id(item.job_id)
-        if job is not None and sha256_text(job.raw_description) != item.job_description_hash:
+        if job is not None and sha256_text(effective_job_text(item.job_description_override, job)) != item.job_description_hash:
             return "The job description changed after this copy was made."
         return None
 

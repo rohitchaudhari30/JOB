@@ -51,7 +51,7 @@ export function useTailoring(jobId: string) {
     item, error, busy, working, loadingExisting, loadExisting,
     clearError: () => setError(null),
     reset: () => { setItem(null); setError(null); },
-    start: (masterResumeId?: string) => run(() => api.startTailoring(jobId, masterResumeId)),
+    start: (masterResumeId?: string, jobDescription?: string) => run(() => api.startTailoring(jobId, masterResumeId, jobDescription)),
     answer: (answers: TailoringAnswer[]) => run(() => api.answerTailoring(item!.id, answers)),
     generate: (ids: string[]) => run(() => api.generateTailored(item!.id, ids)),
     save: () => run(() => api.saveTailored(item!.id)),
