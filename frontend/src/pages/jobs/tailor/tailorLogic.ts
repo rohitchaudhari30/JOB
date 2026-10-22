@@ -48,3 +48,11 @@ export const CHOICE_EDITABLE: ReadonlySet<string> = new Set([
   'PAUSED_OTP', 'PAUSED_CAPTCHA', 'PAUSED_USER_INPUT', 'PAUSED_AUTH_EXPIRED', 'PAUSED_SESSION', 'PAUSED_LIMIT',
   'RETRY_QUEUED', 'FAILED',
 ]);
+
+/** Plain-text version of the suggested wording, for pasting into the user's own resume. */
+export function suggestionsText(edits: { type: string; before: string; after: string; reason?: string }[]): string {
+  return edits
+    .filter((e) => e.type === 'REWORD')
+    .map((e, i) => `${i + 1}. Replace:\n   ${e.before}\n   With:\n   ${e.after}${e.reason ? `\n   Why: ${e.reason}` : ''}`)
+    .join('\n\n');
+}

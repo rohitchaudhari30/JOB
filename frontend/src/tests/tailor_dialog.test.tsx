@@ -188,3 +188,23 @@ describe('saved list is cleared when the user changes', () => {
     expect(screen.queryByRole('button', { name: /tailored ✓/i })).toBeNull();
   });
 });
+
+describe('PDF resumes (suggestions only)', () => {
+  it('can copy the suggested wording as plain text', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { AnalysisStep } = await import('../pages/jobs/tailor/AnalysisStep');
+    const item: any = {
+      ...base, status: 'AWAITING_INPUT', mode: 'SUGGESTIONS_ONLY',
+      analysis: { mode: 'SUGGESTIONS_ONLY', requirements: [], questions: [], gaps: [], strengths: [], match_note: '', editable_lines: 0, locked_lines: 0, layout_check_available: false },
+      edit_plan: { edits: [], suggestions: [edit], rejected: [] },
+    };
+    render(<AnalysisStep item={item} busy={false} onAnswer={() => {}} onGenerate={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: /copy suggestions/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const text = writeText.mock.calls[0][0] as string;
+    expect(text).toContain('Built dashboards');
+    expect(text).toContain('Built analytics dashboards');
+    expect((await screen.findByText(/copied/i))).toBeTruthy();
+  });
+});
