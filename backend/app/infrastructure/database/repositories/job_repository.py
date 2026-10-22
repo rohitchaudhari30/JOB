@@ -284,6 +284,28 @@ class SqlAlchemyJobRepository(JobRepository):
         result = await self._session.execute(stmt)
         return result.scalar() or 0
 
+    async def _purge_tailored_for_jobs(self, job_ids: list) -> None:
+        """Hard-deleting a job also removes the tailored resumes made for it, files included."""
+        import os
+        from sqlalchemy import delete as sql_delete
+        from app.infrastructure.database.models.models import TailoredResumeModel
+
+        if not job_ids:
+            return
+        rows = await self._session.execute(
+            select(TailoredResumeModel.file_path, TailoredResumeModel.pdf_file_path).where(
+                TailoredResumeModel.job_id.in_(job_ids)
+            )
+        )
+        for docx_path, pdf_path in rows:
+            for path in (docx_path, pdf_path):
+                if path:
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+        await self._session.execute(sql_delete(TailoredResumeModel).where(TailoredResumeModel.job_id.in_(job_ids)))
+
     async def delete(self, job_id: str) -> bool:
         from app.infrastructure.database.models.models import MatchResultModel, ApplicationModel
         from sqlalchemy import delete as sql_delete
@@ -302,6 +324,7 @@ class SqlAlchemyJobRepository(JobRepository):
             # Soft-delete to protect application audit logs
             job_model.is_active = False
         else:
+            await self._purge_tailored_for_jobs([job_id])
             await self._session.execute(sql_delete(MatchResultModel).where(MatchResultModel.job_id == job_id))
             await self._session.delete(job_model)
 
@@ -329,6 +352,7 @@ class SqlAlchemyJobRepository(JobRepository):
         soft_delete_job_ids = [jid for jid in job_ids if jid in applied_job_ids]
 
         if deletable_job_ids:
+            await self._purge_tailored_for_jobs(deletable_job_ids)
             await self._session.execute(sql_delete(MatchResultModel).where(MatchResultModel.job_id.in_(deletable_job_ids)))
             await self._session.execute(sql_delete(JobModel).where(JobModel.id.in_(deletable_job_ids)))
 
