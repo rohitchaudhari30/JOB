@@ -630,3 +630,17 @@ async def test_saved_tailored_resumes_are_listed_for_their_owner_only(client, db
     assert rows[0]["job_id"] == w.job_id and rows[0]["company"] and rows[0]["approved_at"]
     other = await signup(client, name="mallory")
     assert (await client.get("/api/v1/tailored-resumes", headers=other)).json() == []
+
+
+@pytest.mark.asyncio
+async def test_a_daily_cap_stops_runaway_ai_use_but_not_repeat_clicks(client, db_session, world, ai, monkeypatch):
+    w = world
+    monkeypatch.setattr(settings, "TAILORING_MAX_STARTS_PER_DAY", 2)
+    jobs = [w.job_id, await add_job(db_session), await add_job(db_session)]
+    for j in jobs[:2]:
+        assert (await client.post(f"/api/v1/jobs/{j}/tailor", json={}, headers=w.headers)).status_code == 202
+    # The same job again is the same request, so it is not counted twice.
+    assert (await client.post(f"/api/v1/jobs/{jobs[0]}/tailor", json={}, headers=w.headers)).status_code == 202
+    third = await client.post(f"/api/v1/jobs/{jobs[2]}/tailor", json={}, headers=w.headers)
+    assert third.status_code == 429, third.text
+    assert "limit" in third.json()["detail"].lower()

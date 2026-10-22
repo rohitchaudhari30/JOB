@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Drawer } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { StatusChip } from '../../components/ui/StatusChip';
 import type { Job, MatchResult } from '../../types';
-import { api } from '../../services/api';
+import { useHasSavedTailored } from './tailor/savedTailoredStore';
 import { TailorResumeDialog } from './tailor/TailorResumeDialog';
 import { getMatchScore, getRecommendationScore } from '../../utils/matchScores';
 
@@ -93,22 +93,9 @@ export const JobDetailDrawer: React.FC<JobDetailDrawerProps> = ({
 }) => {
   const m = model?.match || null;
   const rec = m ? getRecommendationScore(m) : null;
-  const jobId = model?.jobId;
   const [tailorOpen, setTailorOpen] = useState(false);
-  const [savedCopy, setSavedCopy] = useState(false);
-  const refreshSaved = useCallback(async () => {
-    if (!jobId) return;
-    try {
-      setSavedCopy((await api.listTailoredForJob(jobId)).some((i) => i.status === 'SAVED'));
-    } catch {
-      setSavedCopy(false);
-    }
-  }, [jobId]);
-  useEffect(() => {
-    setSavedCopy(false);
-    setTailorOpen(false);
-    void refreshSaved();
-  }, [refreshSaved]);
+  const savedCopy = useHasSavedTailored(model?.jobId ?? '');
+  useEffect(() => setTailorOpen(false), [model?.jobId]);
   return (
     <Drawer open={Boolean(model)} onClose={onClose} title={model ? `${model.title} · ${model.company}` : 'Job'}>
       {model && (
@@ -225,7 +212,6 @@ export const JobDetailDrawer: React.FC<JobDetailDrawerProps> = ({
           jobId={model.jobId}
           jobTitle={model.title}
           onClose={() => setTailorOpen(false)}
-          onChanged={() => void refreshSaved()}
         />
       )}
     </Drawer>

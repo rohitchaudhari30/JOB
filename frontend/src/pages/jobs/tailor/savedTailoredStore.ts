@@ -6,14 +6,17 @@ import type { SavedTailoredSummary } from '../../../types/tailoring';
 let items: SavedTailoredSummary[] = [];
 let loaded = false;
 let inflight: Promise<void> | null = null;
+let generation = 0; // bumped on clear so a request started before logout cannot repopulate the list
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
 export function refreshSavedTailored(): Promise<void> {
   if (inflight) return inflight;
+  const started = generation;
   inflight = Promise.resolve()
     .then(() => api.listSavedTailored())
     .then((rows) => {
+      if (started !== generation) return;
       items = rows;
       loaded = true;
       emit();
@@ -22,15 +25,18 @@ export function refreshSavedTailored(): Promise<void> {
       /* keep the last known list; the next refresh retries */
     })
     .finally(() => {
-      inflight = null;
+      if (started === generation) inflight = null;
     });
   return inflight;
 }
 
-export function resetSavedTailoredForTests(): void {
+/** Forget everything (logout, account deletion, tests) so the next user never sees the previous list. */
+export function clearSavedTailored(): void {
   items = [];
   loaded = false;
   inflight = null;
+  generation += 1;
+  emit();
 }
 
 const subscribe = (l: () => void) => {

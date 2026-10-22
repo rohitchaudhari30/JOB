@@ -113,6 +113,12 @@ class SqlAlchemyTailoredResumeRepository(TailoredResumeRepository):
         )
         return [self._to_entity(m) for m in (await self._session.execute(stmt)).scalars().all()]
 
+    async def count_started_since(self, user_id: str, since: datetime) -> int:
+        stmt = select(func.count()).select_from(TailoredResumeModel).where(
+            TailoredResumeModel.user_id == user_id, TailoredResumeModel.created_at >= since
+        )
+        return int((await self._session.execute(stmt)).scalar() or 0)
+
     async def list_saved(self, user_id: str) -> List[TailoredResume]:
         stmt = (
             select(TailoredResumeModel)
