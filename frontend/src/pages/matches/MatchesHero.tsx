@@ -11,7 +11,7 @@ interface Props {
 export const MatchesHero: React.FC<Props> = ({ loading, isEvaluatingAll, handleEvaluateAll, loadAllMatches }) => (
   <>
     {/* Hero Header */}
-    <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-br from-white via-indigo-50/20 to-white dark:from-slate-900/90 dark:via-indigo-950/20 dark:to-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-white via-indigo-50/20 to-white dark:from-slate-900/90 dark:via-indigo-950/20 dark:to-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
         <div className="flex items-center space-x-3">
           <div className="p-2.5 rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20">

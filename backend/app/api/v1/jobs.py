@@ -9,6 +9,7 @@ from app.api.deps import (
     get_job_repository,
     get_job_source_repository,
     get_matching_task_repository,
+    get_user_job_state_repository,
     require_admin,
 )
 from app.application.background import spawn
@@ -22,6 +23,9 @@ from app.domain.jobs.entities import SearchQueryFilter
 from app.infrastructure.database.repositories.job_repository import (
     SqlAlchemyJobRepository,
     SqlAlchemyJobSourceRepository,
+)
+from app.infrastructure.database.repositories.user_job_state_repository import (
+    SqlAlchemyUserJobStateRepository,
 )
 
 logger = logging.getLogger("app.api.jobs")
@@ -53,7 +57,6 @@ async def _discover_in_background(user_id: str, source_type: str, filters: Searc
             logger.exception("Background discovery failed for source %s", source_type)
 
 
-
 class DiscoverJobsRequest(BaseModel):
     source_type: str = "naukri"
     roles: List[str] = Field(default_factory=lambda: ["Data Engineer"])
@@ -65,7 +68,6 @@ class DiscoverJobsRequest(BaseModel):
     min_salary: Optional[float] = None
     max_days_posted: int = 7
     auto_evaluate: bool = False
-    # true = start in the background and return 202 right away (JOB-02). Look at GET /jobs for the results.
     background: bool = False
 
 
@@ -94,6 +96,10 @@ class JobSummaryResponse(BaseModel):
     posted_at_source: Optional[str] = None
     freshness_bucket: str = "UNKNOWN"
     freshness_score: float = 0.0
+    lifecycle_state: str = "ACTIVE"
+    last_verified_at: Optional[datetime] = None
+    is_saved: bool = False
+    is_dismissed: bool = False
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -160,6 +166,7 @@ async def discover_jobs(
 async def list_jobs(
     current_user: Annotated[User, Depends(get_current_user)],
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
+    user_state_repo: Annotated[SqlAlchemyUserJobStateRepository, Depends(get_user_job_state_repository)],
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     search: Optional[str] = Query(None),
@@ -168,6 +175,7 @@ async def list_jobs(
     posted_within: Optional[str] = Query(None, description="Filter: 1h, 3h, 6h, 12h, 24h, 3d, 7d, 14d, 30d"),
     freshness_bucket: Optional[str] = Query(None, description="Filter: JUST_NOW, LAST_1_HOUR, LAST_24_HOURS, etc."),
     sort_by: Optional[str] = Query("newest", description="Sort: newest, freshness, salary, relevance"),
+    include_dismissed: bool = Query(False, description="Whether to include dismissed jobs"),
 ):
     use_case = ListJobsUseCase(job_repo=job_repo)
     result = await use_case.execute(
@@ -180,7 +188,40 @@ async def list_jobs(
         freshness_bucket=freshness_bucket,
         sort_by=sort_by,
     )
+    items = result.get("items", [])
+    if items:
+        job_ids = [j.id for j in items]
+        states_map = await user_state_repo.get_user_states_for_jobs(current_user.id, job_ids)
+        annotated_items = []
+        for j in items:
+            state = states_map.get(j.id)
+            is_dismissed = state.is_dismissed if state else False
+            if not include_dismissed and is_dismissed:
+                continue
+            j_dict = j.__dict__.copy() if hasattr(j, "__dict__") else dict(j)
+            j_dict["is_saved"] = state.is_saved if state else False
+            j_dict["is_dismissed"] = is_dismissed
+            annotated_items.append(JobSummaryResponse(**j_dict))
+        result["items"] = annotated_items
+        result["total"] = len(annotated_items) if not include_dismissed else result.get("total", len(annotated_items))
     return result
+
+
+@router.get("/user/saved", response_model=PaginatedJobsResponse)
+async def list_saved_jobs(
+    current_user: Annotated[User, Depends(get_current_user)],
+    user_state_repo: Annotated[SqlAlchemyUserJobStateRepository, Depends(get_user_job_state_repository)],
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+):
+    jobs = await user_state_repo.list_saved_jobs(current_user.id, skip=skip, limit=limit)
+    items = []
+    for j in jobs:
+        j_dict = j.__dict__.copy() if hasattr(j, "__dict__") else dict(j)
+        j_dict["is_saved"] = True
+        j_dict["is_dismissed"] = False
+        items.append(JobSummaryResponse(**j_dict))
+    return PaginatedJobsResponse(total=len(items), skip=skip, limit=limit, items=items)
 
 
 @router.get("/{job_id}", response_model=JobDetailResponse)
@@ -188,10 +229,66 @@ async def get_job_details(
     job_id: str,
     current_user: Annotated[User, Depends(get_current_user)],
     job_repo: Annotated[SqlAlchemyJobRepository, Depends(get_job_repository)],
+    user_state_repo: Annotated[SqlAlchemyUserJobStateRepository, Depends(get_user_job_state_repository)],
 ):
     use_case = GetJobDetailsUseCase(job_repo=job_repo)
     job = await use_case.execute(job_id)
-    return job
+    state = await user_state_repo.get_state(current_user.id, job_id)
+    j_dict = job.__dict__.copy() if hasattr(job, "__dict__") else dict(job)
+    j_dict["is_saved"] = state.is_saved if state else False
+    j_dict["is_dismissed"] = state.is_dismissed if state else False
+    return JobDetailResponse(**j_dict)
+
+
+@router.post("/{job_id}/save", response_model=Dict[str, Any])
+async def save_job(
+    job_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    user_state_repo: Annotated[SqlAlchemyUserJobStateRepository, Depends(get_user_job_state_repository)],
+):
+    state = await user_state_repo.set_saved(current_user.id, job_id, True)
+    return {"status": "saved", "job_id": job_id, "is_saved": state.is_saved}
+
+
+@router.delete("/{job_id}/save", response_model=Dict[str, Any])
+async def unsave_job(
+    job_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    user_state_repo: Annotated[SqlAlchemyUserJobStateRepository, Depends(get_user_job_state_repository)],
+):
+    state = await user_state_repo.set_saved(current_user.id, job_id, False)
+    return {"status": "unsaved", "job_id": job_id, "is_saved": state.is_saved}
+
+
+@router.post("/{job_id}/dismiss", response_model=Dict[str, Any])
+async def dismiss_job(
+    job_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    user_state_repo: Annotated[SqlAlchemyUserJobStateRepository, Depends(get_user_job_state_repository)],
+):
+    state = await user_state_repo.set_dismissed(current_user.id, job_id, True)
+    return {"status": "dismissed", "job_id": job_id, "is_dismissed": state.is_dismissed}
+
+
+@router.delete("/{job_id}/dismiss", response_model=Dict[str, Any])
+async def undismiss_job(
+    job_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    user_state_repo: Annotated[SqlAlchemyUserJobStateRepository, Depends(get_user_job_state_repository)],
+):
+    state = await user_state_repo.set_dismissed(current_user.id, job_id, False)
+    return {"status": "undismissed", "job_id": job_id, "is_dismissed": state.is_dismissed}
+
+
+@router.post("/retention/sweep", response_model=Dict[str, Any])
+async def trigger_retention_sweep(
+    current_user: Annotated[User, Depends(require_admin)],
+    dry_run: bool = Query(False, description="Preview actions without committing changes"),
+    batch_size: Optional[int] = Query(None, ge=1, le=1000),
+):
+    from app.workers.job_retention_worker import run_job_retention_sweep
+    summary = await run_job_retention_sweep(batch_size=batch_size, dry_run=dry_run)
+    return summary
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_200_OK)

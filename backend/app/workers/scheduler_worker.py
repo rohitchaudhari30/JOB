@@ -115,6 +115,27 @@ class AutomationSchedulerWorker:
             except Exception as e:
                 logger.warning(f"Could not register stale_submitting_sweeper: {e}")
 
+        if self._scheduler and not self._scheduler.get_job("job_lifecycle_retention_sweeper"):
+            async def _sweep_retention():
+                try:
+                    from app.workers.job_retention_worker import run_job_retention_sweep
+                    await run_job_retention_sweep()
+                except Exception as e:
+                    logger.warning(f"Error during job lifecycle retention sweep: {e}")
+
+            try:
+                from app.core.config import settings
+                self._scheduler.add_job(
+                    func=_sweep_retention,
+                    trigger=IntervalTrigger(hours=settings.RETENTION_SWEEPER_INTERVAL_HOURS),
+                    id="job_lifecycle_retention_sweeper",
+                    replace_existing=True,
+                    max_instances=1,
+                    coalesce=True,
+                )
+            except Exception as e:
+                logger.warning(f"Could not register job_lifecycle_retention_sweeper: {e}")
+
     def shutdown(self):
         if self._scheduler and self._scheduler.running:
             try:

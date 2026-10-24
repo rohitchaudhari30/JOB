@@ -59,6 +59,7 @@ class UserModel(Base):
     browser_sessions = relationship("BrowserSessionModel", back_populates="user", cascade="all, delete-orphan")
     platform_connections = relationship("PlatformConnectionModel", back_populates="user", cascade="all, delete-orphan")
     applications = relationship("ApplicationModel", back_populates="user", cascade="all, delete-orphan")
+    job_states = relationship("UserJobStateModel", back_populates="user", cascade="all, delete-orphan")
     match_results = relationship("MatchResultModel", back_populates="user", cascade="all, delete-orphan")
     automation_runs = relationship("AutomationRunModel", back_populates="user", cascade="all, delete-orphan")
     campaigns = relationship("CampaignModel", back_populates="user", cascade="all, delete-orphan")
@@ -310,11 +311,17 @@ class JobModel(Base):
     freshness_score = Column(Float, default=0.0, nullable=False)
     canonical_job_key = Column(String(64), nullable=True, index=True)
     canonical_confidence = Column(String(32), default="PLATFORM_EXACT", nullable=False)
+    lifecycle_state = Column(String(32), default="ACTIVE", nullable=False, index=True)
+    last_verified_at = Column(DateTime(timezone=True), nullable=True)
+    closed_at = Column(DateTime(timezone=True), nullable=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("source_id", "external_job_id", name="uq_source_external_job"),
+        Index("ix_jobs_lifecycle_updated", "lifecycle_state", "updated_at"),
+        Index("ix_jobs_active_last_seen", "is_active", "last_seen_at"),
         Index(
             "uq_job_canonical_key",
             "canonical_job_key",
@@ -327,6 +334,7 @@ class JobModel(Base):
     source = relationship("JobSourceModel", back_populates="jobs")
     match_results = relationship("MatchResultModel", back_populates="job")
     applications = relationship("ApplicationModel", back_populates="job")
+    user_states = relationship("UserJobStateModel", back_populates="job", cascade="all, delete-orphan")
 
 
 class MatchResultModel(Base):
@@ -388,6 +396,29 @@ class MatchResultModel(Base):
 
     user = relationship("UserModel", back_populates="match_results")
     job = relationship("JobModel", back_populates="match_results")
+
+
+class UserJobStateModel(Base):
+    __tablename__ = "user_job_states"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id = Column(String(36), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    is_saved = Column(Boolean, default=False, nullable=False, index=True)
+    is_dismissed = Column(Boolean, default=False, nullable=False, index=True)
+    saved_at = Column(DateTime(timezone=True), nullable=True)
+    dismissed_at = Column(DateTime(timezone=True), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "job_id", name="uq_user_job_state"),
+        Index("ix_user_job_state_lookup", "user_id", "is_saved", "is_dismissed"),
+    )
+
+    user = relationship("UserModel", back_populates="job_states")
+    job = relationship("JobModel", back_populates="user_states")
 
 
 class PlatformConnectionModel(Base):
@@ -454,6 +485,11 @@ class ApplicationModel(Base):
     current_attempt_id = Column(String(64), nullable=True, index=True)
     # Label of the resume used, kept even if the resume is deleted later (resume_id -> NULL).
     resume_label_snapshot = Column(String(255), nullable=True)
+    # Frozen job snapshots to preserve audit durability if canonical listing is archived or cleaned up
+    job_title_snapshot = Column(String(255), nullable=True)
+    company_snapshot = Column(String(255), nullable=True)
+    location_snapshot = Column(String(255), nullable=True)
+    apply_url_snapshot = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 

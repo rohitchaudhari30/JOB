@@ -42,6 +42,11 @@ async def get_job_repository(session: Annotated[AsyncSession, Depends(get_db_ses
     return SqlAlchemyJobRepository(session)
 
 
+async def get_user_job_state_repository(session: Annotated[AsyncSession, Depends(get_db_session)]):
+    from app.infrastructure.database.repositories.user_job_state_repository import SqlAlchemyUserJobStateRepository
+    return SqlAlchemyUserJobStateRepository(session)
+
+
 async def get_job_source_repository(session: Annotated[AsyncSession, Depends(get_db_session)]) -> SqlAlchemyJobSourceRepository:
     return SqlAlchemyJobSourceRepository(session)
 

@@ -194,7 +194,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({
   }, [allMatches, serverTotal]);
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-24">
+    <div className="space-y-4 animate-fadeIn pb-24">
       <ReadinessBanner
         missing={readiness.missing}
         platformLabel="Your job platform"

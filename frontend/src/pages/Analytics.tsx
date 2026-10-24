@@ -123,16 +123,16 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
           api.getAIStatus().catch(() => null),
         ]);
 
-        if (fData) setFunnel(fData);
-        setResumes(rData || []);
-        setSources(sData || []);
-        setCampaigns(cData || []);
-        setSkills(skData || []);
+        setFunnel(fData);
+        setResumes(rData);
+        setSources(sData);
+        setCampaigns(cData);
+        setSkills(skData);
         setWeightTuning(wData);
         setAiStatus(aiData);
-      } catch (e: any) {
-        console.error('Failed to load analytics data:', e);
-        showError('Unable to load analytics telemetry.');
+      } catch (err) {
+        console.error('Failed to load analytics data:', err);
+        showError('Failed to load analytics dashboard data.');
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -145,7 +145,6 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
     fetchAnalyticsData();
   }, [fetchAnalyticsData]);
 
-  // Observational resume variant with highest observed interview rate (safe terminology)
   const highestInterviewResume = useMemo(() => {
     if (!resumes || resumes.length === 0) return null;
     return [...resumes].sort(
@@ -154,34 +153,39 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
   }, [resumes]);
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-16">
-      <PageHeader
-        title="Insights"
-        description="How your job search is going: where applications come from, what is working, and how matches are scored."
-      />
+    <div className="space-y-4 animate-fadeIn pb-16">
+      {/* Clean, standard SaaS page header without cluttering subtitle */}
+      <PageHeader title="Insights" />
 
-      <div className="space-y-2">
-        <InsightsFilterBar
-          datePreset={datePreset}
-          setDatePreset={setDatePreset}
-          customStartDate={customStartDate}
-          customEndDate={customEndDate}
-          setCustomStartDate={setCustomStartDate}
-          setCustomEndDate={setCustomEndDate}
-          selectedPlatform={selectedPlatform}
-          setSelectedPlatform={setSelectedPlatform}
-          onRefresh={() => fetchAnalyticsData(true)}
-          busy={refreshing || loading}
-        />
-        <p role="status" className="text-xs text-slate-600 dark:text-slate-400">
-          Showing: <strong>{describeRange(datePreset, customStartDate, customEndDate, selectedPlatform)}</strong>. Applies to every view below.
+      {/* Unified Executive Insights Control Bar: Views on left, Filter Presets on right */}
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 pb-2 border-b border-slate-200/80 dark:border-slate-800">
+        <Tabs items={GROUPS} value={view} onChange={setView} label="Insights views" idPrefix="insights" className="border-b-0 shrink-0" />
+
+        <div className="flex items-center gap-3">
+          <InsightsFilterBar
+            datePreset={datePreset}
+            setDatePreset={setDatePreset}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            setCustomStartDate={setCustomStartDate}
+            setCustomEndDate={setCustomEndDate}
+            selectedPlatform={selectedPlatform}
+            setSelectedPlatform={setSelectedPlatform}
+            onRefresh={() => fetchAnalyticsData(true)}
+            busy={refreshing || loading}
+          />
+        </div>
+      </div>
+
+      {/* Observational context indicator */}
+      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-0.5">
+        <p role="status">
+          Showing: <strong className="font-semibold text-slate-700 dark:text-slate-200">{describeRange(datePreset, customStartDate, customEndDate, selectedPlatform)}</strong>. Applies to every view below.
         </p>
       </div>
 
-      <Tabs items={GROUPS} value={view} onChange={setView} label="Insights views" idPrefix="insights" />
-
       <TabPanel idPrefix="insights" id={view} active>
-        <div className="space-y-6">
+        <div className="space-y-6 pt-2">
           {view === 'overview' && <OverviewSection funnel={funnel} onNavigate={onNavigate} />}
           {view === 'breakdowns' && (
             <>

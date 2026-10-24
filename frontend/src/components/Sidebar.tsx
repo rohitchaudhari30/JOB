@@ -82,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user, 
       ref={asideRef}
       id="primary-navigation"
       aria-label="Primary"
-      className={`${open ? 'fixed inset-y-0 left-0 z-40 flex overflow-y-auto' : 'hidden'} lg:static lg:z-auto lg:flex w-64 border-r border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-4 flex flex-col justify-between select-none transition-colors duration-200 shrink-0`}>
+      className={`${open ? 'fixed inset-y-0 left-0 z-40 flex overflow-y-auto' : 'hidden'} lg:sticky lg:top-16 lg:z-30 lg:flex lg:h-[calc(100vh-4rem)] lg:overflow-y-auto w-64 border-r border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-4 flex flex-col justify-between select-none transition-colors duration-200 shrink-0`}>
       <nav aria-label="Primary navigation" className="space-y-0.5">
         {NAV_GROUPS.map((group) => {
           const isActive = activeGroup.id === group.id;

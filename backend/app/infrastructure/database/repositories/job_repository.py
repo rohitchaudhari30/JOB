@@ -48,6 +48,10 @@ class SqlAlchemyJobRepository(JobRepository):
             freshness_score=model.freshness_score or 0.0,
             canonical_job_key=model.canonical_job_key,
             canonical_confidence=model.canonical_confidence or "PLATFORM_EXACT",
+            lifecycle_state=getattr(model, "lifecycle_state", "ACTIVE") or "ACTIVE",
+            last_verified_at=getattr(model, "last_verified_at", None),
+            closed_at=getattr(model, "closed_at", None),
+            archived_at=getattr(model, "archived_at", None),
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -84,7 +88,12 @@ class SqlAlchemyJobRepository(JobRepository):
         result = await self._session.execute(stmt)
         model = result.scalar_one_or_none()
         if model:
-            model.last_seen_at = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc)
+            model.last_seen_at = now
+            model.last_verified_at = now
+            if getattr(model, "lifecycle_state", None) in ("STALE", "DISCOVERED"):
+                model.lifecycle_state = "ACTIVE"
+                model.is_active = True
 
     async def save(self, job: Job) -> Job:
         from datetime import datetime, timezone
@@ -127,6 +136,10 @@ class SqlAlchemyJobRepository(JobRepository):
                 freshness_score=f_score,
                 canonical_job_key=job.canonical_job_key,
                 canonical_confidence=job.canonical_confidence or "PLATFORM_EXACT",
+                lifecycle_state=getattr(job, "lifecycle_state", "ACTIVE") or "ACTIVE",
+                last_verified_at=getattr(job, "last_verified_at", None) or now,
+                closed_at=getattr(job, "closed_at", None),
+                archived_at=getattr(job, "archived_at", None),
             )
             self._session.add(model)
         else:
@@ -153,6 +166,12 @@ class SqlAlchemyJobRepository(JobRepository):
             model.last_seen_at = now
             model.freshness_bucket = f_bucket
             model.freshness_score = f_score
+            if getattr(job, "lifecycle_state", None):
+                model.lifecycle_state = job.lifecycle_state
+            if getattr(model, "lifecycle_state", None) in ("STALE", "DISCOVERED"):
+                model.lifecycle_state = "ACTIVE"
+                model.is_active = True
+            model.last_verified_at = now
 
         from sqlalchemy.exc import IntegrityError
         try:
@@ -183,7 +202,7 @@ class SqlAlchemyJobRepository(JobRepository):
         freshness_bucket: str | None = None,
     ):
         from datetime import datetime, timedelta, timezone
-        stmt = stmt.where(JobModel.is_active == True)
+        stmt = stmt.where(JobModel.is_active == True, JobModel.lifecycle_state == "ACTIVE")
 
         if search:
             stmt = stmt.where(
@@ -317,10 +336,18 @@ class SqlAlchemyJobRepository(JobRepository):
         job_stmt = select(JobModel).where(JobModel.id == job_id)
         job_res = await self._session.execute(job_stmt)
         job_model = job_res.scalar_one_or_none()
+        from app.infrastructure.database.models.models import UserJobStateModel
+        from datetime import datetime, timezone
+        saved_stmt = select(func.count(UserJobStateModel.id)).where(UserJobStateModel.job_id == job_id, UserJobStateModel.is_saved == True)
+        saved_res = await self._session.execute(saved_stmt)
+        is_saved = (saved_res.scalar() or 0) > 0
         if not job_model:
             return False
 
-        if has_apps:
+        if has_apps or is_saved:
+            now = datetime.now(timezone.utc)
+            job_model.lifecycle_state = "ARCHIVED"
+            job_model.archived_at = now
             # Soft-delete to protect application audit logs
             job_model.is_active = False
         else:
@@ -332,7 +359,7 @@ class SqlAlchemyJobRepository(JobRepository):
         return True
 
     async def clear_all(self, source_type: str | None = None) -> int:
-        from app.infrastructure.database.models.models import MatchResultModel, ApplicationModel, JobSourceModel
+        from app.infrastructure.database.models.models import MatchResultModel, ApplicationModel, JobSourceModel, UserJobStateModel
         from sqlalchemy import delete as sql_delete, update as sql_update
 
         stmt = select(JobModel.id)
@@ -348,16 +375,28 @@ class SqlAlchemyJobRepository(JobRepository):
         applied_res = await self._session.execute(applied_stmt)
         applied_job_ids = set(applied_res.scalars().all())
 
-        deletable_job_ids = [jid for jid in job_ids if jid not in applied_job_ids]
-        soft_delete_job_ids = [jid for jid in job_ids if jid in applied_job_ids]
+        saved_stmt = select(UserJobStateModel.job_id).where(UserJobStateModel.job_id.in_(job_ids), UserJobStateModel.is_saved == True)
+        saved_res = await self._session.execute(saved_stmt)
+        saved_job_ids = set(saved_res.scalars().all())
+
+        protected_ids = applied_job_ids | saved_job_ids
+        deletable_job_ids = [jid for jid in job_ids if jid not in protected_ids]
+        archive_job_ids = [jid for jid in job_ids if jid in protected_ids]
+
 
         if deletable_job_ids:
             await self._purge_tailored_for_jobs(deletable_job_ids)
             await self._session.execute(sql_delete(MatchResultModel).where(MatchResultModel.job_id.in_(deletable_job_ids)))
             await self._session.execute(sql_delete(JobModel).where(JobModel.id.in_(deletable_job_ids)))
 
-        if soft_delete_job_ids:
-            await self._session.execute(sql_update(JobModel).where(JobModel.id.in_(soft_delete_job_ids)).values(is_active=False))
+        if archive_job_ids:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            await self._session.execute(
+                sql_update(JobModel)
+                .where(JobModel.id.in_(archive_job_ids))
+                .values(is_active=False, lifecycle_state="ARCHIVED", archived_at=now)
+            )
 
         await self._session.flush()
         return len(job_ids)

@@ -11,11 +11,10 @@ interface Props {
   onNavigate?: (tab: any) => void;
 }
 
-/** Home header: title and refresh only. The single primary action ("Start campaign" / "Open live run") sits in the status card below. */
+/** Home header: clean title and refresh only. The single primary action sits in the status card below. */
 export const DashboardHeader: React.FC<Props> = ({ clientTz, loadData, loading, refreshing }) => (
   <PageHeader
     title="Home"
-    description="What needs your attention today, and how your job search is moving."
     actions={
       <>
         <span className="hidden items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-3 py-1.5 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 lg:inline-flex">

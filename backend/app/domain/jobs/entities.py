@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List
+from app.domain.jobs.lifecycle import JobLifecycleState
 
 
 @dataclass
@@ -33,6 +34,10 @@ class Job:
     parsed_requirements: Dict[str, Any] = field(default_factory=dict)
     embedding: List[float] | None = None
     is_active: bool = True
+    lifecycle_state: str = JobLifecycleState.ACTIVE.value
+    last_verified_at: datetime | None = None
+    closed_at: datetime | None = None
+    archived_at: datetime | None = None
     posted_at: datetime | None = None
     first_seen_at: datetime | None = None
     last_seen_at: datetime | None = None
@@ -43,6 +48,21 @@ class Job:
     freshness_score: float = 0.0
     canonical_job_key: str | None = None
     canonical_confidence: str = "PLATFORM_EXACT"  # PLATFORM_EXACT | CANONICAL_DERIVED | POSSIBLE_DUPLICATE
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass
+class UserJobState:
+    """User-specific job interaction state decoupled from canonical job records."""
+    id: str
+    user_id: str
+    job_id: str
+    is_saved: bool = False
+    is_dismissed: bool = False
+    saved_at: datetime | None = None
+    dismissed_at: datetime | None = None
+    notes: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

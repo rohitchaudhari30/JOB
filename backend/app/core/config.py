@@ -103,6 +103,15 @@ class Settings(BaseSettings):
     GLOBAL_ACCOUNT_SAFE_CEILING: int = 50
     PLATFORM_DAILY_CAP_DEFAULT: int = 30
 
+    # Job Lifecycle & Data Retention Policy (configurable product thresholds)
+    RETENTION_STALE_DAYS: int = 14              # Unverified active jobs marked STALE after 14 days
+    RETENTION_EXPIRED_DAYS: int = 30            # Stale jobs marked EXPIRED after 30 days
+    RETENTION_UNAPPLIED_PURGE_DAYS: int = 90    # Unsaved, unapplied inactive jobs purged after 90 days
+    RETENTION_DISMISSED_PURGE_DAYS: int = 60    # Dismissed interaction states purged after 60 days
+    RETENTION_SWEEPER_BATCH_SIZE: int = 250     # Max records processed per transaction chunk
+    RETENTION_SWEEPER_INTERVAL_HOURS: int = 24  # Recurring sweeper cadence
+    RETENTION_ENABLED: bool = True              # Global toggle for retention sweeper
+
     @property
     def cors_origin_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]

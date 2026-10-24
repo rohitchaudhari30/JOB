@@ -56,15 +56,15 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
             for q in (model.questions or [])
         ]
         job = getattr(model, "job", None)
-        job_title = job.title if job else None
-        company = job.company if job else None
-        location = job.location if job else None
+        job_title = (job.title if job else None) or getattr(model, "job_title_snapshot", None)
+        company = (job.company if job else None) or getattr(model, "company_snapshot", None)
+        location = (job.location if job else None) or getattr(model, "location_snapshot", None)
         min_experience_years = job.min_experience_years if job else None
         max_experience_years = job.max_experience_years if job else None
         min_salary = job.min_salary if job else None
         max_salary = job.max_salary if job else None
         salary_currency = job.salary_currency if job else "INR"
-        apply_url = job.apply_url if job else None
+        apply_url = (job.apply_url if job else None) or getattr(model, "apply_url_snapshot", None)
         platform = None
         if job:
             if getattr(job, "source_id", None) and "-" not in str(job.source_id):
@@ -233,6 +233,18 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
         model = result.scalar_one_or_none()
 
         if not model:
+            j_title = getattr(application, "job_title", None)
+            j_comp = getattr(application, "company", None)
+            j_loc = getattr(application, "location", None)
+            j_url = getattr(application, "apply_url", None)
+            if (not j_title or not j_comp) and application.job_id:
+                from app.infrastructure.database.models.models import JobModel
+                rel_job = await self._session.get(JobModel, application.job_id)
+                if rel_job:
+                    j_title = j_title or rel_job.title
+                    j_comp = j_comp or rel_job.company
+                    j_loc = j_loc or rel_job.location
+                    j_url = j_url or rel_job.apply_url
             model = ApplicationModel(
                 id=application.id,
                 user_id=application.user_id,
@@ -252,6 +264,10 @@ class SqlAlchemyApplicationRepository(ApplicationRepository):
                 next_retry_at=application.next_retry_at,
                 current_attempt_id=application.current_attempt_id,
                 resume_label_snapshot=await self._resume_label(application.resume_id),
+                job_title_snapshot=j_title,
+                company_snapshot=j_comp,
+                location_snapshot=j_loc,
+                apply_url_snapshot=j_url,
             )
             self._session.add(model)
         else:

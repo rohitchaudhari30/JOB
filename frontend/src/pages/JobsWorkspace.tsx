@@ -13,12 +13,6 @@ const LENSES = [
   { id: 'review', label: 'Needs review' },
 ];
 
-const DESCRIPTIONS: Record<JobsLens, string> = {
-  all: 'Every job found so far, newest first. Find new jobs, then queue the ones you want to apply to.',
-  matched: 'Jobs scored against your profile, best fit first. Select the ones you want to queue.',
-  review: "Jobs the AI isn't sure about. Check each one and decide whether to queue it.",
-};
-
 /** Reads the lens from the address bar: /jobs is "all"; /jobs/matches is "matched" or, with ?lens=review, "review". */
 export function readLens(tab: 'discovery' | 'matches', search = window.location.search): JobsLens {
   if (tab === 'discovery') return 'all';
@@ -64,14 +58,19 @@ export const JobsWorkspace: React.FC<Props> = ({ tab, activeRun = null, onRefres
   );
 
   return (
-    <div className="space-y-5">
-      <PageHeader title="Jobs" description={DESCRIPTIONS[lens]} />
-      <Tabs
-        items={LENSES}
-        value={lens}
-        onChange={(id) => changeLens(id as JobsLens)}
-        label="Jobs view"
-        idPrefix="jobs-lens"
+    <div className="space-y-4">
+      <PageHeader
+        title="Jobs"
+        actions={
+          <Tabs
+            items={LENSES}
+            value={lens}
+            onChange={(id) => changeLens(id as JobsLens)}
+            label="Jobs view"
+            idPrefix="jobs-lens"
+            className="border-b-0 shrink-0"
+          />
+        }
       />
       <TabPanel idPrefix="jobs-lens" id={lens} active>
         {lens === 'all' ? (

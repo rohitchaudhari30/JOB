@@ -71,11 +71,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, activeRun: pro
   const effectiveStatus = overview?.active_run.status || propActiveRun?.status || 'IDLE';
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12">
+    <div className="space-y-5 animate-fadeIn pb-12">
       <DashboardHeader clientTz={clientTz} loadData={loadData} loading={loading} refreshing={refreshing} onNavigate={onNavigate} />
-      <ActionRequiredSection overview={overview} connections={connections} onNavigate={onNavigate} />
       <OperationalCommandCard overview={overview} effectiveRunning={effectiveRunning} effectiveStatus={effectiveStatus} onNavigate={onNavigate} />
       <OperationalPulse overview={overview} connections={connections} onNavigate={onNavigate} />
+      <ActionRequiredSection overview={overview} connections={connections} onNavigate={onNavigate} />
       <TopMatchesCard overview={overview} onNavigate={onNavigate} />
       <RecentActivityCard recentApplications={recentApplications} onNavigate={onNavigate} />
     </div>

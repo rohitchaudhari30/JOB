@@ -270,10 +270,10 @@ export const MatchesGrid: React.FC<Props> = ({
                           href={m.apply_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="px-3 py-2 rounded-xl border border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs shrink-0"
+                          className="px-3.5 py-2 rounded-xl border border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs shrink-0"
                           title="Open job link on original employer site"
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                           <span className="hidden sm:inline">Job Link</span>
                         </a>
                       )}
@@ -283,7 +283,7 @@ export const MatchesGrid: React.FC<Props> = ({
                         type="button"
                         onClick={() => handleApplySingle(m.job_id)}
                         disabled={applyingJobId === m.job_id}
-                        className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+                        className="px-3.5 py-2 rounded-xl border border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600 bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
                       >
                         <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
                         <span>{applyingJobId === m.job_id ? 'Queuing…' : 'Super Apply'}</span>
@@ -294,6 +294,7 @@ export const MatchesGrid: React.FC<Props> = ({
                         jobId={m.job_id}
                         jobTitle={m.job_title || m.job?.title || 'this job'}
                         className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-600/20 shrink-0"
+                        savedClassName="px-3.5 py-2 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-900 border border-violet-200 hover:border-violet-300 dark:bg-violet-950/60 dark:hover:bg-violet-900/80 dark:text-violet-100 dark:border-violet-700/80 font-bold text-xs shadow-xs shrink-0"
                         label="Optimize & Apply →"
                       />
                     </div>

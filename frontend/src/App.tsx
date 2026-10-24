@@ -315,7 +315,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col ${theme === 'dark' ? 'dark' : ''} bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200`}>
+    <div className={`h-screen flex flex-col ${theme === 'dark' ? 'dark' : ''} bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200 overflow-hidden`}>
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-indigo-700 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
@@ -332,7 +332,7 @@ export const App: React.FC = () => {
         navOpen={navOpen}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         <Sidebar
           activeTab={activeTab}
           onTabChange={handleTabChange}

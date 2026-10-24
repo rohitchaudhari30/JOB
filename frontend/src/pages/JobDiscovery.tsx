@@ -329,7 +329,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   );
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-24">
+    <div className="space-y-4 animate-fadeIn pb-24">
       <DiscoveryControls
         experience={experience}
         handleTriggerDiscovery={handleTriggerDiscovery}

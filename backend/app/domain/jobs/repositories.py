@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from app.domain.jobs.entities import Job, JobSource
+from app.domain.jobs.entities import Job, JobSource, UserJobState
 
 
 class JobRepository(ABC):
@@ -69,4 +69,30 @@ class JobSourceRepository(ABC):
 
     @abstractmethod
     async def save(self, source: JobSource) -> JobSource:
+        pass
+
+
+class UserJobStateRepository(ABC):
+    @abstractmethod
+    async def get_state(self, user_id: str, job_id: str) -> UserJobState | None:
+        pass
+
+    @abstractmethod
+    async def set_saved(self, user_id: str, job_id: str, is_saved: bool, notes: str | None = None) -> UserJobState:
+        pass
+
+    @abstractmethod
+    async def set_dismissed(self, user_id: str, job_id: str, is_dismissed: bool) -> UserJobState:
+        pass
+
+    @abstractmethod
+    async def list_saved_jobs(self, user_id: str, skip: int = 0, limit: int = 50) -> List[Job]:
+        pass
+
+    @abstractmethod
+    async def list_dismissed_job_ids(self, user_id: str) -> List[str]:
+        pass
+
+    @abstractmethod
+    async def get_user_states_for_jobs(self, user_id: str, job_ids: List[str]) -> dict[str, UserJobState]:
         pass
