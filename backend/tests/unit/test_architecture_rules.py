@@ -15,26 +15,26 @@ def test_inner_layers_do_not_import_the_api_layer():
         str(p.relative_to(APP))
         for folder in ("domain", "application", "infrastructure", "workers")
         for p in _python_files(folder)
-        if pattern.search(p.read_text())
+        if pattern.search(p.read_text(encoding="utf-8", errors="replace"))
     ]
     assert offenders == []
 
 
 def test_domain_layer_does_not_import_infrastructure():
     pattern = re.compile(r"^\s*(from|import)\s+app\.infrastructure\b", re.MULTILINE)
-    offenders = [str(p.relative_to(APP)) for p in _python_files("domain") if pattern.search(p.read_text())]
+    offenders = [str(p.relative_to(APP)) for p in _python_files("domain") if pattern.search(p.read_text(encoding="utf-8", errors="replace"))]
     assert offenders == []
 
 
 def test_automation_router_does_not_open_its_own_sessions():
-    text = (APP / "api" / "v1" / "automation.py").read_text()
+    text = (APP / "api" / "v1" / "automation.py").read_text(encoding="utf-8", errors="replace")
     assert "AsyncSessionLocal" not in text
 
 
 def test_application_layer_does_not_import_infrastructure():
     """ARC-01: use cases reach browsers, adapters and models only through ports and repositories."""
     pattern = re.compile(r"^\s*(from|import)\s+app\.infrastructure\b", re.MULTILINE)
-    offenders = [str(p.relative_to(APP)) for p in _python_files("application") if pattern.search(p.read_text())]
+    offenders = [str(p.relative_to(APP)) for p in _python_files("application") if pattern.search(p.read_text(encoding="utf-8", errors="replace"))]
     assert offenders == []
 
 

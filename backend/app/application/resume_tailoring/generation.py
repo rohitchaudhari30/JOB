@@ -1,6 +1,7 @@
 """Stage 2: apply the approved edits to a copy of the master, validate it, and store it."""
 import asyncio
 import os
+import re
 import uuid
 
 from app.domain.resume_tailoring.entities import TailoredResume
@@ -8,7 +9,7 @@ from app.domain.resume_tailoring.plan import edit_from_dict
 from app.domain.resume_tailoring.rules import validate_edit
 from app.domain.resume_tailoring.status import TailoringStatus
 from app.application.resume_tailoring.analysis import fail, stale
-from app.application.resume_tailoring.common import file_format, release_lease, remove_files, slug, to_facts
+from app.application.resume_tailoring.common import file_format, now, release_lease, remove_files, to_facts
 from app.application.resume_tailoring.deps import TailoringDeps
 
 
@@ -44,8 +45,16 @@ async def run_generation(deps: TailoringDeps, item: TailoredResume) -> TailoredR
 
     remove_files(item.file_path, item.pdf_file_path)  # a regenerated draft replaces the previous files
     item.file_path, item.pdf_file_path, item.file_hash = outcome.file_path, outcome.pdf_file_path, outcome.file_hash
-    stem = os.path.splitext(resume.file_name or "resume")[0]
-    item.file_name = f"{slug(stem, 40)}-tailored-{slug(item.company_snapshot or '', 24)}.docx"
+    raw_stem = os.path.splitext(resume.file_name or "Resume")[0]
+    clean_stem = re.sub(r"[-_](tailored|optimized|customized|customize).*$", "", raw_stem, flags=re.IGNORECASE)
+    clean_stem = re.sub(r"[-_](for|to)[-_].*$", "", clean_stem, flags=re.IGNORECASE)
+    clean_stem = re.sub(r"[^\w\s-]", "_", clean_stem)
+    clean_stem = re.sub(r"[-\s_]+", "_", clean_stem).strip("_")
+    if not clean_stem or len(clean_stem) < 3 or clean_stem.lower() == "resume":
+        clean_stem = "Resume"
+    if not clean_stem.lower().endswith("resume"):
+        clean_stem = f"{clean_stem}_Resume"
+    item.file_name = f"{clean_stem}.docx"
     item.validation = {
         **outcome.validation,
         "applied": outcome.applied_ids,
@@ -54,5 +63,10 @@ async def run_generation(deps: TailoringDeps, item: TailoredResume) -> TailoredR
     item.error_code = item.error_message = None
     item.attempt_count = 0
     release_lease(item)
-    item.status = TailoringStatus.READY_FOR_REVIEW
+    if bool((item.analysis or {}).get("auto_generate")) and (item.validation or {}).get("passed"):
+        item.status = TailoringStatus.SAVED
+        item.approved_at = now()
+        item.expires_at = None
+    else:
+        item.status = TailoringStatus.READY_FOR_REVIEW
     return item

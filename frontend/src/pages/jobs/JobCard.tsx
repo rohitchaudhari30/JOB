@@ -278,7 +278,7 @@ export const JobCard: React.FC<JobCardProps> = ({
             <ExternalLink className="w-4 h-4" aria-hidden="true" />
           </a>
 
-          <TailorButton jobId={job.id} jobTitle={job.title} />
+          <TailorButton jobId={job.id} jobTitle={job.title} applyUrl={job.apply_url} />
 
           {isCurrentlyApplying ? (
             <button type="button"

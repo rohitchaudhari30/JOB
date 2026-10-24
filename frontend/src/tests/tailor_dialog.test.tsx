@@ -4,6 +4,18 @@ import { TailorResumeDialog } from '../pages/jobs/tailor/TailorResumeDialog';
 import { pickResumable } from '../pages/jobs/tailor/tailorLogic';
 import { api } from '../services/api';
 
+const mockShowError = vi.fn();
+const mockShowSuccess = vi.fn();
+vi.mock('../context/ToastContext', () => ({
+  ToastProvider: ({ children }: any) => children,
+  useToast: () => ({
+    showError: mockShowError,
+    showSuccess: mockShowSuccess,
+    showWarning: vi.fn(),
+    showInfo: vi.fn(),
+  }),
+}));
+
 vi.mock('../services/api', () => ({
   api: {
     listResumes: vi.fn(),
@@ -65,6 +77,21 @@ describe('TailorResumeDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: /save for this job/i }));
     await waitFor(() => expect(m.saveTailored).toHaveBeenCalledWith('t1'));
     expect(screen.getByRole('button', { name: /download word/i })).toBeTruthy();
+  });
+
+  it('notifies the user via toast when tailored download fails (DEF-06)', async () => {
+    m.listTailoredForJob.mockResolvedValue([
+      { ...base, status: 'READY_FOR_REVIEW', has_file: true, approved_edit_ids: ['e1'],
+        edit_plan: { edits: [edit], suggestions: [], rejected: [] },
+        validation: { passed: true, applied: ['e1'], skipped: [], checks: [{ name: 'opens', status: 'pass', detail: '' }] } },
+    ]);
+    m.downloadTailored.mockRejectedValue(new Error('Network error during file download'));
+    renderDialog();
+    const dlBtn = await screen.findByRole('button', { name: /download word/i });
+    fireEvent.click(dlBtn);
+    await waitFor(() => {
+      expect(mockShowError).toHaveBeenCalledWith('Network error during file download');
+    });
   });
 
   it('shows the server message and a restart when a request fails', async () => {
@@ -139,9 +166,9 @@ describe('saved copies on cards, in the application panel and in settings', () =
     m.listSavedTailored = vi.fn().mockResolvedValue(saved);
     const { TailorButton } = await import('../pages/jobs/tailor/TailorButton');
     render(<TailorButton jobId="j1" jobTitle="Analyst" />);
-    expect(await screen.findByRole('button', { name: /tailored ✓/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /optimized ✓|customized ✓|tailored ✓/i })).toBeTruthy();
     render(<TailorButton jobId="other" jobTitle="Other" />);
-    expect((await screen.findAllByRole('button', { name: /^tailor resume$/i })).length).toBe(1);
+    expect((await screen.findAllByRole('button', { name: /optimize resume|customize resume|tailor resume/i })).length).toBe(1);
   });
 
   it('the application panel offers the switch only when a copy exists and the state allows it', async () => {

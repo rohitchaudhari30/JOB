@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useApplyReadiness } from './useApplyReadiness';
@@ -27,9 +27,14 @@ export function useJobActions({ onNavigate, readinessMissing }: Options = {}) {
   const [evaluatingIds, setEvaluatingIds] = useState<Set<string>>(new Set());
   const [queueingIds, setQueueingIds] = useState<Set<string>>(new Set());
   const [isEvaluatingAll, setIsEvaluatingAll] = useState(false);
+  const inflightEvalRef = useRef<Set<string>>(new Set());
 
   const evaluateJob = useCallback(
     async (jobId: string): Promise<MatchResult | null> => {
+      if (inflightEvalRef.current.has(jobId)) {
+        return null;
+      }
+      inflightEvalRef.current.add(jobId);
       setEvaluatingIds((s) => new Set(s).add(jobId));
       try {
         const res = await api.evaluateMatch(jobId);
@@ -39,6 +44,7 @@ export function useJobActions({ onNavigate, readinessMissing }: Options = {}) {
         showError(`Match evaluation failed: ${e.response?.data?.detail || e.message}`);
         return null;
       } finally {
+        inflightEvalRef.current.delete(jobId);
         setEvaluatingIds((s) => {
           const n = new Set(s);
           n.delete(jobId);

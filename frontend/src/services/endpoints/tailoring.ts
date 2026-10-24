@@ -2,7 +2,23 @@ import { apiClient } from '../http';
 import type { Application } from '../../types/applications';
 import type { SavedTailoredSummary, TailoredResume, TailoringAnswer } from '../../types/tailoring';
 
+export interface BulkTailorResultItem {
+  job_id: string;
+  success: boolean;
+  tailored: TailoredResume | null;
+  error?: string | null;
+  code?: string | null;
+}
+
 export const tailoringApi = {
+  bulkTailor: async (jobIds: string[], masterResumeId?: string, autoGenerate: boolean = true): Promise<BulkTailorResultItem[]> => {
+    const res = await apiClient.post('/jobs/bulk-tailor', {
+      job_ids: jobIds,
+      master_resume_id: masterResumeId ?? null,
+      auto_generate: autoGenerate,
+    });
+    return res.data;
+  },
   startTailoring: async (jobId: string, masterResumeId?: string, jobDescription?: string): Promise<TailoredResume> => {
     const res = await apiClient.post(`/jobs/${jobId}/tailor`, {
       master_resume_id: masterResumeId ?? null,

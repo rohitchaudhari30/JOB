@@ -58,7 +58,7 @@ class AutomationSession:
     ):
         self.run_id = run_id
         self.user_id = user_id
-        self.execution_id = execution_id or run_id
+        self.execution_id = execution_id
         self.campaign_id = campaign_id
         self.worker_id = worker_id
         self.lease_version = lease_version
@@ -297,7 +297,7 @@ class AutomationOrchestrator:
         session = AutomationSession(
             run_id=run_id,
             user_id=user_id,
-            execution_id=execution_id or run_id,
+            execution_id=execution_id,
             campaign_id=campaign_id,
             worker_id=worker_id,
             lease_version=lease_version,
@@ -430,7 +430,7 @@ class AutomationOrchestrator:
         quota_repo: Any = None,
     ):
         heartbeat_task = None
-        if session.execution_id:
+        if session.campaign_id and session.execution_id:
             heartbeat_task = asyncio.create_task(
                 self._run_heartbeat_loop(session, interval_seconds=30, execution_repo=execution_repo)
             )
@@ -506,7 +506,7 @@ class AutomationOrchestrator:
         finally:
             if heartbeat_task and not heartbeat_task.done():
                 heartbeat_task.cancel()
-            if session.execution_id:
+            if session.campaign_id and session.execution_id:
                 try:
                     async def _sync_final_state(repo):
                         exec_model = await repo.get_by_id(session.execution_id)

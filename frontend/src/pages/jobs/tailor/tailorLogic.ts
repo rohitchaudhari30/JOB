@@ -4,8 +4,10 @@ export const WORKING: ReadonlySet<TailoringStatus> = new Set(['QUEUED', 'ANALYZI
 export const DEAD_ENDS: ReadonlySet<TailoringStatus> = new Set(['FAILED', 'STALE', 'CANCELLED', 'DISCARDED']);
 
 export function workingText(status: TailoringStatus): string {
-  if (status === 'GENERATE_QUEUED' || status === 'GENERATING') return 'Creating your tailored copy and checking it against your original…';
-  return 'Reading your resume and the job description…';
+  if (status === 'GENERATE_QUEUED' || status === 'GENERATING') {
+    return 'Generating tailored resume and validating integrity…';
+  }
+  return 'Reading your resume and analyzing role requirements…';
 }
 
 export interface TailorError {
@@ -15,7 +17,7 @@ export interface TailorError {
 
 export function toTailorError(e: unknown): TailorError {
   const err = e as { response?: { data?: { detail?: string; details?: { code?: string } } }; message?: string };
-  return { message: err?.response?.data?.detail || err?.message || 'Something went wrong.', code: err?.response?.data?.details?.code };
+  return { message: err?.response?.data?.detail || err?.message || 'An unexpected error occurred.', code: err?.response?.data?.details?.code };
 }
 
 /** The most useful existing request to continue with, or null when the user should start fresh. */
@@ -34,12 +36,27 @@ export function saveBlob(blob: Blob, fileName: string): void {
   window.URL.revokeObjectURL(url);
 }
 
+/** Produces a clean, professional HR-standard resume filename without internal tool tags or company names. */
+export function cleanResumeFileName(rawName?: string | null, candidateName?: string, extension: 'pdf' | 'docx' = 'pdf'): string {
+  let base = (rawName || '').replace(/\.(docx|pdf)$/i, '');
+  base = base.replace(/[-_](tailored|optimized|customized|customize).*$/i, '');
+  base = base.replace(/[-_](for|to)[-_].*$/i, '');
+  base = base.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!base || base.length < 3 || base.toLowerCase() === 'resume') {
+    base = candidateName ? candidateName.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') : 'Resume';
+  }
+  if (!base.toLowerCase().includes('resume')) {
+    base = `${base}_Resume`;
+  }
+  return `${base}.${extension}`;
+}
+
 export const CHECK_LABELS: Record<string, string> = {
-  opens: 'File opens',
-  structure: 'Styles and layout settings unchanged',
-  wording: 'Only your approved changes differ',
-  protected_facts: 'Name, contact, dates and numbers intact',
-  layout: 'Page layout',
+  opens: 'Document validity',
+  structure: 'Layout & styling preserved',
+  wording: 'Only approved modifications applied',
+  protected_facts: 'Core credentials intact',
+  layout: 'Page layout fidelity',
 };
 
 /** Application states in which the resume choice can still change (mirrors the server's rule). */

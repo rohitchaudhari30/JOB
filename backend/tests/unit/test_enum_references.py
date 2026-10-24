@@ -29,7 +29,7 @@ def test_every_referenced_member_exists(enum_name):
     pattern = re.compile(rf"\b{enum_name}\.([A-Z][A-Z0-9_]*)\b")
     missing = []
     for path in APP_DIR.rglob("*.py"):
-        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for member in pattern.findall(line):
                 if member not in enum_cls.__members__:
                     missing.append(f"{path.relative_to(APP_DIR)}:{lineno} {enum_name}.{member}")
@@ -41,6 +41,6 @@ def test_application_failure_text_uses_the_persisted_field():
     offenders = [
         str(path.relative_to(APP_DIR))
         for path in (APP_DIR / "application" / "applications").rglob("*.py")
-        if "app.last_error_message" in path.read_text()
+        if "app.last_error_message" in path.read_text(encoding="utf-8")
     ]
     assert not offenders, f"Use app.failure_reason instead: {offenders}"

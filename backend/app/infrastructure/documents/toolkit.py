@@ -3,7 +3,7 @@ import os
 import re
 import shutil
 import tempfile
-from typing import Sequence
+from typing import Optional, Sequence
 
 from app.domain.resume_tailoring.document import LOCKED_FORMAT, Block, DocumentMap
 from app.domain.resume_tailoring.plan import ProposedEdit
@@ -36,6 +36,9 @@ class FileDocumentToolkit(DocumentToolkit):
 
     def renderer_available(self) -> bool:
         return renderer_available()
+
+    def render_pdf(self, docx_path: str, output_dir: str) -> Optional[str]:
+        return render_docx_to_pdf(docx_path, output_dir)
 
     def generate(self, master_path: str, output_dir: str, output_name: str, edits: Sequence[ProposedEdit]) -> GenerationOutcome:
         os.makedirs(output_dir, exist_ok=True)

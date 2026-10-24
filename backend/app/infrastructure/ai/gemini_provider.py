@@ -19,6 +19,15 @@ import os
 logger = logging.getLogger("app.ai.gemini")
 
 
+def _to_float(val: Any, default: float = 0.0) -> float:
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
 class GeminiProvider(AIProvider):
     def __init__(self, api_key: str | None = None, model_name: str | None = None):
         raw_key = (
@@ -47,7 +56,6 @@ class GeminiProvider(AIProvider):
                 response_mime_type="application/json",
                 max_output_tokens=max_tokens,
             )
-            # In google-genai SDK, generate_content or async client can be used
             response = await self._client.aio.models.generate_content(
                 model=self._model,
                 contents=prompt,
@@ -73,7 +81,7 @@ class GeminiProvider(AIProvider):
             headline=data.get("headline", ""),
             summary=data.get("summary", ""),
             skills=data.get("skills", []),
-            total_experience_years=float(data.get("total_experience_years", 0.0)),
+            total_experience_years=_to_float(data.get("total_experience_years"), 0.0),
             experiences=data.get("experiences", []),
             educations=data.get("educations", []),
         )
@@ -88,8 +96,8 @@ class GeminiProvider(AIProvider):
         return ParsedJobRequirementsDTO(
             mandatory_skills=data.get("mandatory_skills", []),
             preferred_skills=data.get("preferred_skills", []),
-            min_experience_years=float(data.get("min_experience_years", 0.0)),
-            max_experience_years=float(data.get("max_experience_years", 0.0)),
+            min_experience_years=_to_float(data.get("min_experience_years"), 0.0),
+            max_experience_years=_to_float(data.get("max_experience_years"), 0.0),
             education=data.get("education"),
             role_summary=data.get("role_summary", ""),
         )
@@ -104,11 +112,11 @@ class GeminiProvider(AIProvider):
         content = await self._call_gemini(sys_inst, prompt)
         data = json.loads(content)
         return MatchEvaluationDTO(
-            score=float(data.get("score", 50.0)),
+            score=_to_float(data.get("score"), 50.0),
             matched_skills=data.get("matched_skills", []),
             missing_skills=data.get("missing_skills", []),
             reasoning=data.get("reasoning", "Gemini evaluation completed."),
-            confidence=float(data.get("confidence", 0.95)),
+            confidence=_to_float(data.get("confidence"), 0.95),
             provider_used="gemini",
         )
 
@@ -125,7 +133,7 @@ class GeminiProvider(AIProvider):
         data = json.loads(content)
         return QuestionIntentDTO(
             canonical_intent=data.get("canonical_intent", "CUSTOM_ESSAY"),
-            confidence=float(data.get("confidence", 0.90)),
+            confidence=_to_float(data.get("confidence"), 0.90),
             extracted_options=data.get("extracted_options", []),
         )
 
@@ -144,6 +152,6 @@ class GeminiProvider(AIProvider):
         data = json.loads(content)
         return GeneratedAnswerDTO(
             answer_text=data.get("answer_text", ""),
-            confidence=float(data.get("confidence", 0.90)),
+            confidence=_to_float(data.get("confidence"), 0.90),
             reasoning=data.get("reasoning", ""),
         )

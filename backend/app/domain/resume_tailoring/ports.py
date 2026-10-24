@@ -2,13 +2,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from app.domain.resume_tailoring.document import DocumentMap
 from app.domain.resume_tailoring.entities import ConfirmedFactRecord, TailoredResume
 from app.domain.resume_tailoring.plan import ProposedEdit
 from app.domain.resume_tailoring.rules import ConfirmedFact
-from app.domain.resume_tailoring.status import TailoringStatus
 
 
 class TailoredResumeRepository(ABC):
@@ -85,6 +84,9 @@ class DocumentToolkit(ABC):
 
     @abstractmethod
     def renderer_available(self) -> bool: ...
+
+    @abstractmethod
+    def render_pdf(self, docx_path: str, output_dir: str) -> Optional[str]: ...
 
 
 class TailoringAI(ABC):

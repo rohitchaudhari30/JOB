@@ -3,7 +3,7 @@ import { api } from '../../services/api';
 import { Button } from '../../components/ui/Button';
 import { useToast } from '../../context/ToastContext';
 import { refreshSavedTailored, useSavedTailored } from '../jobs/tailor/savedTailoredStore';
-import { saveBlob } from '../jobs/tailor/tailorLogic';
+import { saveBlob, cleanResumeFileName } from '../jobs/tailor/tailorLogic';
 
 /** Every saved job-specific resume, with download and remove. Created from a job card's "Tailor resume". */
 export const TailoredResumesSection: React.FC = () => {
@@ -14,7 +14,8 @@ export const TailoredResumesSection: React.FC = () => {
   const download = async (id: string, fileName?: string | null) => {
     setBusyId(id);
     try {
-      saveBlob(await api.downloadTailored(id, 'docx'), fileName || 'tailored-resume.docx');
+      const cleanName = cleanResumeFileName(fileName, undefined, 'docx');
+      saveBlob(await api.downloadTailored(id, 'docx'), cleanName);
     } catch {
       showError('Could not download this file. Please try again.');
     } finally {
@@ -28,7 +29,7 @@ export const TailoredResumesSection: React.FC = () => {
     try {
       await api.discardTailored(id);
       await refreshSavedTailored();
-      showSuccess('Tailored resume removed.');
+      showSuccess('Optimized resume removed.');
     } catch (e: any) {
       showError(e?.response?.data?.detail || 'Could not remove it.');
     } finally {
@@ -38,13 +39,13 @@ export const TailoredResumesSection: React.FC = () => {
 
   return (
     <section aria-labelledby="tailored-heading" className="mt-8 space-y-3">
-      <h3 id="tailored-heading" className="text-sm font-bold text-slate-900 dark:text-white">Tailored resumes</h3>
+      <h3 id="tailored-heading" className="text-sm font-bold text-slate-900 dark:text-white">Optimized resumes</h3>
       <p className="text-xs text-slate-600 dark:text-slate-400">
         Saved copies made for a specific job. Each one is sent only when you apply to that job.
       </p>
       {items.length === 0 ? (
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          None yet. Open the Jobs page and click “Tailor resume” on a job.
+          None yet. Open the Jobs page and click “Optimize resume” on a job.
         </p>
       ) : (
         <ul className="divide-y divide-slate-100 dark:divide-slate-800 rounded-lg border border-slate-200 dark:border-slate-800">

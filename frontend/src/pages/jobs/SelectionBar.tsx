@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, FileText } from 'lucide-react';
+import { Play, FileText, Sparkles } from 'lucide-react';
 import type { Resume } from '../../types';
 
 interface SelectionBarProps {
@@ -10,6 +10,7 @@ interface SelectionBarProps {
   setSelectedJobIds: (s: Set<string>) => void;
   /** Disables the button while the queue request is running (defaults to isStartingQueue). */
   busy?: boolean;
+  onBulkTailor?: () => void;
 }
 
 /** Floating bar shown while jobs are selected. */
@@ -19,6 +20,7 @@ export const SelectionBar: React.FC<SelectionBarProps> = ({
   isStartingQueue,
   selectedCount,
   setSelectedJobIds,
+  onBulkTailor,
 }) => (
   <>
     {/* Floating Action Bar when jobs are selected */}
@@ -52,6 +54,17 @@ export const SelectionBar: React.FC<SelectionBarProps> = ({
           >
             Clear selection
           </button>
+
+          {onBulkTailor && (
+            <button
+              type="button"
+              onClick={onBulkTailor}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white font-bold text-xs border border-indigo-500/30 flex items-center space-x-1.5 transition-transform active:scale-95 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Optimize Resumes</span>
+            </button>
+          )}
 
           <button type="button"
             onClick={() => handleLaunchQueue()}

@@ -6,6 +6,7 @@ import { useLiveApplyEvents } from './jobs/useLiveApplyEvents';
 import { DiscoveryControls } from './jobs/DiscoveryControls';
 import { DiscoveryToolbar } from './jobs/DiscoveryToolbar';
 import { SelectionBar } from './jobs/SelectionBar';
+import { BulkTailorModal } from './jobs/tailor/BulkTailorModal';
 import { JobDetailDrawer, jobToDetailModel } from './jobs/JobDetailDrawer';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 
@@ -38,6 +39,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   const { showSuccess, showError, showWarning } = useToast();
   const actions = useJobActions({ onNavigate });
   const evaluatingJobIds = actions.evaluatingIds;
+  const [bulkTailorOpen, setBulkTailorOpen] = useState(false);
   const record = useRecordRoute('/jobs', 'discovery', ['matches']);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
@@ -349,16 +351,9 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
       />
 
       <DiscoveryToolbar
-        appliedTodayCount={appliedTodayCount}
-        filterMinFit={filterMinFit}
-        jobs={jobs}
-        postedWithin={postedWithin}
-        searchQuery={searchQuery}
-        setFilterMinFit={setFilterMinFit}
-        setPostedWithin={setPostedWithin}
-        setSearchQuery={setSearchQuery}
-        setSortBy={setSortBy}
-        sortBy={sortBy}
+        appliedTodayCount={appliedTodayCount} filterMinFit={filterMinFit} jobs={jobs}
+        postedWithin={postedWithin} searchQuery={searchQuery} setFilterMinFit={setFilterMinFit}
+        setPostedWithin={setPostedWithin} setSearchQuery={setSearchQuery} setSortBy={setSortBy} sortBy={sortBy}
       />
 
       {/* Discovered Jobs Header & Bulk Selection Controls */}
@@ -377,15 +372,21 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
         selectedCount={selectedCount}
         setSelectedJobIds={setSelectedJobIds}
         busy={isStartingQueue}
+        onBulkTailor={() => setBulkTailorOpen(true)}
+      />
+
+      <BulkTailorModal
+        open={bulkTailorOpen}
+        onClose={() => setBulkTailorOpen(false)}
+        jobIds={Array.from(selectedJobIds)}
+        jobs={jobs}
+        onInspectJob={(id) => record.open(id)}
       />
 
       <JobDetailDrawer
-        model={drawerModel}
-        onClose={record.close}
-        onEvaluate={(id) => void handleEvaluateSingle(id)}
+        model={drawerModel} onClose={record.close} onEvaluate={(id) => void handleEvaluateSingle(id)}
         onQueue={(id) => handleLaunchQueue(jobs.filter((x) => x.id === id))}
-        evaluating={evaluatingJobIds.has(drawerModel?.jobId ?? '')}
-        queueing={actions.queueingIds.has(drawerModel?.jobId ?? '')}
+        evaluating={evaluatingJobIds.has(drawerModel?.jobId ?? '')} queueing={actions.queueingIds.has(drawerModel?.jobId ?? '')}
       />
     </div>
   );

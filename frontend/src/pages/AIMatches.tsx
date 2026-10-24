@@ -13,6 +13,7 @@ import { MatchesKpis } from './matches/MatchesKpis';
 import { MatchesToolbar } from './matches/MatchesToolbar';
 import { MatchesGrid } from './matches/MatchesGrid';
 import { SelectionBar } from './jobs/SelectionBar';
+import { BulkTailorModal } from './jobs/tailor/BulkTailorModal';
 import { useSelectionControl, type JobIdSet, type SetJobIds } from './jobs/useSelectionControl';
 
 const PAGE_SIZE = 100;
@@ -36,6 +37,7 @@ export const AIMatches: React.FC<AIMatchesProps> = ({
 }) => {
   const [selectedJobIds, setSelectedJobIds] = useSelectionControl(selectedFromParent, onSelectedJobIdsChange);
   const [queueing, setQueueing] = useState(false);
+  const [bulkTailorOpen, setBulkTailorOpen] = useState(false);
   const actions = useJobActions({ onNavigate });
   const readiness = actions.readiness;
   const record = useRecordRoute('/jobs/matches', 'matches');
@@ -224,6 +226,15 @@ export const AIMatches: React.FC<AIMatchesProps> = ({
         isStartingQueue={queueing}
         selectedCount={selectedJobIds.size}
         setSelectedJobIds={setSelectedJobIds}
+        onBulkTailor={() => setBulkTailorOpen(true)}
+      />
+
+      <BulkTailorModal
+        open={bulkTailorOpen}
+        onClose={() => setBulkTailorOpen(false)}
+        jobIds={Array.from(selectedJobIds)}
+        jobs={allMatches.map((m) => m.job).filter(Boolean) as any}
+        onInspectJob={(id) => record.open(id)}
       />
 
       <JobDetailDrawer

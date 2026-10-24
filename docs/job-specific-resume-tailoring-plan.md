@@ -101,6 +101,65 @@ Main conclusions:
 
 ---
 
+## 4.5 Authoritative Job Description Retrieval and Ingestion Pipeline [V + R]
+
+### 4.5.1 Existing Job Discovery and Storage Flow
+1. **Search Discovery**: Crawlers in `app/infrastructure/browser/adapters/` (Naukri, LinkedIn, Greenhouse, Lever, Ashby, Workday) discover listings. ATS integrations yield rich descriptions directly; portal aggregators (LinkedIn/Naukri search cards) store search card snippets (100–250 chars) in `raw_description` to avoid anti-bot blocks during bulk crawl.
+2. **Persistence Baseline**: Normalized records are persisted in `jobs` (`JobModel`). Fields include `raw_description`, `parsed_requirements`, `title`, `company`, `location`, `min_experience_years`, `apply_url`, and `is_active`.
+
+### 4.5.2 Authoritative Source of Truth
+The selected job record in `jobs` (identified by its authoritative `id` UUID) is the sole source of truth for resume tailoring. Users are never required to copy-paste or upload job descriptions in the standard workflow. When the user clicks **Tailor Resume for This Job**, the frontend passes only `job_id` (and optionally `master_resume_id`).
+
+### 4.5.3 Existing Retrieval Services & APIs
+- **Database Access**: `JobRepository.get_by_id(job_id)` retrieves the full `Job` entity in `TailoringService`.
+- **API Endpoint**: `GET /api/v1/jobs/{job_id}` exposes stored `raw_description` and `parsed_requirements`.
+- **Source Adapter Detail Extraction**: All adapters implement `fetch_job_details(context, external_job_id, apply_url)` to fetch complete postings on demand directly from the target portal.
+
+### 4.5.4 Description Freshness and Completeness Checks
+Before initiating AI analysis, `TailoringService` inspects the stored job record:
+1. **Completeness Threshold**: Evaluates whether `len(job.raw_description.strip()) >= TAILORING_MIN_JOB_DESCRIPTION_CHARS` (300 chars) and contains requirement structures.
+2. **Freshness & Validity**: Checks `job.is_active` and `job.posted_at` to warn if the posting is stale or closed.
+
+### 4.5.5 Just-In-Time (JIT) Automated Enrichment Protocol
+When a user initiates tailoring:
+1. If `job.raw_description` is complete (>= 300 chars), analysis begins immediately without external network requests.
+2. If `job.raw_description` is a search snippet (< 300 chars):
+   - The system initiates an automated background enrichment via `fetch_job_details(job.external_job_id, job.apply_url)`.
+   - The UI displays an active progress indicator: *"Retrieving complete job posting from [Platform]..."*.
+   - Upon successful fetch, `job.raw_description` and `job.parsed_requirements` are updated in the database (`jobs` table). Future matching runs and other platform features immediately benefit from the enriched text.
+   - The tailoring workflow seamlessly advances to analysis without requiring user intervention.
+
+### 4.5.6 Job ID Parameterization & Context Propagation
+- Client initiates tailoring via `POST /api/v1/jobs/{job_id}/tailor`.
+- `job_id` is validated server-side against `JobRepository`.
+- The `job_id` is immutably stamped on `tailored_resumes.job_id` (`FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE`).
+- All subsequent child operations (`/answers`, `/generate`, `/save`, `/download`) address `/tailored-resumes/{tailored_id}` where `tailored_id` links permanently to `job_id`.
+
+### 4.5.7 Description Snapshotting & Consistency Guard
+To guarantee reproducibility and prevent race conditions if a job is re-scraped concurrently:
+1. At initiation, `TailoringService` hashes the exact text used: `job_description_hash = sha256(effective_job_text.encode('utf-8')).hexdigest()`.
+2. Stored snapshots: `job_title_snapshot`, `company_snapshot`, and `job_description_hash` are written to `tailored_resumes`.
+3. Before generating the final document, the worker verifies that the hash of the description matches `job_description_hash`. If the job changed mid-flight, the record transitions to `STALE` with an option to restart.
+
+### 4.5.8 Missing, Stale, or Incomplete Description Handling
+If a job description is unavailable and automated JIT enrichment fails (e.g., job link 404, aggressive Cloudflare barrier, or expired listing):
+1. **Refusal to Hallucinate**: The system strictly refuses to generate a tailored resume or fabricate requirements based on title alone.
+2. **Clear Explanation**: The UI transitions to an informative state explaining why automated retrieval failed: *"Could not automatically retrieve the full job posting from [Platform] (link expired or blocked by platform security)."*
+3. **Emergency Secondary Escape Valve**: Only when automated retrieval is definitively unavailable is the user offered an optional manual description input or direct link to open the posting, ensuring users are never permanently blocked.
+
+### 4.5.9 Permanent Job-Resume Linkage & Access Control
+- Every tailored record enforces multi-tenant ownership (`user_id = current_user.id`).
+- When queueing an application (`POST /api/v1/applications`), `ApplicationOrchestrator` automatically attaches the user's saved tailored resume for that specific `(user_id, job_id)` pair unless opted out.
+- `applications.tailored_resume_id` explicitly references the tailored record, creating a permanent audit trail visible in the Application CRM.
+
+### 4.5.10 Automated Testing Strategy (No Manual Input Required)
+- **Unit Tests**: Mocked `JobRepository` returning pre-seeded full descriptions, verifying that `start_tailoring` immediately advances without prompting for text.
+- **JIT Enrichment Tests**: Mocked adapter returning complete text on `fetch_job_details`, verifying that a 50-character snippet is automatically enriched and persisted to `JobModel`.
+- **Integrity Tests**: Verifying that `job_description_hash` matches throughout analysis and generation.
+- **Refusal Tests**: Verifying that jobs with permanently missing text and failed JIT return `JOB_DESCRIPTION_UNAVAILABLE` rather than hallucinating skills.
+
+---
+
 ## 5. Supported formats and document-preservation feasibility
 
 ### 5.1 What the application accepts [V]
@@ -150,11 +209,14 @@ Limits, stated honestly: LibreOffice does not lay out text exactly as Microsoft 
 Primary action: **Tailor resume for this job** (in the job drawer).
 
 1. **Open dialog.** Shows the job title and company, the master resume that will be used (default pre-selected; a select if the user has several), and a one-line promise: "Your original resume is never changed. This creates a separate copy." Button **Analyse**.
-2. **Prerequisite checks (server-side, shown as clear next steps):**
+2. **Prerequisite checks & automated retrieval (server-side, shown as clear next steps):**
    - no master resume -> "Upload a resume" link to Settings > Resumes & answers;
    - PDF master -> explain suggestions-only mode (section 5.2);
    - scanned PDF -> unreadable message;
-   - job description missing or too short (for example under 300 characters) -> "This posting has no usable description; open the posting";
+   - job description automated retrieval & enrichment (section 4.5):
+     - complete description present in database (>= 300 chars) -> automatically start analysis without user input;
+     - snippet description (< 300 chars) -> automatically trigger background JIT enrichment via adapter `fetch_job_details()`, update stored `JobModel`, and proceed;
+     - retrieval failure / blocked external link -> safe refusal with explanation; optional manual paste offered strictly as an emergency escape valve (never default);
    - job no longer active -> warn but allow the user to continue.
 3. **Analysis (background job, progress shown).** Output shown in plain language:
    - **Strengths:** requirements already supported, with the resume line that supports each.
@@ -445,7 +507,12 @@ Each phase is a separate local commit with tests, as in the UI redesign.
 
 | Requirement from the brief | Where covered |
 |---|---|
-| Identify job and description | 7 (step 2), 14 (`POST /jobs/{id}/tailor`), 10 (`job_description_hash`) |
+| Identify job and description | 4.5 (authoritative retrieval & JIT enrichment), 7 (step 2), 10 (`job_description_hash`), 14 (`POST /jobs/{id}/tailor`) |
+| Automatic job description retrieval & JIT enrichment | 4.5.1-4.5.5, 7 (step 2), 16 tests |
+| Job ID parameterization & consistency guard | 4.5.6, 4.5.7, 10 (`job_description_hash`) |
+| Missing/stale description safe handling & escape valve | 4.5.8, 7 (step 2) |
+| Permanent job-resume linkage | 4.5.9, 10 (resolution order & `applications.tailored_resume_id`) |
+| Testing without manual input | 4.5.10, 16 testing strategy |
 | Verify resume ownership | 11, 16 security tests |
 | Analyse required and preferred qualifications | 9.1, 9.2 analysis |
 | Distinguish supported, confirmed, unsupported | 7 (A, B, C), 8, 9.4 |

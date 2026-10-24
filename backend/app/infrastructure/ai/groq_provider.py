@@ -16,6 +16,15 @@ from app.domain.ai.contracts import (
 logger = logging.getLogger("app.ai.groq")
 
 
+def _to_float(val: Any, default: float = 0.0) -> float:
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
 class GroqProvider(AIProvider):
     def __init__(self, api_key: str | None = None, model_name: str | None = None):
         raw_key = api_key or settings.GROQ_API_KEY
@@ -66,7 +75,7 @@ class GroqProvider(AIProvider):
             headline=data.get("headline", ""),
             summary=data.get("summary", ""),
             skills=data.get("skills", []),
-            total_experience_years=float(data.get("total_experience_years", 0.0)),
+            total_experience_years=_to_float(data.get("total_experience_years"), 0.0),
             experiences=data.get("experiences", []),
             educations=data.get("educations", []),
         )
@@ -82,8 +91,8 @@ class GroqProvider(AIProvider):
         return ParsedJobRequirementsDTO(
             mandatory_skills=data.get("mandatory_skills", []),
             preferred_skills=data.get("preferred_skills", []),
-            min_experience_years=float(data.get("min_experience_years", 0.0)),
-            max_experience_years=float(data.get("max_experience_years", 0.0)),
+            min_experience_years=_to_float(data.get("min_experience_years"), 0.0),
+            max_experience_years=_to_float(data.get("max_experience_years"), 0.0),
             education=data.get("education"),
             role_summary=data.get("role_summary", ""),
         )
@@ -98,11 +107,11 @@ class GroqProvider(AIProvider):
         content = await self._call_llm(system_prompt, user_prompt)
         data = json.loads(content)
         return MatchEvaluationDTO(
-            score=float(data.get("score", 50.0)),
+            score=_to_float(data.get("score"), 50.0),
             matched_skills=data.get("matched_skills", []),
             missing_skills=data.get("missing_skills", []),
             reasoning=data.get("reasoning", "Evaluated based on skill and role overlap."),
-            confidence=float(data.get("confidence", 0.90)),
+            confidence=_to_float(data.get("confidence"), 0.90),
             provider_used="groq",
         )
 
@@ -120,7 +129,7 @@ class GroqProvider(AIProvider):
         data = json.loads(content)
         return QuestionIntentDTO(
             canonical_intent=data.get("canonical_intent", "CUSTOM_ESSAY"),
-            confidence=float(data.get("confidence", 0.85)),
+            confidence=_to_float(data.get("confidence"), 0.85),
             extracted_options=data.get("extracted_options", []),
         )
 
@@ -140,6 +149,6 @@ class GroqProvider(AIProvider):
         data = json.loads(content)
         return GeneratedAnswerDTO(
             answer_text=data.get("answer_text", ""),
-            confidence=float(data.get("confidence", 0.85)),
+            confidence=_to_float(data.get("confidence"), 0.85),
             reasoning=data.get("reasoning", ""),
         )

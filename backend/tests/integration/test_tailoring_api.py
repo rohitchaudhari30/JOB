@@ -344,6 +344,51 @@ async def test_prerequisites_give_clear_errors(client, db_session, tmp_path, ai)
 
 
 @pytest.mark.asyncio
+async def test_tailor_start_auto_enriches_snippet(client, db_session, tmp_path):
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from app.domain.jobs.entities import Job
+    from app.infrastructure.database.models.models import JobModel
+
+    headers = await signup(client, "autofetch")
+    resume = await upload(client, headers, make_resume(tmp_path / "auto.docx"))
+    snippet_job_id = await add_job(db_session, description="Short snippet.")
+
+    enriched_desc = ("Full enriched job description with complete requirements and responsibilities. " * 8).strip()
+    mock_detailed_job = Job(
+        id=snippet_job_id,
+        source_id="naukri",
+        source_type="naukri",
+        external_job_id="ext_auto",
+        title="Backend Engineer",
+        company="Contoso",
+        location="Remote",
+        raw_description=enriched_desc,
+        parsed_requirements={"mandatory_skills": ["Python"]},
+    )
+
+    mock_adapter = MagicMock()
+    mock_adapter.fetch_job_details = AsyncMock(return_value=mock_detailed_job)
+    mock_ctx = AsyncMock()
+
+    with patch("app.application.jobs.enrichment.adapter_registry") as mock_registry, \
+         patch("app.application.jobs.enrichment.browser_manager") as mock_browser:
+        mock_registry.list_supported_sources.return_value = ["naukri"]
+        mock_registry.get_source_adapter.return_value = mock_adapter
+        mock_browser.create_isolated_context = AsyncMock(return_value=mock_ctx)
+
+        # User clicks Tailor without pasting any description
+        res = await client.post(f"/api/v1/jobs/{snippet_job_id}/tailor", json={}, headers=headers)
+        assert res.status_code == 202
+        data = res.json()
+        assert data["job_id"] == snippet_job_id
+        assert data["status"] == "QUEUED"
+
+        # Verify DB was enriched
+        job_in_db = await db_session.get(JobModel, snippet_job_id)
+        assert job_in_db.raw_description == enriched_desc
+
+
+@pytest.mark.asyncio
 async def test_provider_failures_retry_once_then_fail_clearly(client, world, ai):
     w = world
     ai.error = AIProviderException("all_providers", "down")
@@ -688,3 +733,29 @@ async def test_a_short_saved_description_can_be_replaced_by_text_the_user_pastes
     row = await db_session.get(JobModel, short_job)
     assert row.raw_description == "Data Engineer - Reports and Dashboards."
     assert "Required: Python" in (await db_session.get(TailoredResumeModel, tid)).job_description_override
+
+@pytest.mark.asyncio
+async def test_bulk_tailoring_processes_multiple_jobs_with_failure_isolation(client, db_session, world, ai):
+    w = world
+    job2 = await add_job(db_session, description=JOB_TEXT)
+    bad_job = await add_job(db_session, description="Too short.")
+    ai.script = standard_plan
+
+    res = await client.post(
+        "/api/v1/jobs/bulk-tailor",
+        json={"job_ids": [w.job_id, job2, bad_job], "auto_generate": True},
+        headers=w.headers,
+    )
+    assert res.status_code == 202
+    data = res.json()
+    assert len(data) == 3
+    by_job = {item["job_id"]: item for item in data}
+    assert by_job[w.job_id]["success"] is True
+    assert by_job[job2]["success"] is True
+    assert by_job[bad_job]["success"] is False
+    assert by_job[bad_job]["code"] == "JOB_DESCRIPTION_TOO_SHORT"
+
+    await run_worker()
+    await run_worker()
+    t1 = await get(client, w.headers, by_job[w.job_id]["tailored"]["id"])
+    assert t1["status"] in ("SAVED", "READY_FOR_REVIEW")

@@ -4,7 +4,7 @@ import { Drawer } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { Application } from '../../types';
 import { api } from '../../services/api';
-import { saveBlob, CHOICE_EDITABLE } from '../jobs/tailor/tailorLogic';
+import { saveBlob, CHOICE_EDITABLE, cleanResumeFileName } from '../jobs/tailor/tailorLogic';
 import { useHasSavedTailored } from '../jobs/tailor/savedTailoredStore';
 
 export interface ApplicationDrawerView {
@@ -69,11 +69,15 @@ export const ApplicationDrawer: React.FC<ApplicationDrawerProps> = ({
             <Row label="Resume sent">
               {app.tailored_resume_id ? (
                 <span className="inline-flex flex-wrap items-center gap-2">
-                  Tailored for this job
+                  Optimized for this job
                   <button
                     type="button"
                     className="underline text-xs font-semibold"
-                    onClick={async () => saveBlob(await api.downloadTailored(app.tailored_resume_id as string, 'docx'), 'tailored-resume.docx')}
+                    onClick={async () => {
+                      const blob = await api.downloadTailored(app.tailored_resume_id as string, 'docx');
+                      const cleanName = cleanResumeFileName(null, view?.title, 'docx');
+                      saveBlob(blob, cleanName);
+                    }}
                   >
                     Download
                   </button>
@@ -95,11 +99,11 @@ export const ApplicationDrawer: React.FC<ApplicationDrawerProps> = ({
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
               <span>
                 {app.tailored_resume_id
-                  ? 'This application will send your tailored resume.'
-                  : 'This application will send your master resume. A tailored copy is saved for this job.'}
+                  ? 'This application will send your optimized resume.'
+                  : 'This application will send your master resume. An optimized copy is saved for this job.'}
               </span>
               <Button size="sm" onClick={() => onResumeChoice(app, !app.tailored_resume_id)}>
-                {app.tailored_resume_id ? 'Send master resume instead' : 'Use tailored resume'}
+                {app.tailored_resume_id ? 'Send master resume instead' : 'Use optimized resume'}
               </Button>
             </div>
           )}

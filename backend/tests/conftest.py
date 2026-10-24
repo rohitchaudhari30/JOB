@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, StaticPool
 
 # Tests are a dev-like environment: settings generate throw-away secrets.
 os.environ.setdefault("APP_ENV", "test")
@@ -36,10 +36,11 @@ def _make_engine(use_file: bool):
             connect_args={"check_same_thread": False, "timeout": 30},
             poolclass=NullPool,
         )
-    # One shared in-memory connection: fast and isolated.
+    # One shared in-memory connection: fast and isolated across all sessions.
     return create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
 
 
@@ -104,16 +105,17 @@ async def db_session(test_database) -> AsyncSession:
 
 
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession) -> AsyncClient:
+async def client(test_database) -> AsyncClient:
     async def override_get_db():
         # Mirror app.core.database.get_db_session: commit when the request ends,
         # so one request's writes are visible to other connections.
-        try:
-            yield db_session
-            await db_session.commit()
-        except Exception:
-            await db_session.rollback()
-            raise
+        async with test_database() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
 
     app.dependency_overrides[get_db_session] = override_get_db
     transport = ASGITransport(app=app)

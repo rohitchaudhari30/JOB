@@ -342,7 +342,17 @@ class NaukriAdapter(BaseJobSourceAdapter):
         try:
             page = await context.new_page()
             await page.goto(apply_url, timeout=25000, wait_until="domcontentloaded")
-            desc_el = await page.query_selector(".job-desc-section, .jd-container, .styles_job-desc-container__kb-TH")
+            try:
+                await page.wait_for_selector(
+                    '[class*="job-desc"], .styles_job-desc-container__kb-TH, .job-desc-section, .jd-container, .styles_JDs__essential-details__C8Jt0',
+                    timeout=8000,
+                )
+            except Exception:
+                pass
+
+            desc_el = await page.query_selector(
+                '[class*="job-desc"], .styles_job-desc-container__kb-TH, .job-desc-section, .jd-container, section.styles_job-desc-container__kb-TH'
+            )
             desc_text = (await desc_el.inner_text()).strip() if desc_el else ""
 
             return Job(

@@ -5,10 +5,11 @@
 // to lower the recorded size (it never raises it).
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const LIMIT = 400;
-const ROOT = new URL('../src', import.meta.url).pathname;
-const BASELINE_PATH = new URL('./file-size-baseline.json', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('../src', import.meta.url));
+const BASELINE_PATH = fileURLToPath(new URL('./file-size-baseline.json', import.meta.url));
 const update = process.argv.includes('--update');
 
 function walk(dir) {

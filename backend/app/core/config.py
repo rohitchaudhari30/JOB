@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     GROQ_TEMPERATURE: float = 0.2
 
     GEMINI_API_KEY: str = ""
-    GEMINI_DEFAULT_MODEL: str = "gemini-2.0-flash"
+    GEMINI_DEFAULT_MODEL: str = "gemini-2.5-flash"
     GEMINI_PRO_MODEL: str = "gemini-1.5-pro"
 
     # Browser Automation
@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     TAILORING_DRAFT_RETENTION_DAYS: int = 7     # unsaved drafts are removed after this
     TAILORING_MAX_CONCURRENCY: int = 2
     TAILORING_MAX_PASTED_DESCRIPTION_CHARS: int = 20000
-    TAILORING_MAX_STARTS_PER_DAY: int = 30      # new requests per user per 24 h (each one calls the AI)
+    TAILORING_MAX_STARTS_PER_DAY: int = 100     # new requests per user per 24 h (supports bulk batches)
     TAILORING_MAX_ATTEMPTS: int = 2             # one retry for a provider failure or a malformed reply
     ALLOWED_RESUME_EXTENSIONS: str = ".pdf,.docx"
 

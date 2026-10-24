@@ -26,6 +26,12 @@ class StartTailoringRequest(BaseModel):
     job_description: Optional[str] = Field(default=None, max_length=40000)
 
 
+class BulkTailorRequest(BaseModel):
+    job_ids: List[str] = Field(min_length=1, max_length=50)
+    master_resume_id: Optional[str] = None
+    auto_generate: bool = True
+
+
 class AnswerItem(BaseModel):
     question_id: str
     has_it: bool
@@ -64,6 +70,27 @@ def _view(item: TailoredResume) -> Dict[str, Any]:
         "approved_at": item.approved_at,
         "expires_at": item.expires_at,
     }
+
+
+@router.post("/jobs/bulk-tailor", status_code=status.HTTP_202_ACCEPTED)
+async def bulk_tailor(
+    req: BulkTailorRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    service: Annotated[TailoringService, Depends(get_tailoring_service)],
+):
+    results = await service.bulk_start(
+        current_user.id, req.job_ids, req.master_resume_id, auto_generate=req.auto_generate
+    )
+    return [
+        {
+            "job_id": r["job_id"],
+            "success": r["success"],
+            "tailored": _view(r["tailored"]) if r.get("tailored") else None,
+            "error": r.get("error"),
+            "code": r.get("code"),
+        }
+        for r in results
+    ]
 
 
 @router.post("/jobs/{job_id}/tailor", status_code=status.HTTP_202_ACCEPTED)

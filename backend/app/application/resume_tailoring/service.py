@@ -1,5 +1,6 @@
 """The use cases the API calls. Every method checks that the request belongs to the signed-in user."""
 import os
+import re
 import uuid
 from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -11,10 +12,11 @@ from app.domain.resume_tailoring.entities import MODE_EDIT, MODE_SUGGESTIONS_ONL
 from app.domain.resume_tailoring.plan import PROMPT_VERSION
 from app.domain.resume_tailoring.rules import normalize
 from app.domain.resume_tailoring.status import IN_FLIGHT, TailoringStatus
-from app.application.resume_tailoring.analysis import GAP, NEEDS_CONFIRMATION, SUPPORTED
+from app.application.resume_tailoring.analysis import GAP, NEEDS_CONFIRMATION
 from app.application.resume_tailoring.common import (
     file_format, move, now, release_lease, remove_files, sha256_text,
 )
+from app.application.jobs.enrichment import ensure_job_description
 from app.application.resume_tailoring.deps import TailoringDeps
 
 MIN_DETAIL_CHARS = 10
@@ -46,7 +48,12 @@ class TailoringService:
 
     # ---- start ---------------------------------------------------------------------------
     async def start(
-        self, user_id: str, job_id: str, master_resume_id: Optional[str], job_description: Optional[str] = None
+        self,
+        user_id: str,
+        job_id: str,
+        master_resume_id: Optional[str],
+        job_description: Optional[str] = None,
+        auto_generate: bool = False,
     ) -> TailoredResume:
         job = await self._d.jobs.get_by_id(job_id)
         if job is None:
@@ -55,12 +62,16 @@ class TailoringService:
         job_text = effective_job_text(pasted, job)
         minimum = settings.TAILORING_MIN_JOB_DESCRIPTION_CHARS
         if len(job_text.strip()) < minimum:
-            raise _problem(
-                "This job's saved description is too short to tailor against. Paste the job description from the "
-                "posting and try again." if not pasted else
-                f"The pasted text is too short. Paste the full job description (at least {minimum} characters).",
-                "JOB_DESCRIPTION_TOO_SHORT",
-            )
+            if not pasted:
+                await ensure_job_description(job, self._d.jobs, min_length=minimum, user_id=user_id, session_repo=self._d.sessions)
+                job_text = effective_job_text(pasted, job)
+            if len(job_text.strip()) < minimum:
+                raise _problem(
+                    "This job's saved description is too short to tailor against. Paste the job description from the "
+                    "posting and try again." if not pasted else
+                    f"The pasted text is too short. Paste the full job description (at least {minimum} characters).",
+                    "JOB_DESCRIPTION_TOO_SHORT",
+                )
 
         if master_resume_id:
             resume = await self._d.resumes.get_by_id(master_resume_id)
@@ -107,11 +118,29 @@ class TailoringService:
             version=await self._d.tailored.next_version(user_id, resume.id, job_id),
             master_label_snapshot=resume.label, job_title_snapshot=job.title, company_snapshot=job.company,
             prompt_version=PROMPT_VERSION, created_at=stamp, updated_at=stamp,
+            analysis={"auto_generate": True} if auto_generate else None,
             expires_at=stamp + timedelta(days=settings.TAILORING_DRAFT_RETENTION_DAYS),
         )
         created = await self._d.tailored.create(item)
         self._poke()
         return created
+
+    async def bulk_start(
+        self,
+        user_id: str,
+        job_ids: List[str],
+        master_resume_id: Optional[str] = None,
+        auto_generate: bool = True,
+    ) -> List[Dict[str, Any]]:
+        results: List[Dict[str, Any]] = []
+        for jid in job_ids:
+            try:
+                item = await self.start(user_id, jid, master_resume_id, auto_generate=auto_generate)
+                results.append({"job_id": jid, "success": True, "tailored": item})
+            except Exception as e:
+                err_code = getattr(e, "details", {}).get("code") if hasattr(e, "details") and isinstance(e.details, dict) else "ERROR"
+                results.append({"job_id": jid, "success": False, "error": str(e), "code": err_code})
+        return results
 
     # ---- read ----------------------------------------------------------------------------
     async def get(self, user_id: str, tailored_id: str) -> TailoredResume:
@@ -244,13 +273,46 @@ class TailoringService:
         )
         if not usable:
             raise ConflictException("Only a copy that passed the checks can be downloaded.")
+        docx_path = item.file_path
+        if docx_path and not os.path.isfile(docx_path):
+            alt = os.path.join("backend", docx_path.lstrip("./\\"))
+            if os.path.isfile(alt):
+                docx_path = alt
+
+        raw_name = (item.file_name or "Resume.docx").rsplit(".", 1)[0]
+        clean_stem = re.sub(r"[-_](tailored|optimized|customized|customize).*$", "", raw_name, flags=re.IGNORECASE)
+        clean_stem = re.sub(r"[-_](for|to)[-_].*$", "", clean_stem, flags=re.IGNORECASE)
+        clean_stem = re.sub(r"[^\w\s-]", "_", clean_stem)
+        clean_stem = re.sub(r"[-\s_]+", "_", clean_stem).strip("_")
+        if not clean_stem or len(clean_stem) < 3 or clean_stem.lower() == "resume":
+            clean_stem = "Resume"
+        if not clean_stem.lower().endswith("resume"):
+            clean_stem = f"{clean_stem}_Resume"
+
         if fmt == "pdf":
-            path, media = item.pdf_file_path, "application/pdf"
-            name = (item.file_name or "resume.docx").rsplit(".", 1)[0] + ".pdf"
+            media = "application/pdf"
+            name = f"{clean_stem}.pdf"
+            pdf_path = item.pdf_file_path
+            if pdf_path and not os.path.isfile(pdf_path):
+                alt_pdf = os.path.join("backend", pdf_path.lstrip("./\\"))
+                if os.path.isfile(alt_pdf):
+                    pdf_path = alt_pdf
+
+            if not pdf_path or not os.path.isfile(pdf_path):
+                if docx_path and os.path.isfile(docx_path):
+                    output_dir = os.path.dirname(docx_path)
+                    rendered = self._d.toolkit.render_pdf(docx_path, output_dir)
+                    if rendered and os.path.isfile(rendered):
+                        pdf_path = rendered
+                        item.pdf_file_path = rendered
+                        await self._d.tailored.save(item)
+
+            path = pdf_path
         else:
-            path = item.file_path
+            path = docx_path
             media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            name = item.file_name or "resume.docx"
+            name = f"{clean_stem}.docx"
+
         if not path or not os.path.isfile(path):
             raise EntityNotFoundException("Tailored resume file", tailored_id)
         return path, name, media

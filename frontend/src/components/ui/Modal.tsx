@@ -7,12 +7,37 @@ const FOCUSABLE =
 /** Open modals, innermost last. Only the innermost one reacts to the keyboard (a dialog opened from a drawer). */
 const openStack: symbol[] = [];
 
+let originalOverflow: string | null = null;
+let originalPaddingRight: string | null = null;
+
+const lockScroll = () => {
+  if (openStack.length === 1) {
+    originalOverflow = document.body.style.overflow;
+    originalPaddingRight = document.body.style.paddingRight;
+    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+    if (scrollBarWidth > 0) {
+      document.body.style.paddingRight = `${scrollBarWidth}px`;
+    }
+    document.body.style.overflow = 'hidden';
+  }
+};
+
+const unlockScroll = () => {
+  if (openStack.length === 0) {
+    document.body.style.overflow = originalOverflow ?? '';
+    document.body.style.paddingRight = originalPaddingRight ?? '';
+    originalOverflow = null;
+    originalPaddingRight = null;
+  }
+};
+
 export interface ModalProps {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  headerActions?: React.ReactNode;
   /** "center" dialog (default) or "right" side drawer. */
   variant?: 'center' | 'right';
   /** Tailwind max-width class for the panel, e.g. "max-w-lg". */
@@ -32,6 +57,7 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   children,
   footer,
+  headerActions,
   variant = 'center',
   widthClass = 'max-w-lg',
   dismissible = true,
@@ -51,6 +77,7 @@ export const Modal: React.FC<ModalProps> = ({
 
     const me = Symbol('modal');
     openStack.push(me);
+    lockScroll();
     const onKeyDown = (e: KeyboardEvent) => {
       if (openStack[openStack.length - 1] !== me) return;
       if (e.key === 'Escape' && dismissible) {
@@ -81,6 +108,7 @@ export const Modal: React.FC<ModalProps> = ({
       document.removeEventListener('keydown', onKeyDown);
       const at = openStack.indexOf(me);
       if (at >= 0) openStack.splice(at, 1);
+      unlockScroll();
       returnFocusTo.current?.focus?.();
     };
   }, [open, dismissible]);
@@ -89,9 +117,9 @@ export const Modal: React.FC<ModalProps> = ({
 
   const isDrawer = variant === 'right';
   return createPortal(
-    <div className={`fixed inset-0 z-50 flex ${isDrawer ? 'justify-end' : 'items-center justify-center p-4'}`}>
+    <div className={`fixed inset-0 z-50 flex overscroll-contain ${isDrawer ? 'justify-end' : 'items-center justify-center p-4'}`}>
       <div
-        className="absolute inset-0 bg-slate-900/50"
+        className="absolute inset-0 bg-slate-900/50 overscroll-contain"
         aria-hidden="true"
         onClick={() => dismissible && onClose()}
         data-testid="modal-backdrop"
@@ -102,27 +130,30 @@ export const Modal: React.FC<ModalProps> = ({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative w-full ${widthClass} bg-surface text-content border border-line shadow-xl outline-none flex flex-col ${
-          isDrawer ? 'h-full rounded-none sm:rounded-l-xl' : 'rounded-xl max-h-[90vh]'
+        className={`relative w-full ${widthClass} bg-surface text-content border border-line shadow-xl outline-none flex flex-col overscroll-contain ${
+          isDrawer ? 'h-full rounded-none sm:rounded-l-2xl' : 'rounded-xl max-h-[90vh]'
         } bg-white dark:bg-slate-900`}
       >
-        <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-slate-200 dark:border-slate-800">
-          <h2 id={titleId} className="text-base font-bold text-slate-900 dark:text-white">
+        <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-200 dark:border-slate-800">
+          <h2 id={titleId} className="text-base font-bold text-slate-900 dark:text-white truncate">
             {title}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={!dismissible}
-            aria-label="Close dialog"
-            className="p-1.5 -mr-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
-          >
-            <span aria-hidden="true">✕</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {headerActions}
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={!dismissible}
+              aria-label="Close dialog"
+              className="p-1.5 -mr-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+            >
+              <span aria-hidden="true">✕</span>
+            </button>
+          </div>
         </div>
-        <div className="px-5 py-4 overflow-y-auto flex-1 text-sm">{children}</div>
+        <div className="px-6 py-5 overflow-y-auto overscroll-contain flex-1 text-sm flex flex-col">{children}</div>
         {footer && (
-          <div className="px-5 py-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap justify-end gap-2">
+          <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap justify-end gap-2">
             {footer}
           </div>
         )}

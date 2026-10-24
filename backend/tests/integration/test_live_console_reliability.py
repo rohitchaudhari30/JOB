@@ -206,6 +206,7 @@ async def test_worker_staleness_detection(authenticated_client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.file_db
 async def test_cross_user_isolation(authenticated_client):
     """Scenario 4: User B cannot view User A's run status or events."""
     client, headers, _ = authenticated_client

@@ -53,6 +53,79 @@ export interface TailoringAnalysis {
   editable_lines: number;
   locked_lines: number;
   layout_check_available: boolean;
+  nextraise?: NextRaiseComparison;
+}
+
+export interface NextRaiseCategoryScore {
+  matched: number;
+  total: number;
+  percentage: number;
+}
+
+export interface StructuredExperience {
+  company: string;
+  title: string;
+  location?: string;
+  dates?: string;
+  bullets: string[];
+}
+
+export interface StructuredProject {
+  title: string;
+  technologies?: string;
+  bullets: string[];
+}
+
+export interface StructuredEducation {
+  degree: string;
+  institution: string;
+  dates?: string;
+  details?: string;
+}
+
+export interface StructuredResumeData {
+  personal: {
+    first_name: string;
+    last_name: string;
+    headline: string;
+    email: string;
+    phone: string;
+    linkedin?: string;
+    location: string;
+  };
+  summary: string;
+  skills_categories?: { category: string; skills: string }[];
+  skills: string[];
+  experience_bullets?: string[];
+  project_bullets?: string[];
+  experiences?: StructuredExperience[];
+  projects?: StructuredProject[];
+  education?: StructuredEducation[];
+  certifications?: string[];
+  raw_text?: string;
+}
+
+export interface NextRaiseComparison {
+  score: number;
+  score_label: string;
+  breakdown: {
+    requirements: NextRaiseCategoryScore;
+    responsibilities: NextRaiseCategoryScore;
+    skills: NextRaiseCategoryScore;
+    job_title: { score: number; job: string; resume: string };
+  };
+  comparison_rows: {
+    title: { job: string; resume: string; status: 'match' | 'warning' | 'gap' };
+    experience: { job: string; resume: string; status: 'match' | 'warning' | 'gap' };
+    qualifications: { name: string; matched: boolean }[];
+    responsibilities: { name: string; matched: boolean }[];
+    keywords: { name: string; matched: boolean }[];
+    related_terms: string[];
+    recruiter_perspective: string;
+  };
+  missing_keywords: { name: string; category: string; selected: boolean }[];
+  structured_resume: StructuredResumeData;
+  scored_resume_name: string;
 }
 
 export interface TailoredResume {

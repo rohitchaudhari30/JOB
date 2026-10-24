@@ -8,8 +8,9 @@ from app.application.resume_tailoring.service import TailoringService
 from app.core.config import settings
 from app.infrastructure.ai.gateway import MultiTierAIGateway
 from app.infrastructure.ai.tailoring_ai import GatewayTailoringAI
+from app.infrastructure.database.repositories.connection_repository import SqlAlchemyBrowserSessionRepository
 from app.infrastructure.database.repositories.job_repository import SqlAlchemyJobRepository
-from app.infrastructure.database.repositories.profile_repository import SqlAlchemyResumeRepository
+from app.infrastructure.database.repositories.profile_repository import SqlAlchemyProfileRepository, SqlAlchemyResumeRepository
 from app.infrastructure.database.repositories.tailored_resume_repository import (
     SqlAlchemyConfirmedFactRepository,
     SqlAlchemyTailoredResumeRepository,
@@ -27,6 +28,8 @@ def build_tailoring_deps(session: AsyncSession, on_work_queued: Optional[Callabl
         ai=GatewayTailoringAI(MultiTierAIGateway(session=session)),
         storage_root=settings.STORAGE_DIR,
         on_work_queued=on_work_queued,
+        sessions=SqlAlchemyBrowserSessionRepository(session),
+        profiles=SqlAlchemyProfileRepository(session),
     )
 
 

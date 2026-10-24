@@ -3,6 +3,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 from app.application.matching.cascade import MatchingCascadeEngine
+from app.application.matching.single_flight import matching_single_flight
 from app.core.exceptions import EntityNotFoundException
 from app.domain.ai.contracts import AIGateway
 from app.domain.jobs.repositories import JobRepository
@@ -106,16 +107,17 @@ class EvaluateJobMatchUseCase:
             except Exception as e:
                 logger.warning(f"Could not load custom matching weights for user {user_id}: {e}")
 
+        eval_key, _, _, _ = self._cascade.compute_evaluation_key(
+            profile=profile,
+            job=job,
+            resume=resume,
+            embedding_model=self._cascade._embedding_service.model_name,
+            embedding_version=self._cascade._embedding_service.model_version,
+            rule=rule_to_use or MatchRule(),
+        )
+
         # Check existing evaluation cache by evaluation_key if not forcing re-evaluation
         if not force_reevaluate:
-            eval_key, _, _, _ = self._cascade.compute_evaluation_key(
-                profile=profile,
-                job=job,
-                resume=resume,
-                embedding_model=self._cascade._embedding_service.model_name,
-                embedding_version=self._cascade._embedding_service.model_version,
-                rule=rule_to_use or MatchRule(),
-            )
             cached_result = await self._match_repo.get_by_evaluation_key(
                 user_id=user_id, job_id=job_id, evaluation_key=eval_key
             )
@@ -125,18 +127,44 @@ class EvaluateJobMatchUseCase:
                 )
                 return cached_result
 
-        # Authoritative 5-stage cascade evaluation
+            # Single-flight deduplication: prevent duplicate AI cascade executions
+            flight_key = f"eval:{user_id}:{job_id}:{eval_key}"
+
+            async def _run_eval_and_persist() -> MatchResult:
+                inner_cached = await self._match_repo.get_by_evaluation_key(
+                    user_id=user_id, job_id=job_id, evaluation_key=eval_key
+                )
+                if inner_cached:
+                    return inner_cached
+
+                match_result = await self._cascade.evaluate(
+                    profile=profile,
+                    job=job,
+                    rule=rule_to_use or MatchRule(),
+                    resume=resume,
+                )
+                return await self._match_repo.save(match_result)
+
+            saved_match, is_leader = await matching_single_flight.execute_or_join(
+                flight_key, _run_eval_and_persist
+            )
+            logger.info(
+                f"Evaluated match for Job [{job.title}] vs User [{user_id}] (leader={is_leader}): "
+                f"MatchScore={saved_match.match_score}% | RecScore={saved_match.recommendation_score}% | "
+                f"Decision={saved_match.decision.value}"
+            )
+            return saved_match
+
+        # Force re-evaluation bypasses single-flight cache
         match_result = await self._cascade.evaluate(
             profile=profile,
             job=job,
             rule=rule_to_use or MatchRule(),
             resume=resume,
         )
-
-        # Save to database
         saved_match = await self._match_repo.save(match_result)
         logger.info(
-            f"Evaluated match for Job [{job.title}] vs User [{user_id}]: "
+            f"Force-evaluated match for Job [{job.title}] vs User [{user_id}]: "
             f"MatchScore={saved_match.match_score}% | RecScore={saved_match.recommendation_score}% | "
             f"Decision={saved_match.decision.value}"
         )

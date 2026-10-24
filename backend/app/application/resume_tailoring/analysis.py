@@ -10,8 +10,9 @@ from app.domain.resume_tailoring.entities import MODE_SUGGESTIONS_ONLY, Tailored
 from app.domain.resume_tailoring.plan import PlanSchemaError, edit_to_dict, parse_edit_plan
 from app.domain.resume_tailoring.rules import ConfirmedFact, find_evidence_block, normalize, phrase_supported, validate_edit
 from app.domain.resume_tailoring.status import TailoringStatus
-from app.application.resume_tailoring.common import file_format, move, release_lease, sha256_text, to_facts
+from app.application.resume_tailoring.common import file_format, release_lease, sha256_text, to_facts
 from app.application.resume_tailoring.deps import TailoringDeps
+from app.application.resume_tailoring.diagnosis import build_nextraise_comparison
 
 logger = logging.getLogger("app.tailoring.analysis")
 
@@ -137,8 +138,22 @@ async def run_analysis(deps: TailoringDeps, item: TailoredResume, max_attempts: 
         {"id": r["id"], "requirement": r["text"], "ask": f"Have you really used {r['text']} in a job, project or course?"}
         for r in requirements if r["status"] == NEEDS_CONFIRMATION
     ]
+    is_auto = bool((item.analysis or {}).get("auto_generate"))
+    profile = await deps.profiles.get_by_user_id(item.user_id) if getattr(deps, 'profiles', None) else None
+    nextraise_data = build_nextraise_comparison(
+        job_title=job.title,
+        job_company=job.company or 'Company',
+        job_description=job_text,
+        resume_name=resume.file_name or 'Resume',
+        requirements=requirements,
+        doc=doc,
+        raw_text=resume.raw_text or '',
+        profile=profile,
+    )
     item.analysis = {
+        "auto_generate": is_auto,
         "mode": item.mode,
+        "nextraise": nextraise_data,
         "requirements": requirements,
         "questions": questions,
         "gaps": [{"requirement": r["text"], "kind": r["kind"], "note": r.get("note", "")} for r in requirements if r["status"] == GAP],
@@ -159,5 +174,9 @@ async def run_analysis(deps: TailoringDeps, item: TailoredResume, max_attempts: 
     item.error_code = item.error_message = None
     item.attempt_count = 0
     release_lease(item)
-    item.status = TailoringStatus.AWAITING_INPUT
+    if is_auto and item.mode != MODE_SUGGESTIONS_ONLY and accepted:
+        item.approved_edit_ids = [e["id"] for e in accepted]
+        item.status = TailoringStatus.GENERATE_QUEUED
+    else:
+        item.status = TailoringStatus.AWAITING_INPUT
     return item
