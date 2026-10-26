@@ -64,6 +64,7 @@ def parse_structured_resume(doc: DocumentMap, raw_text: str = "", profile: Optio
 
     sections_raw: Dict[str, List[str]] = {"HEADER": []}
     current_sec = "HEADER"
+    section_order: List[str] = []
 
     for ln in lines:
         h = detect_header(ln)
@@ -71,6 +72,8 @@ def parse_structured_resume(doc: DocumentMap, raw_text: str = "", profile: Optio
             current_sec = h
             if current_sec not in sections_raw:
                 sections_raw[current_sec] = []
+            if current_sec not in section_order:
+                section_order.append(current_sec)
         else:
             sections_raw[current_sec].append(ln)
 
@@ -185,6 +188,7 @@ def parse_structured_resume(doc: DocumentMap, raw_text: str = "", profile: Optio
         "project_bullets": [b for proj in projects for b in proj["bullets"]],
         "education": education,
         "certifications": certifications,
+        "section_order": section_order or ["SUMMARY", "SKILLS", "EXPERIENCE", "PROJECTS", "EDUCATION", "CERTIFICATIONS"],
         "raw_text": full,
     }
 
@@ -198,10 +202,40 @@ def build_nextraise_comparison(
     doc: DocumentMap,
     raw_text: str = "",
     profile: Optional[Any] = None,
+    file_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Generates the rich NextRaise side-by-side comparison, scoring breakdown, and recruiter diagnosis."""
     structured = parse_structured_resume(doc, raw_text, profile=profile)
     full_resume_text = (raw_text or doc.full_text()).lower()
+
+    # Determine original page count dynamically
+    original_page_count = 1
+    if file_path and os.path.isfile(file_path):
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".pdf":
+            try:
+                from pypdf import PdfReader
+                original_page_count = max(1, len(PdfReader(file_path).pages))
+            except Exception:
+                pass
+        elif ext == ".docx":
+            try:
+                import docx
+                doc_obj = docx.Document(file_path)
+                props = getattr(getattr(doc_obj, "part", None), "package", None)
+                ext_props = getattr(props, "extended_properties", None)
+                pages = getattr(ext_props, "pages", 0) if ext_props else 0
+                if pages and pages > 0:
+                    original_page_count = pages
+                else:
+                    words = sum(len(p.text.split()) for p in doc_obj.paragraphs)
+                    original_page_count = 2 if words > 420 else 1
+            except Exception:
+                pass
+    if original_page_count <= 1:
+        words = len((raw_text or doc.full_text()).split())
+        if words > 450:
+            original_page_count = 2
 
     # Required qualifications
     supported = [r for r in requirements if r.get("status") == "SUPPORTED"]
@@ -311,4 +345,5 @@ def build_nextraise_comparison(
         "missing_keywords": missing_for_step2[:8],
         "structured_resume": structured,
         "scored_resume_name": resume_name,
+        "original_page_count": original_page_count,
     }

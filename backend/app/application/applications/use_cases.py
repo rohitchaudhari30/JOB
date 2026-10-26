@@ -631,7 +631,7 @@ class ExecuteApplicationUseCase:
         """
         Evidence-based post-click submission outcome classification.
         Classifies outcome into:
-        1. Platform Adapter Verification (Naukri, LinkedIn, Greenhouse, etc.)
+        1. Platform Adapter Verification (Naukri, LinkedIn)
         2. Human Challenge (PAUSED_OTP / PAUSED_CAPTCHA)
         3. Inline Validation Failure (FAILED)
         4. Confirmed Submission (APPLIED + SUBMITTED)

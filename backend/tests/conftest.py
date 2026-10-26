@@ -14,6 +14,10 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("AUTH_RATE_LIMIT_ATTEMPTS", "0")
 # Controlled-browser tests open pages on localhost; the URL guard has its own tests.
 os.environ.setdefault("ALLOW_PRIVATE_APPLY_URLS", "true")
+os.environ.setdefault("BROWSER_STEALTH_ENABLED", "false")
+# Prevent HuggingFace network hangs in isolated test environments
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 import app.core.database as database
 from app.core.database import Base, get_db_session
@@ -44,11 +48,7 @@ def _make_engine(use_file: bool):
     )
 
 
-@pytest_asyncio.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+# Deprecated event_loop fixture removed for pytest-asyncio >= 0.23 / Python 3.12 compatibility
 
 
 @pytest_asyncio.fixture(autouse=True)

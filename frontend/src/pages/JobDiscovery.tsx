@@ -44,10 +44,12 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [platform, setPlatform] = useState('naukri');
+  const [platform, setPlatform] = useState('all');
+  const [platforms, setPlatforms] = useState<string[]>(['naukri', 'linkedin']);
   const [roles, setRoles] = useState('Data Engineer');
   const [location, setLocation] = useState('Pune, Mumbai');
-  const [experience, setExperience] = useState<number>(2);
+  const [expYears, setExpYears] = useState<number>(2);
+  const [expMonths, setExpMonths] = useState<number>(0);
   const [postedWithin, setPostedWithin] = useState<string>('24h');
   const [sortBy, setSortBy] = useState<string>('newest');
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -108,7 +110,7 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     loadAppliedJobs
   );
 
-  useDiscoveryDefaults(setRoles, setLocation, setExperience);
+  const { profileSkills } = useDiscoveryDefaults(setRoles, setLocation, setExpYears, setExpMonths);
 
   // Pagination & Debouncing
   const [page, setPage] = useState(1);
@@ -128,11 +130,11 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   // Reset page to 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [postedWithin, sortBy]);
+  }, [postedWithin, sortBy, platform, roles, location, expYears, expMonths]);
 
   useEffect(() => {
     loadJobs();
-  }, [debouncedSearch, postedWithin, sortBy, page]);
+  }, [debouncedSearch, postedWithin, sortBy, page, platform, roles, location, expYears, expMonths]);
 
   const latestRequestIdRef = useRef<number>(0);
 
@@ -140,8 +142,14 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
     const requestId = ++latestRequestIdRef.current;
     try {
       setLoading(true);
+      const totalExp = Math.round((expYears + expMonths / 12) * 10) / 10;
       const res = await api.listJobs({
         search: debouncedSearch.trim() || undefined,
+        role: roles.trim() || undefined,
+        location: location.trim() || undefined,
+        source_id: platform === 'all' ? undefined : platform,
+        min_experience: totalExp,
+        max_experience: totalExp + 2.0,
         posted_within: postedWithin === 'all' ? undefined : (postedWithin || undefined),
         sort_by: sortBy || 'newest',
         skip: (page - 1) * pageSize,
@@ -171,18 +179,19 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
       const locList = location.split(',').map((l) => l.trim()).filter(Boolean);
       const days = parseDaysFromFreshness(postedWithin);
 
+      const targetSources = platform === 'all' ? ['naukri', 'linkedin'] : [platform];
+      const totalExp = Math.round((expYears + expMonths / 12) * 10) / 10;
+      const defaultResume = resumes.find((r) => r.is_default) || resumes[0];
       const res = await api.discoverJobs({
-        source_type: platform,
-        roles: rolesList,
-        locations: locList,
-        experience: Number(experience),
-        min_experience: Number(experience),
-        max_experience: Number(experience) + 2,
-        max_days_posted: days,
-        auto_evaluate: true,
+        source_type: platform, source_types: targetSources, roles: rolesList,
+        locations: locList, experience: totalExp, min_experience: totalExp,
+        max_experience: totalExp + 2, max_days_posted: days, auto_evaluate: true,
+        skills: profileSkills.length > 0 ? profileSkills.slice(0, 10) : undefined,
+        resume_id: defaultResume?.id,
       });
-
-      showSuccess(`Found ${res.discovered_total} jobs (${res.new_jobs_count} new) matching ${experience} yrs on ${platform.toUpperCase()}.`, 'Discovery Complete');
+      const portalLabel = platform === 'all' ? 'All Portals (Naukri & LinkedIn)' : platform.toUpperCase();
+      const filterInfo = res.filtered_out_count ? ` (${res.filtered_out_count} mismatched filtered out)` : '';
+      showSuccess(`Found ${res.discovered_total} jobs (${res.new_jobs_count} new)${filterInfo} across ${portalLabel}.`, 'Discovery Complete');
       loadJobs();
     } catch (e: any) {
       showError(`Discovery failed: ${e.response?.data?.detail || e.message}`);
@@ -225,8 +234,9 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   };
   const defaultResume = resumes.find((r) => r.is_default) || resumes[0];
   const hasResume = Boolean(defaultResume);
+  const requiresConnection = platform === 'naukri' || platform === 'linkedin';
   const currentConn = connections.find((c: any) => c.platform?.toLowerCase() === platform.toLowerCase());
-  const isPlatformConnected = currentConn?.status === 'CONNECTED';
+  const isPlatformConnected = !requiresConnection || currentConn?.status === 'CONNECTED';
 
   const displayedJobs = useMemo(() => {
     let result = jobs;
@@ -331,22 +341,16 @@ export const JobDiscovery: React.FC<JobDiscoveryProps> = ({
   return (
     <div className="space-y-4 animate-fadeIn pb-24">
       <DiscoveryControls
-        experience={experience}
-        handleTriggerDiscovery={handleTriggerDiscovery}
-        isDiscovering={isDiscovering}
-        location={location}
-        platform={platform}
-        roles={roles}
-        setExperience={setExperience}
-        setLocation={setLocation}
-        setPlatform={setPlatform}
-        setRoles={setRoles}
+        expMonths={expMonths} expYears={expYears} handleTriggerDiscovery={handleTriggerDiscovery}
+        isDiscovering={isDiscovering} location={location} platform={platform}
+        platforms={platforms} roles={roles} setExpMonths={setExpMonths} setExpYears={setExpYears}
+        setLocation={setLocation} setPlatform={setPlatform}
+        setPlatforms={setPlatforms} setRoles={setRoles}
       />
-
 
       <ReadinessBanner
         missing={[...(!isPlatformConnected ? (['connection'] as const) : []), ...(!hasResume ? (['resume'] as const) : [])]}
-        platformLabel={platform === 'linkedin' ? 'LinkedIn' : platform === 'naukri' ? 'Naukri' : platform.toUpperCase()}
+        platformLabel={platform === 'all' ? 'Job Platforms' : platform === 'linkedin' ? 'LinkedIn' : platform === 'naukri' ? 'Naukri' : platform.toUpperCase()}
         onNavigate={(tab) => onNavigate?.(tab)}
       />
 

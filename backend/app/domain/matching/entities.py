@@ -139,6 +139,8 @@ class MatchResult:
     location: str | None = None
     apply_url: str | None = None
     raw_posted_text: str | None = None
+    min_experience_years: float | None = None
+    max_experience_years: float | None = None
 
     def __post_init__(self):
         # Guarantee overall_score sync with match_score if not explicitly specified

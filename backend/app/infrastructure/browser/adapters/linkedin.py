@@ -39,7 +39,8 @@ class LinkedInAdapter(BaseJobSourceAdapter):
                 await page.close()
 
     def _build_search_url(self, filters: SearchQueryFilter) -> str:
-        keywords = " ".join(filters.roles) if filters.roles else "Software Engineer"
+        role_part = " ".join([f'"{r}"' if ' ' in r and not r.startswith('"') else r for r in filters.roles]) if filters.roles else "Software Engineer"
+        keywords = role_part.strip() if role_part.strip() else "Software Engineer"
         locations = " ".join(filters.locations) if filters.locations else ""
 
         params = {
@@ -203,6 +204,18 @@ class LinkedInAdapter(BaseJobSourceAdapter):
                 if page.is_closed() or "closed" in str(extract_err).lower():
                     raise RuntimeError(f"Target page, context or browser has been closed: {extract_err}") from extract_err
                 raise extract_err
+
+            if len(raw_cards_data) == 0 and not page.is_closed():
+                try:
+                    p_title = await page.title()
+                    p_url = page.url
+                    is_auth_wall = "login" in p_url.lower() or "checkpoint" in p_url.lower() or "authwall" in p_url.lower()
+                    logger.warning(
+                        "LinkedIn discovery returned 0 cards. Diagnostic: url='%s', title='%s', auth_wall=%s",
+                        p_url, p_title, is_auth_wall
+                    )
+                except Exception as diag_err:
+                    logger.debug("LinkedIn diagnostic inspect skipped: %s", diag_err)
 
             logger.info("search_completed", extra={"platform": "linkedin", "run_id": run_id, "cards_count": len(raw_cards_data)})
 

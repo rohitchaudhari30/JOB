@@ -149,6 +149,7 @@ async def run_analysis(deps: TailoringDeps, item: TailoredResume, max_attempts: 
         doc=doc,
         raw_text=resume.raw_text or '',
         profile=profile,
+        file_path=resume.file_path,
     )
     item.analysis = {
         "auto_generate": is_auto,

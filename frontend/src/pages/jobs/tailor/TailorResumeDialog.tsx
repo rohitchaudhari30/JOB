@@ -9,7 +9,7 @@ import { NextRaiseStep2 } from './NextRaiseStep2';
 import { NextRaiseStep3 } from './NextRaiseStep3';
 import { AnalysisStep } from './AnalysisStep';
 import { useTailoring } from './useTailoring';
-import { saveBlob, workingText, cleanResumeFileName } from './tailorLogic';
+import { saveBlob, workingText, cleanResumeFileName, printResumeCanvas } from './tailorLogic';
 import { refreshSavedTailored } from './savedTailoredStore';
 import { useToast } from '../../../context/ToastContext';
 
@@ -46,6 +46,9 @@ export const TailorResumeDialog: React.FC<Props> = ({ open, jobId, jobTitle, app
     if (!item) return;
     try {
       const blob = await api.downloadTailored(item.id, format);
+      if (!blob || blob.size === 0) {
+        throw new Error('Received empty download');
+      }
       const personal = item.analysis?.nextraise?.structured_resume?.personal;
       const candidate = personal && (personal.first_name || personal.last_name)
         ? `${personal.first_name ?? ''} ${personal.last_name ?? ''}`.trim()
@@ -53,7 +56,16 @@ export const TailorResumeDialog: React.FC<Props> = ({ open, jobId, jobTitle, app
       const cleanName = cleanResumeFileName(item.file_name, candidate, format);
       saveBlob(blob, cleanName);
     } catch (e: any) {
-      showError(e?.response?.data?.detail || e?.message || 'Failed to download tailored resume. Please try again.');
+      if (format === 'pdf') {
+        const personal = item.analysis?.nextraise?.structured_resume?.personal;
+        const candidate = personal && (personal.first_name || personal.last_name)
+          ? `${personal.first_name ?? ''} ${personal.last_name ?? ''}`.trim()
+          : (jobTitle ? `${jobTitle.replace(/[^a-zA-Z0-9]+/g, '_')}_Candidate` : 'Resume');
+        const cleanName = cleanResumeFileName(item.file_name, candidate, 'pdf');
+        printResumeCanvas('resume-document-canvas-root', cleanName);
+      } else {
+        showError(e?.response?.data?.detail || e?.message || 'Failed to download tailored resume. Please try again.');
+      }
     }
   };
 

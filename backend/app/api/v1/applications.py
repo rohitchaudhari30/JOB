@@ -414,9 +414,11 @@ async def approve_application(
     conn_repo: Annotated[Any, Depends(get_connection_repository)],
     ai_gateway: Annotated[AIGateway, Depends(get_ai_gateway)],
     execute_application_uc: Annotated[ExecuteApplicationUseCase, Depends(get_execute_application_use_case)],
+    response: Response,
+    wait: bool = Query(False, description="true = run browser flow inside request"),
 ):
     await _get_authorized_app(application_id, current_user.id, app_repo, current_user=current_user)
-    execute_use_case = execute_application_uc
+    execute_use_case = _build_executor(app_repo, execute_application_uc, wait)
     use_case = ApproveApplicationUseCase(
         app_repo=app_repo,
         execute_use_case=execute_use_case,
@@ -430,6 +432,8 @@ async def approve_application(
         resume_id=req.resume_id,
         auto_execute=req.auto_execute,
     )
+    if response and getattr(execute_use_case, "scheduled", False):
+        response.status_code = status.HTTP_202_ACCEPTED
     return _to_response_dto(app)
 
 

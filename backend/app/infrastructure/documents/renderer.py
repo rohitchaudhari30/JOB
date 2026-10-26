@@ -30,7 +30,7 @@ def find_office_binary() -> Optional[str]:
 
 
 def renderer_available() -> bool:
-    return True
+    return find_office_binary() is not None
 
 
 def render_docx_to_pdf_reportlab(docx_path: str, output_dir: str) -> Optional[str]:
@@ -133,15 +133,41 @@ def render_docx_to_pdf_reportlab(docx_path: str, output_dir: str) -> Optional[st
             else:
                 story.append(Paragraph(clean, body_style))
 
+        total_words = sum(len(p.text.split()) for p in doc.paragraphs)
+        target_pages = 1 if total_words <= 420 else 2
+
         pdf_doc = SimpleDocTemplate(
             pdf_path,
             pagesize=letter,
-            leftMargin=36,
-            rightMargin=36,
-            topMargin=36,
-            bottomMargin=36,
+            leftMargin=32,
+            rightMargin=32,
+            topMargin=32,
+            bottomMargin=32,
         )
         pdf_doc.build(story)
+
+        # Dynamic page budget convergence: scale down if it exceeds target_pages
+        if os.path.isfile(pdf_path):
+            try:
+                reader = PdfReader(pdf_path)
+                if len(reader.pages) > target_pages:
+                    compact_b = ParagraphStyle('CompactB', parent=styles['Normal'], fontSize=7.8, leading=10, fontName='Helvetica', textColor=colors.HexColor('#1e293b'), spaceAfter=1)
+                    compact_bul = ParagraphStyle('CompactBU', parent=styles['Normal'], fontSize=7.8, leading=10, fontName='Helvetica', textColor=colors.HexColor('#1e293b'), leftIndent=10, firstLineIndent=-7, spaceAfter=1)
+                    compact_story = []
+                    for item in story:
+                        if isinstance(item, Paragraph) and item.style == bullet_style:
+                            compact_story.append(Paragraph(item.text, compact_bul))
+                        elif isinstance(item, Paragraph) and item.style == body_style:
+                            compact_story.append(Paragraph(item.text, compact_b))
+                        elif isinstance(item, Spacer):
+                            compact_story.append(Spacer(1, 1.5))
+                        else:
+                            compact_story.append(item)
+                    pdf_doc2 = SimpleDocTemplate(pdf_path, pagesize=letter, leftMargin=28, rightMargin=28, topMargin=28, bottomMargin=28)
+                    pdf_doc2.build(compact_story)
+            except Exception as pe:
+                logger.debug("Page convergence exception: %s", pe)
+
         if os.path.isfile(pdf_path) and os.path.getsize(pdf_path) > 0:
             return pdf_path
         return None
@@ -175,8 +201,118 @@ def render_docx_to_pdf(docx_path: str, output_dir: str) -> Optional[str]:
         finally:
             shutil.rmtree(profile, ignore_errors=True)
 
+
+def render_docx_to_pdf_pure_python(docx_path: str, output_dir: str) -> Optional[str]:
+    """Generates a clean, valid PDF from docx using pure Python without external C libraries."""
+    try:
+        import docx
+
+        os.makedirs(output_dir, exist_ok=True)
+        stem = os.path.splitext(os.path.basename(docx_path))[0]
+        pdf_path = os.path.join(output_dir, f"{stem}.pdf")
+
+        doc = docx.Document(docx_path)
+        paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+        if not paragraphs:
+            paragraphs = ["Resume"]
+
+        page_width, page_height = 612, 792
+        margin = 44
+        y = page_height - margin
+        pages = []
+        current_cmds = []
+
+        def sanitize(t: str) -> str:
+            return t.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+        for para in paragraphs:
+            is_title = len(pages) == 0 and len(current_cmds) == 0
+            is_heading = para.isupper() and len(para) < 40
+
+            is_compact = len(paragraphs) > 30
+            font = "/F2 14" if is_title else ("/F2 10.5" if is_heading else "/F1 9") if is_compact else ("/F2 15" if is_title else ("/F2 11" if is_heading else "/F1 9.5"))
+            spacing = (17 if is_title else (13 if is_heading else 11)) if is_compact else (22 if is_title else (16 if is_heading else 13))
+
+            if y - spacing < margin:
+                pages.append("\n".join(current_cmds))
+                current_cmds = []
+                y = page_height - margin
+
+            y -= spacing
+            clean = sanitize(para)
+            if len(clean) > 90:
+                words = clean.split(" ")
+                curr_line = ""
+                for w in words:
+                    if len(curr_line) + len(w) + 1 > 88:
+                        current_cmds.append(f"BT {font} Tf {margin} {y:.1f} Td ({curr_line}) Tj ET")
+                        y -= 12
+                        curr_line = w
+                    else:
+                        curr_line = f"{curr_line} {w}".strip()
+                if curr_line:
+                    current_cmds.append(f"BT {font} Tf {margin} {y:.1f} Td ({curr_line}) Tj ET")
+            else:
+                current_cmds.append(f"BT {font} Tf {margin} {y:.1f} Td ({clean}) Tj ET")
+
+        if current_cmds:
+            pages.append("\n".join(current_cmds))
+
+        objects = []
+
+        def add_obj(c: str) -> int:
+            objects.append(c)
+            return len(objects)
+
+        add_obj("<< /Type /Catalog /Pages 3 0 R >>")
+        add_obj("<< /Type /Outlines /Count 0 >>")
+        add_obj("")
+        f1_id = add_obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+        f2_id = add_obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
+
+        page_ids = []
+        for p_str in pages:
+            s_bytes = p_str.encode("latin-1", errors="replace")
+            c_id = add_obj(f"<< /Length {len(s_bytes)} >>\nstream\n{p_str}\nendstream")
+            p_obj = (
+                f"<< /Type /Page /Parent 3 0 R /MediaBox [0 0 {page_width} {page_height}] "
+                f"/Contents {c_id} 0 R "
+                f"/Resources << /Font << /F1 {f1_id} 0 R /F2 {f2_id} 0 R >> >> >>"
+            )
+            p_id = add_obj(p_obj)
+            page_ids.append(f"{p_id} 0 R")
+
+        kids = " ".join(page_ids)
+        objects[2] = f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>"
+
+        with open(pdf_path, "wb") as f:
+            f.write(b"%PDF-1.4\n")
+            offsets = []
+            for i, o_str in enumerate(objects, 1):
+                offsets.append(f.tell())
+                f.write(f"{i} 0 obj\n{o_str}\nendobj\n".encode("latin-1", errors="replace"))
+
+            xref_start = f.tell()
+            f.write(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("latin-1"))
+            for off in offsets:
+                f.write(f"{off:010d} 00000 n \n".encode("latin-1"))
+
+            f.write(
+                f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF\n".encode("latin-1")
+            )
+
+        if os.path.isfile(pdf_path) and os.path.getsize(pdf_path) > 100:
+            return pdf_path
+        return None
+    except Exception as err:
+        logger.warning("Pure Python PDF conversion fallback failed: %s", err)
+        return None
+
     # Pure Python ReportLab fallback for systems without LibreOffice
-    return render_docx_to_pdf_reportlab(docx_path, output_dir)
+    res = render_docx_to_pdf_reportlab(docx_path, output_dir)
+    if res and os.path.isfile(res):
+        return res
+    return render_docx_to_pdf_pure_python(docx_path, output_dir)
 
 
 def measure_layout(pdf_path: str) -> Optional[RenderedLayout]:

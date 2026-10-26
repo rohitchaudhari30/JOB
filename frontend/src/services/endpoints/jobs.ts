@@ -5,6 +5,9 @@ export const jobsApi = {
   // Jobs
   listJobs: async (params?: {
     search?: string;
+    role?: string;
+    min_experience?: number;
+    max_experience?: number;
     location?: string;
     source_id?: string;
     posted_within?: string;
@@ -17,12 +20,15 @@ export const jobsApi = {
     return res.data;
   },
   discoverJobs: async (payload: {
-    source_type: string;
+    source_type?: string;
+    source_types?: string[];
     roles: string[];
     locations?: string[];
     experience?: number;
     min_experience?: number;
     max_experience?: number;
+    skills?: string[];
+    resume_id?: string;
     min_salary?: number;
     max_days_posted?: number;
     auto_evaluate?: boolean;

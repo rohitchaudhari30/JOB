@@ -22,20 +22,20 @@ def test_detect_job_source_type_from_url():
         title="Dev",
         company="Co",
         location="Loc",
-        apply_url="https://boards.greenhouse.io/company/jobs/12345",
+        apply_url="https://www.naukri.com/job-listings-12345",
     )
-    assert detect_job_source_type(job) == "greenhouse"
+    assert detect_job_source_type(job) == "naukri"
 
-    job_lever = Job(
+    job_linkedin = Job(
         id="4",
         source_id="custom",
         external_job_id="e4",
         title="Dev",
         company="Co",
         location="Loc",
-        apply_url="https://jobs.lever.co/company/abc",
+        apply_url="https://www.linkedin.com/jobs/view/abc",
     )
-    assert detect_job_source_type(job_lever) == "lever"
+    assert detect_job_source_type(job_linkedin) == "linkedin"
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@ import {
   Brain,
   MapPin,
   ExternalLink,
-  RefreshCw,
+
   Check,
   ArrowRight,
   ShieldCheck,
@@ -15,6 +15,7 @@ import {
 import type { MatchResult } from '../../types';
 import { getMatchScore } from '../../utils/matchScores';
 import { Button } from '../../components/ui/Button';
+import { CardSkeleton } from '../../components/ui/Skeleton';
 import { TailorButton } from '../jobs/tailor/TailorButton';
 import { MatchesPagination } from './MatchesPagination';
 import { MatchRelevanceHud } from './MatchRelevanceHud';
@@ -42,6 +43,56 @@ const getInitials = (name?: string) => {
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
 };
+
+const formatExperienceRange = (m: MatchResult): string => {
+  const min = m.min_experience_years ?? m.job?.min_experience_years;
+  const max = m.max_experience_years ?? m.job?.max_experience_years;
+
+  if (min !== undefined && min !== null && min > 0) {
+    if (max !== undefined && max !== null && max > min) {
+      return `${Math.round(min)}-${Math.round(max)} yrs`;
+    }
+    return `${Math.round(min)}+ yrs`;
+  }
+  if (max !== undefined && max !== null && max > 0) {
+    return `Up to ${Math.round(max)} yrs`;
+  }
+
+  if (m.reasoning_summary) {
+    const reqMatch = m.reasoning_summary.match(/Experience required:\s*([0-9.]+)(?:\s*-\s*([0-9.]+))?\s*yrs?/i);
+    if (reqMatch) {
+      const minReq = Math.round(parseFloat(reqMatch[1]));
+      if (reqMatch[2]) {
+        return `${minReq}-${Math.round(parseFloat(reqMatch[2]))} yrs`;
+      }
+      return minReq > 0 ? `${minReq}+ yrs` : '0-1 yr';
+    }
+    const generalMatch = m.reasoning_summary.match(/([0-9]+)\s*(?:-\s*([0-9]+)|\+)?\s*(?:years?|yrs?)/i);
+    if (generalMatch) {
+      if (generalMatch[2]) {
+        return `${generalMatch[1]}-${generalMatch[2]} yrs`;
+      }
+      return `${generalMatch[1]}+ yrs`;
+    }
+  }
+
+  const title = (m.job_title || m.job?.title || '').toLowerCase();
+  if (title.includes('lead') || title.includes('principal') || title.includes('staff') || title.includes('director')) {
+    return '7+ yrs';
+  }
+  if (title.includes('senior') || title.includes('sr.') || title.includes('architect')) {
+    return '5-8 yrs';
+  }
+  if (title.includes('junior') || title.includes('jr.') || title.includes('associate') || title.includes('entry')) {
+    return '1-3 yrs';
+  }
+  if (title.includes('intern') || title.includes('trainee') || title.includes('fresher')) {
+    return '0-1 yr';
+  }
+
+  return '2-5 yrs';
+};
+
 
 export const MatchesGrid: React.FC<Props> = ({
   loading,
@@ -84,12 +135,10 @@ export const MatchesGrid: React.FC<Props> = ({
     <>
       {/* Matches Grid or Empty State */}
       {loading ? (
-        <div className="text-center py-24 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
-          <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
-          <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
-            Loading your matches…
-          </div>
-          <p className="text-xs text-slate-400">Comparing roles with your verified qualifications.</p>
+        <div className="space-y-4" role="status" aria-label="Loading your matches">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
         </div>
       ) : filteredAndSortedMatches.length === 0 ? (
         <div className="text-center py-20 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-8 shadow-sm space-y-4 max-w-xl mx-auto">
@@ -135,22 +184,15 @@ export const MatchesGrid: React.FC<Props> = ({
             const matchedSkills = m.matched_skills || [];
             const isSaved = savedJobIds.has(m.job_id);
 
-            // Experience text
-            const expText =
-              m.job?.min_experience_years !== undefined && m.job?.max_experience_years !== undefined
-                ? `${m.job.min_experience_years}-${m.job.max_experience_years} yrs`
-                : m.job?.min_experience_years !== undefined
-                ? `${m.job.min_experience_years}+ yrs`
-                : 'Mid-Senior';
+            // Experience range
+            const expText = formatExperienceRange(m);
 
             // Clean concise posted text
             const cleanPosted = (m.raw_posted_text || '1d ago').replace(/Within the past 24 hours/gi, '').trim() || '1d ago';
 
             // Match tier labels
             const verdictText =
-              score >= 80 ? 'STRONG MATCH' : score >= 65 ? 'GOOD MATCH' : score >= 50 ? 'MODERATE FIT' : 'LOW MATCH';
-            const ringColor =
-              score >= 75 ? 'text-emerald-400' : score >= 50 ? 'text-amber-400' : 'text-rose-400';
+              score >= 80 ? 'Top Match' : score >= 65 ? 'Strong Fit' : score >= 50 ? 'Good Match' : 'Needs Review';
 
             return (
               <div
@@ -302,7 +344,15 @@ export const MatchesGrid: React.FC<Props> = ({
                 </div>
 
                 {/* Right Dedicated Dark HUD Panel (Never pushed off screen) */}
-                <MatchRelevanceHud score={score} verdictText={verdictText} ringColor={ringColor} />
+                <MatchRelevanceHud
+                  score={score}
+                  verdictText={verdictText}
+                  matchedSkillsCount={matchedSkills.length}
+                  totalSkillsCount={matchedSkills.length + (m.missing_skills?.length || 0)}
+                  experienceText={expText}
+                  skillScore={m.skill_match_score}
+                  experienceScore={m.experience_score}
+                />
               </div>
             );
           })}

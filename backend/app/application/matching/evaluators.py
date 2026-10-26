@@ -18,12 +18,25 @@ class HardFilterEvaluator:
 
     @staticmethod
     def evaluate(profile: CandidateProfile, job: Job, rule: MatchRule | None = None) -> Tuple[bool, str]:
-        # 1. Experience filter
+        # 1. Experience filter & Seniority protection
         candidate_years = profile.total_experience_months / 12.0
         if job.min_experience_years > 0:
             # Allow 0.5 year grace margin for near-matches
             if candidate_years < (job.min_experience_years - 0.5):
                 return False, f"Experience required: {job.min_experience_years} yrs vs candidate: {candidate_years:.1f} yrs"
+
+        # Max experience / overqualification check (if job states upper bound)
+        if job.max_experience_years and job.max_experience_years > 0:
+            if candidate_years > (job.max_experience_years + 2.5):
+                return False, f"Candidate experience ({candidate_years:.1f} yrs) exceeds job maximum required ({job.max_experience_years} yrs)"
+
+        # Seniority leadership protection for early-career / mid-level candidates
+        if candidate_years <= 3.5:
+            senior_markers = ["director", "vice president", "vp ", "head of", "principal", "staff engineer", "chief", "architect"]
+            job_title_lower = (job.title or "").lower()
+            for marker in senior_markers:
+                if marker in job_title_lower:
+                    return False, f"Seniority mismatch: '{job.title}' requires senior/executive leadership, candidate has {candidate_years:.1f} yrs"
 
         # 2. Location & Remote filter
         if profile.remote_preference == "remote":

@@ -24,7 +24,7 @@ export const PersonalTab: React.FC<PersonalTabProps> = ({ profile, setProfile })
             Personal &amp; contact details
           </h2>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Primary candidate identity used on job portal applications (Naukri, LinkedIn, Greenhouse, Lever).
+            Primary candidate identity used on job portal applications (Naukri and LinkedIn).
           </p>
         </div>
       </div>

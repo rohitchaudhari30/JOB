@@ -16,6 +16,8 @@ import { useToast } from './context/ToastContext';
 import { Bot, LogIn, Sparkles } from 'lucide-react';
 import { resolveTab, getTabFromLocation, TAB_TO_PATH, TAB_TITLES, needsCanonicalRedirect } from './utils/navigation';
 import { Button } from './components/ui/Button';
+import { BootLoader } from './components/ui/BootLoader';
+import { PageSkeleton } from './components/ui/Skeleton';
 
 // Pages load on demand so the first screen downloads less code (FE-03).
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
@@ -176,11 +178,7 @@ export const App: React.FC = () => {
   };
 
   if (booting) {
-    return (
-      <div role="status" aria-live="polite" className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-sm text-slate-500">
-        Loading…
-      </div>
-    );
+    return <BootLoader />;
   }
 
   if (!user) {
@@ -295,18 +293,18 @@ export const App: React.FC = () => {
     // The three profile pages share one form, so moving between them never discards edits.
     const sameForm = PROFILE_VIEW_TABS.has(canonicalTab) && PROFILE_VIEW_TABS.has(activeTab);
     if (!replace && canonicalTab !== activeTab && !sameForm && !confirmLeave()) return;
-    const targetPath = TAB_TO_PATH[canonicalTab] || '/home';
+    const targetPath = typeof target === 'string' && target.startsWith('/') ? target : (TAB_TO_PATH[canonicalTab] || '/home');
     setActiveTab(canonicalTab);
 
     if (typeof window !== 'undefined') {
-      if (window.location.pathname !== targetPath) {
+      const current = window.location.pathname + window.location.search;
+      if (current !== targetPath) {
         if (replace) {
           window.history.replaceState({ tab: canonicalTab }, '', targetPath);
         } else {
           window.history.pushState({ tab: canonicalTab }, '', targetPath);
-          // Let in-page URL state (drawers, filters) resync to the new location.
-          window.dispatchEvent(new PopStateEvent('popstate'));
         }
+        window.dispatchEvent(new PopStateEvent('popstate'));
       }
       if (typeof document !== 'undefined') {
         document.title = TAB_TITLES[canonicalTab] || BRAND_NAME;
@@ -348,7 +346,7 @@ export const App: React.FC = () => {
         <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 md:px-8 md:py-8 w-full focus:outline-none">
           <SectionTabs activeTab={activeTab} onTabChange={handleTabChange} />
           <ErrorBoundary resetKey={activeTab}>
-          <Suspense fallback={<div className="p-8 text-sm text-slate-500" role="status">Loading…</div>}>
+          <Suspense fallback={<PageSkeleton />}>
           {activeTab === 'dashboard' && (
             <Dashboard onNavigate={handleTabChange} activeRun={activeRun} />
           )}

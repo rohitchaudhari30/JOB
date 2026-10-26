@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.models.models import RevokedTokenModel
@@ -17,8 +18,13 @@ class SqlAlchemyRevokedTokenRepository:
             return  # tokens issued before jti existed cannot be tracked individually
         if await self.is_revoked(jti):
             return
-        self._session.add(RevokedTokenModel(jti=jti, user_id=user_id, expires_at=expires_at))
-        await self._session.flush()
+        try:
+            async with self._session.begin_nested():
+                self._session.add(RevokedTokenModel(jti=jti, user_id=user_id, expires_at=expires_at))
+                await self._session.flush()
+        except IntegrityError:
+            # Token already revoked concurrently in another transaction; treat as idempotent success
+            pass
 
     async def is_revoked(self, jti: str | None) -> bool:
         if not jti:

@@ -36,6 +36,50 @@ export function saveBlob(blob: Blob, fileName: string): void {
   window.URL.revokeObjectURL(url);
 }
 
+/** Prints or generates high-definition vector PDF from the live resume DOM canvas. */
+export function printResumeCanvas(elementId: string, title: string = 'Resume'): void {
+  const element = document.getElementById(elementId);
+  if (!element) {
+    window.print();
+    return;
+  }
+
+  const printFrame = document.createElement('iframe');
+  printFrame.style.position = 'fixed';
+  printFrame.style.right = '0';
+  printFrame.style.bottom = '0';
+  printFrame.style.width = '0';
+  printFrame.style.height = '0';
+  printFrame.style.border = '0';
+  document.body.appendChild(printFrame);
+
+  const frameDoc = printFrame.contentWindow?.document;
+  if (!frameDoc) {
+    window.print();
+    return;
+  }
+
+  const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    .map((s) => s.outerHTML)
+    .join('\n');
+
+  frameDoc.write(`<!DOCTYPE html><html><head><title>${title}</title>${styles}<style>@page { size: letter portrait; margin: 0.25in; } .resume-page-break { page-break-after: always !important; break-after: page !important; } .resume-page-block { page-break-inside: avoid !important; break-inside: avoid !important; box-sizing: border-box !important; } body { background: white !important; color: #0f172a !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }</style></head><body><div style="background: white; padding: 10px;">${element.innerHTML}</div></body></html>`);
+  frameDoc.close();
+
+  setTimeout(() => {
+    try {
+      printFrame.contentWindow?.focus();
+      printFrame.contentWindow?.print();
+    } catch {
+      window.print();
+    } finally {
+      setTimeout(() => {
+        printFrame.remove();
+      }, 1000);
+    }
+  }, 300);
+}
+
 /** Produces a clean, professional HR-standard resume filename without internal tool tags or company names. */
 export function cleanResumeFileName(rawName?: string | null, candidateName?: string, extension: 'pdf' | 'docx' = 'pdf'): string {
   let base = (rawName || '').replace(/\.(docx|pdf)$/i, '');

@@ -70,7 +70,7 @@ class UserJobState:
 @dataclass
 class JobSource:
     id: str
-    source_type: str  # 'naukri', 'linkedin', 'greenhouse', etc.
+    source_type: str  # 'naukri', 'linkedin'
     base_url: str
     is_active: bool = True
     rate_limit_per_min: int = 20
@@ -79,7 +79,7 @@ class JobSource:
 @dataclass
 class SearchQueryFilter:
     roles: List[str] = field(default_factory=list)
-    # Company board names for ATS sources (Lever, Greenhouse, Ashby, Workday). Roles are job titles, not companies.
+    # Optional target companies filter
     companies: List[str] = field(default_factory=list)
     locations: List[str] = field(default_factory=list)
     min_experience: float = 0.0
@@ -89,3 +89,6 @@ class SearchQueryFilter:
     max_days_posted: int = 7
     max_pages: int = 1
     sort_by_date: bool = True
+    skills: List[str] = field(default_factory=list)
+    strict_experience_match: bool = True
+    strict_role_match: bool = True

@@ -16,11 +16,11 @@ def _stealth_launch_args() -> list[str]:
     """Flags that hide automation. Off unless BROWSER_STEALTH_ENABLED is set (COMP-01)."""
     if not settings.BROWSER_STEALTH_ENABLED:
         return []
-    return ["--disable-blink-features=AutomationControlled", "--disable-infobars"]
+    return ["--disable-blink-features=AutomationControlled", "--disable-infobars", "--no-sandbox", "--disable-setuid-sandbox"]
 
 
 def _identity_options() -> dict:
-    """Spoofed browser identity. Off by default: the browser reports its real user agent."""
+    """Spoofed browser identity and modern client hint headers."""
     if not settings.BROWSER_STEALTH_ENABLED:
         return {}
     return {
@@ -28,7 +28,14 @@ def _identity_options() -> dict:
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/128.0.0.0 Safari/537.36"
-        )
+        ),
+        "extra_http_headers": {
+            "Accept-Language": "en-US,en;q=0.9",
+            "Sec-Ch-Ua": '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Upgrade-Insecure-Requests": "1",
+        },
     }
 
 
@@ -38,9 +45,42 @@ async def _apply_stealth_script(context) -> None:
     await context.add_init_script(
         """
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        window.chrome = { runtime: {} };
+        if (!window.chrome) {
+            window.chrome = { runtime: {} };
+        }
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en'],
+        });
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5],
+        });
         """
     )
+
+
+def _resolve_storage_state(encrypted_storage_state: Optional[str | dict]) -> Optional[dict]:
+    """Safely decrypts or parses stored session cookies without throwing JSONDecodeErrors on ciphertext."""
+    if not encrypted_storage_state:
+        return None
+    if isinstance(encrypted_storage_state, dict):
+        return encrypted_storage_state
+    if not isinstance(encrypted_storage_state, str) or not encrypted_storage_state.strip():
+        return None
+
+    cleaned = encrypted_storage_state.strip()
+    try:
+        return session_encryptor.decrypt_json(cleaned)
+    except Exception as decrypt_err:
+        if cleaned.startswith(('{', '[')):
+            try:
+                parsed = json.loads(cleaned)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception as json_err:
+                logger.warning(f'Failed to parse plaintext storage_state JSON: {json_err}. Launching clean context.')
+                return None
+        logger.warning(f'Failed to decrypt storage_state: {decrypt_err}. Launching clean context.')
+        return None
 
 class ProactorLoopThread:
     """Dedicated Proactor event loop thread for Playwright subprocess execution on Windows."""
@@ -123,19 +163,7 @@ class PlaywrightBrowserManager:
     ) -> BrowserContext:
         browser = await self.get_browser()
 
-        storage_state_dict = None
-        if encrypted_storage_state:
-            try:
-                storage_state_dict = session_encryptor.decrypt_json(encrypted_storage_state)
-            except Exception:
-                try:
-                    storage_state_dict = (
-                        json.loads(encrypted_storage_state)
-                        if isinstance(encrypted_storage_state, str)
-                        else encrypted_storage_state
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to decrypt storage_state: {e}. Launching clean context.")
+        storage_state_dict = _resolve_storage_state(encrypted_storage_state)
 
         context = await browser.new_context(
             storage_state=storage_state_dict,
@@ -228,12 +256,7 @@ class PlaywrightBrowserManager:
         Creates a BrowserContext and initial Page.
         Supports headed mode for interactive user logins and OTP resolution.
         """
-        storage_state_dict = None
-        if encrypted_storage_state:
-            try:
-                storage_state_dict = session_encryptor.decrypt_json(encrypted_storage_state)
-            except Exception as e:
-                logger.warning(f"Failed to decrypt storage_state: {e}")
+        storage_state_dict = _resolve_storage_state(encrypted_storage_state)
 
         if not headless:
             if self._needs_bridge():
@@ -316,19 +339,7 @@ class PlaywrightBrowserManager:
         Injects decrypted session cookies and stealth evasion scripts.
         """
         if not headless:
-            storage_state_dict = None
-            if encrypted_storage_state:
-                try:
-                    storage_state_dict = session_encryptor.decrypt_json(encrypted_storage_state)
-                except Exception:
-                    try:
-                        storage_state_dict = (
-                            json.loads(encrypted_storage_state)
-                            if isinstance(encrypted_storage_state, str)
-                            else encrypted_storage_state
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to decrypt storage_state: {e}")
+            storage_state_dict = _resolve_storage_state(encrypted_storage_state)
 
             if self._needs_bridge():
                 if not self._proactor_bridge:

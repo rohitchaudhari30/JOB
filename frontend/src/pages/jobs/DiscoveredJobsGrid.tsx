@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Job } from '../../types';
 import { JobCard } from './JobCard';
+import { CardSkeleton } from '../../components/ui/Skeleton';
 type CardProps = React.ComponentProps<typeof JobCard>;
 
 interface Props {
@@ -46,7 +47,14 @@ export const DiscoveredJobsGrid: React.FC<Props> = ({
 }) => (
   <>
     {loading ? (
-      <div className="text-center py-16 text-slate-500 text-xs">Loading fresh jobs...</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" role="status" aria-label="Loading fresh jobs">
+        <CardSkeleton />
+        <CardSkeleton />
+        <CardSkeleton />
+        <CardSkeleton />
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
     ) : displayedJobs.length === 0 ? (
       <div className="text-center py-16 bg-white dark:bg-slate-900/30 rounded-3xl border border-slate-200/80 dark:border-slate-800 text-slate-500 text-xs shadow-sm">
         {filterMinFit

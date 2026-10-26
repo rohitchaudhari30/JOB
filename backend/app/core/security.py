@@ -132,7 +132,11 @@ class SessionStorageEncryptor:
         ciphertext = raw_payload[12:]
         for aesgcm in [self._aesgcm, *self._old_aesgcms]:
             try:
-                return aesgcm.decrypt(nonce, ciphertext, None).decode("utf-8")
+                decrypted_str = aesgcm.decrypt(nonce, ciphertext, None).decode("utf-8")
+                try:
+                    return json.loads(decrypted_str)
+                except Exception:
+                    return decrypted_str
             except InvalidTag:
                 continue  # wrong key: try the next (older) one
         raise ValueError("Could not decrypt: the data was encrypted with an unknown key.")
@@ -144,8 +148,10 @@ class SessionStorageEncryptor:
         return self.decrypt(encrypted_b64)
 
     def decrypt_json(self, encrypted_b64: str) -> dict:
-        plain_text = self.decrypt(encrypted_b64)
-        return json.loads(plain_text)
+        plain = self.decrypt(encrypted_b64)
+        if isinstance(plain, dict):
+            return plain
+        return json.loads(plain)
 
 
 session_encryptor = SessionStorageEncryptor()

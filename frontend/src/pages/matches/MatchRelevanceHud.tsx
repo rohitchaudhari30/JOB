@@ -1,106 +1,191 @@
 import React from 'react';
-import { Sparkles, Check, Info } from 'lucide-react';
+import { Sparkles, Check, Info, Briefcase, Award } from 'lucide-react';
 
-interface Props {
+export interface MatchRelevanceHudProps {
   score: number;
-  verdictText: string;
-  ringColor: string;
+  verdictText?: string;
+  matchedSkillsCount?: number;
+  totalSkillsCount?: number;
+  experienceText?: string;
+  skillScore?: number;
+  experienceScore?: number;
 }
 
-export const MatchRelevanceHud: React.FC<Props> = ({ score, verdictText, ringColor }) => {
-  const glowShadow =
-    score >= 75
-      ? 'drop-shadow(0 0 6px rgba(52, 211, 153, 0.7))'
-      : score >= 50
-      ? 'drop-shadow(0 0 6px rgba(251, 191, 36, 0.7))'
-      : 'drop-shadow(0 0 6px rgba(244, 63, 94, 0.7))';
+interface TierConfig {
+  label: string;
+  badgeLabel: string;
+  ringClass: string;
+  trackClass: string;
+  badgeClass: string;
+  accentBg: string;
+  icon: React.ReactNode;
+}
+
+const getTierConfig = (score: number): TierConfig => {
+  if (score >= 80) {
+    return {
+      label: 'Top Match',
+      badgeLabel: 'Top 1% Fit',
+      ringClass: 'text-emerald-500 dark:text-emerald-400',
+      trackClass: 'stroke-emerald-100/90 dark:stroke-emerald-950/60',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
+      accentBg: 'from-emerald-500/10 via-emerald-500/5 to-transparent',
+      icon: <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />,
+    };
+  }
+  if (score >= 65) {
+    return {
+      label: 'Strong Fit',
+      badgeLabel: 'High Priority',
+      ringClass: 'text-indigo-600 dark:text-indigo-400',
+      trackClass: 'stroke-indigo-100/90 dark:stroke-indigo-950/60',
+      badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800',
+      accentBg: 'from-indigo-500/10 via-indigo-500/5 to-transparent',
+      icon: <Check className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />,
+    };
+  }
+  if (score >= 50) {
+    return {
+      label: 'Good Match',
+      badgeLabel: 'Potential Fit',
+      ringClass: 'text-amber-500 dark:text-amber-400',
+      trackClass: 'stroke-amber-100/90 dark:stroke-amber-950/60',
+      badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
+      accentBg: 'from-amber-500/10 via-amber-500/5 to-transparent',
+      icon: <Check className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />,
+    };
+  }
+  return {
+    label: 'Needs Review',
+    badgeLabel: 'Exploratory',
+    ringClass: 'text-slate-400 dark:text-slate-500',
+    trackClass: 'stroke-slate-200 dark:stroke-slate-800',
+    badgeClass: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
+    accentBg: 'from-slate-500/5 to-transparent',
+    icon: null,
+  };
+};
+
+export const MatchRelevanceHud: React.FC<MatchRelevanceHudProps> = ({
+  score,
+  verdictText,
+  matchedSkillsCount,
+  totalSkillsCount,
+  experienceText,
+}) => {
+  const clampedScore = Math.max(0, Math.min(100, Math.round(score)));
+  const tier = getTierConfig(clampedScore);
+  const displayLabel = verdictText || tier.label;
+
+  const hasSkillData = totalSkillsCount !== undefined && totalSkillsCount > 0;
+  const hasExpData = Boolean(experienceText && experienceText.trim());
 
   return (
-    <div className="w-full md:w-52 shrink-0 bg-gradient-to-b from-[#0b1120] via-[#070b16] to-[#04060c] text-white p-5 flex flex-col items-center justify-center text-center border-t md:border-t-0 md:border-l border-white/10 select-none relative overflow-hidden">
-      {/* Subtle ambient colored glow */}
+    <div
+      aria-label={`Match score: ${clampedScore} percent, ${displayLabel}`}
+      className="w-full md:w-60 lg:w-64 shrink-0 bg-slate-50/70 dark:bg-slate-900/60 border-t md:border-t-0 md:border-l border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 flex flex-col items-center justify-between text-center select-none relative overflow-hidden transition-colors"
+    >
+      {/* Subtle contextual ambient gradient at top */}
       <div
-        className={`absolute w-24 h-24 rounded-full blur-2xl opacity-25 pointer-events-none -top-2 ${
-          score >= 75 ? 'bg-emerald-400' : score >= 50 ? 'bg-amber-400' : 'bg-rose-500'
-        }`}
+        className={`absolute inset-x-0 top-0 h-20 bg-gradient-to-b ${tier.accentBg} pointer-events-none transition-all duration-500`}
       />
 
-      {/* Header with Info Icon */}
-      <div className="text-[10px] font-extrabold tracking-[0.14em] text-slate-400 uppercase flex items-center gap-1.5 mb-1.5 relative z-10">
-        <span>PROFILE RELEVANCE</span>
+      {/* Top Header Label with Tooltip */}
+      <div className="w-full flex items-center justify-between text-[11px] font-bold tracking-wider text-slate-500 dark:text-slate-400 uppercase relative z-10">
+        <span className="flex items-center gap-1.5">
+          <Award className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+          <span>Match Score</span>
+        </span>
         <span
-          title="Multidimensional score calculated from skill match, experience alignment, and semantic relevance"
-          className="cursor-help inline-flex"
+          title="Calculated from your skills match, experience alignment, and role requirements"
+          className="cursor-help inline-flex text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
         >
-          <Info className="w-3 h-3 text-slate-500 hover:text-slate-300 transition-colors" />
+          <Info className="w-3.5 h-3.5" />
         </span>
       </div>
 
-      {/* High-Definition Circular Progress Gauge with Prominent Percentage */}
-      <div className="relative w-20 h-20 flex items-center justify-center my-1 select-none z-10">
+      {/* Modern Circular Progress Gauge */}
+      <div className="relative w-20 h-20 my-2 flex items-center justify-center select-none z-10">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+          {/* Subtle background track */}
           <circle
             cx="18"
             cy="18"
             r="15.9155"
-            className="text-slate-800/90"
+            className={tier.trackClass}
             strokeWidth="3.2"
-            stroke="currentColor"
             fill="none"
           />
+          {/* Animated progress ring */}
           <circle
             cx="18"
             cy="18"
             r="15.9155"
-            className={`${ringColor} transition-all duration-500`}
-            strokeWidth="3.5"
-            strokeDasharray={`${score}, 100`}
+            className={`${tier.ringClass} transition-all duration-700 ease-out`}
+            strokeWidth="3.4"
+            strokeDasharray={`${clampedScore}, 100`}
             strokeLinecap="round"
             stroke="currentColor"
             fill="none"
-            style={{ filter: glowShadow }}
           />
         </svg>
 
-        {/* Large, High-Contrast Percentage Typography */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        {/* Center Percentage Display */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <div className="flex items-baseline justify-center">
-            <span className="text-2xl font-black text-white tracking-tight leading-none drop-shadow-sm font-sans">
-              {score}
+            <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-none font-sans">
+              {clampedScore}
             </span>
-            <span className="text-xs font-extrabold text-slate-300 ml-0.5 leading-none">
+            <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400 ml-0.5 leading-none">
               %
             </span>
           </div>
         </div>
       </div>
 
-      {/* Match Verdict */}
-      <div className="text-xs font-black tracking-wider text-white mt-1 uppercase relative z-10 drop-shadow-xs">
-        {verdictText}
+      {/* Unified Tier Status Badge */}
+      <div className="relative z-10 mb-2">
+        <span
+          className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1 rounded-full border shadow-2xs ${tier.badgeClass}`}
+        >
+          {tier.icon}
+          <span>{displayLabel}</span>
+        </span>
       </div>
 
-      {/* Polished Contextual Highlight Pill Badge */}
-      <div className="mt-2.5 relative z-10">
-        {score >= 80 ? (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-3 py-1 rounded-full border border-amber-400/40 bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 text-amber-300 shadow-xs">
-            <Sparkles className="w-2.5 h-2.5 text-amber-400 fill-amber-400 shrink-0" />
-            <span>Top 1% for you</span>
-          </span>
-        ) : score >= 65 ? (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-3 py-1 rounded-full border border-emerald-400/40 bg-gradient-to-r from-emerald-500/20 via-teal-500/15 to-emerald-500/20 text-emerald-300 shadow-xs">
-            <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-            <span>High Priority</span>
-          </span>
-        ) : score >= 50 ? (
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-3 py-1 rounded-full border border-amber-500/30 bg-amber-500/15 text-amber-300/90 shadow-xs">
-            <span>Potential Fit</span>
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-0.5 rounded-full border border-slate-700 bg-slate-800/80 text-slate-400">
-            <span>Needs Review</span>
-          </span>
-        )}
-      </div>
+      {/* Explanatory Micro-Metrics (Why this score?) */}
+      {(hasSkillData || hasExpData) && (
+        <div className="w-full pt-2.5 border-t border-slate-200/80 dark:border-slate-800/80 grid grid-cols-2 gap-2 text-left relative z-10">
+          {hasSkillData && (
+            <div className="bg-white/90 dark:bg-slate-800/80 rounded-xl px-2.5 py-1.5 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
+              <span className="block text-[9px] font-bold tracking-wider uppercase text-slate-400 dark:text-slate-400">
+                Skills
+              </span>
+              <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1 mt-0.5 whitespace-nowrap">
+                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>
+                  {matchedSkillsCount ?? 0}/{totalSkillsCount}
+                </span>
+              </span>
+            </div>
+          )}
+
+          {hasExpData && (
+            <div className="bg-white/90 dark:bg-slate-800/80 rounded-xl px-2.5 py-1.5 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
+              <span className="block text-[9px] font-bold tracking-wider uppercase text-slate-400 dark:text-slate-400">
+                Exp Range
+              </span>
+              <span
+                className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1 mt-0.5 whitespace-nowrap"
+                title={`Experience requirement: ${experienceText}`}
+              >
+                <Briefcase className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                <span className="whitespace-nowrap font-black">{experienceText}</span>
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

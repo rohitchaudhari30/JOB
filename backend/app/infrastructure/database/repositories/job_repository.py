@@ -1,10 +1,61 @@
+import re
 from typing import List
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_, and_, not_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.jobs.entities import Job, JobSource
 from app.domain.jobs.repositories import JobRepository, JobSourceRepository
 from app.infrastructure.database.models.models import JobModel, JobSourceModel
+
+
+def expand_role_aliases(role: str) -> list[str]:
+    """Expands a single role query string into a list of equivalent role titles
+    without generating loose single-word false positives.
+    """
+    if not role or not role.strip():
+        return []
+    role_norm = role.strip().lower()
+    expanded = {role_norm}
+
+    # Common multi-word compound equivalents
+    compounds = [
+        (["frontend", "front-end", "front end"], ["developer", "engineer", "software engineer"]),
+        (["backend", "back-end", "back end"], ["developer", "engineer", "software engineer"]),
+        (["fullstack", "full-stack", "full stack"], ["developer", "engineer", "software engineer"]),
+        (["software"], ["developer", "engineer", "development engineer", "sde"]),
+        (["mobile"], ["developer", "engineer", "app developer", "app engineer"]),
+        (["cloud"], ["engineer", "architect", "developer"]),
+    ]
+
+    for prefixes, suffixes in compounds:
+        matched_prefix = None
+        for p in prefixes:
+            if role_norm.startswith(p):
+                rest = role_norm[len(p):].strip()
+                for s in suffixes:
+                    if rest == s or rest.startswith(s):
+                        matched_prefix = p
+                        break
+            if matched_prefix:
+                break
+        if matched_prefix:
+            for p in prefixes:
+                for s in suffixes:
+                    expanded.add(f"{p} {s}")
+            break
+
+    # Direct whole-phrase or acronym aliases
+    exact_alias_groups = [
+        {"qa", "sdet", "quality assurance", "qa engineer", "sdet engineer", "qa automation"},
+        {"devops", "devops engineer", "sre", "site reliability engineer"},
+        {"data engineer", "big data engineer"},
+        {"ml engineer", "machine learning engineer", "ai engineer"},
+    ]
+    for group in exact_alias_groups:
+        if role_norm in group:
+            expanded.update(group)
+
+    return sorted(expanded)
 
 
 class SqlAlchemyJobRepository(JobRepository):
@@ -196,22 +247,83 @@ class SqlAlchemyJobRepository(JobRepository):
         self,
         stmt,
         search: str | None = None,
+        role: str | None = None,
+        min_experience: float | None = None,
+        max_experience: float | None = None,
         location: str | None = None,
         source_id: str | None = None,
         posted_within: str | None = None,
         freshness_bucket: str | None = None,
+        exclude_job_ids: list[str] | None = None,
     ):
         from datetime import datetime, timedelta, timezone
         stmt = stmt.where(JobModel.is_active == True, JobModel.lifecycle_state == "ACTIVE")
+
+        if exclude_job_ids:
+            stmt = stmt.where(JobModel.id.not_in(exclude_job_ids))
 
         if search:
             stmt = stmt.where(
                 (JobModel.title.ilike(f"%{search}%")) | (JobModel.company.ilike(f"%{search}%"))
             )
+
+        if role:
+            role_items = [r.strip() for r in role.split(",") if r.strip()]
+            if role_items:
+                role_clauses = []
+                for r in role_items:
+                    aliases = expand_role_aliases(r)
+                    for alias in aliases:
+                        role_clauses.append(JobModel.title.ilike(f"%{alias}%"))
+                        tokens = [t for t in re.findall(r'\b[a-zA-Z]{3,}\b', alias) if t.lower() not in ('and', 'the', 'for', 'with')]
+                        if len(tokens) >= 2:
+                            role_clauses.append(and_(*(JobModel.title.ilike(f"%{t}%") for t in tokens)))
+                stmt = stmt.where(or_(*role_clauses))
+
+        cand_baseline = None
+        if min_experience is not None:
+            cand_baseline = min_experience
+        elif max_experience is not None:
+            cand_baseline = max(0.0, max_experience - 2.0)
+
+        if max_experience is not None:
+            stmt = stmt.where(
+                or_(
+                    JobModel.min_experience_years == None,
+                    JobModel.min_experience_years <= (max_experience + 1.0)
+                )
+            )
+
+        if cand_baseline is not None and cand_baseline <= 3.5:
+            senior_markers = ["%director%", "%vice president%", "%vp %", "%head of%", "%principal%", "%staff engineer%", "%chief%", "%architect%"]
+            for marker in senior_markers:
+                stmt = stmt.where(not_(JobModel.title.ilike(marker)))
+
+        if min_experience is not None and min_experience > 0:
+            stmt = stmt.where(
+                or_(
+                    JobModel.max_experience_years == None,
+                    JobModel.max_experience_years == 0,
+                    JobModel.max_experience_years >= max(0.5, min_experience - 1.5)
+                )
+            )
+
         if location:
-            stmt = stmt.where(JobModel.location.ilike(f"%{location}%"))
-        if source_id:
-            stmt = stmt.where(JobModel.source_id == source_id)
+            loc_items = [l.strip() for l in re.split(r'[,/|]', location) if l.strip()]
+            if loc_items:
+                loc_clauses = []
+                for loc in loc_items:
+                    loc_clauses.append(JobModel.location.ilike(f"%{loc}%"))
+                if any(loc.lower() == "remote" for loc in loc_items):
+                    loc_clauses.append(JobModel.location.ilike("%remote%"))
+                stmt = stmt.where(or_(*loc_clauses))
+
+        if source_id and source_id.lower() not in ("all", "*"):
+            if "," in source_id:
+                sources = [s.strip().lower() for s in source_id.split(",") if s.strip()]
+                stmt = stmt.where(JobModel.source_id.in_(sources))
+            else:
+                stmt = stmt.where(JobModel.source_id == source_id.lower())
         if freshness_bucket:
             stmt = stmt.where(JobModel.freshness_bucket == freshness_bucket)
 
@@ -250,20 +362,28 @@ class SqlAlchemyJobRepository(JobRepository):
         skip: int = 0,
         limit: int = 50,
         search: str | None = None,
+        role: str | None = None,
+        min_experience: float | None = None,
+        max_experience: float | None = None,
         location: str | None = None,
         source_id: str | None = None,
         posted_within: str | None = None,
         freshness_bucket: str | None = None,
         sort_by: str | None = "newest",
+        exclude_job_ids: list[str] | None = None,
     ) -> List[Job]:
         stmt = select(JobModel).options(selectinload(JobModel.source))
         stmt = self._apply_filters(
             stmt,
             search=search,
+            role=role,
+            min_experience=min_experience,
+            max_experience=max_experience,
             location=location,
             source_id=source_id,
             posted_within=posted_within,
             freshness_bucket=freshness_bucket,
+            exclude_job_ids=exclude_job_ids,
         )
 
         sb = (sort_by or "newest").lower()
@@ -286,19 +406,27 @@ class SqlAlchemyJobRepository(JobRepository):
     async def count_jobs(
         self,
         search: str | None = None,
+        role: str | None = None,
+        min_experience: float | None = None,
+        max_experience: float | None = None,
         location: str | None = None,
         source_id: str | None = None,
         posted_within: str | None = None,
         freshness_bucket: str | None = None,
+        exclude_job_ids: list[str] | None = None,
     ) -> int:
         stmt = select(func.count(JobModel.id))
         stmt = self._apply_filters(
             stmt,
             search=search,
+            role=role,
+            min_experience=min_experience,
+            max_experience=max_experience,
             location=location,
             source_id=source_id,
             posted_within=posted_within,
             freshness_bucket=freshness_bucket,
+            exclude_job_ids=exclude_job_ids,
         )
         result = await self._session.execute(stmt)
         return result.scalar() or 0

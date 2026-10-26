@@ -14,30 +14,6 @@ export function PlatformIcon({ platform }: { platform: string }) {
           in
         </div>
       );
-    case 'greenhouse':
-      return (
-        <div className="w-10 h-10 rounded-2xl bg-[#008744] text-white font-black text-sm flex items-center justify-center shadow-sm">
-          GH
-        </div>
-      );
-    case 'lever':
-      return (
-        <div className="w-10 h-10 rounded-2xl bg-[#4F46E5] text-white font-black text-sm flex items-center justify-center shadow-sm">
-          LV
-        </div>
-      );
-    case 'workday':
-      return (
-        <div className="w-10 h-10 rounded-2xl bg-[#0284C7] text-white font-black text-sm flex items-center justify-center shadow-sm">
-          WD
-        </div>
-      );
-    case 'ashby':
-      return (
-        <div className="w-10 h-10 rounded-2xl bg-[#EA580C] text-white font-black text-sm flex items-center justify-center shadow-sm">
-          AS
-        </div>
-      );
     default:
       return (
         <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center shadow-sm">

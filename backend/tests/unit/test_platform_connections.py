@@ -11,7 +11,7 @@ from app.infrastructure.connections.manifests import PlatformManifestRegistry, S
 
 def test_platform_manifest_registry():
     manifests = PlatformManifestRegistry.list_all()
-    assert len(manifests) >= 6
+    assert len(manifests) == 2
 
     # Verify Naukri Manifest
     naukri = PlatformManifestRegistry.get("naukri")
@@ -22,20 +22,7 @@ def test_platform_manifest_registry():
     assert PlatformCapability.JOB_SEARCH in naukri.capabilities
     assert PlatformCapability.APPLICATION in naukri.capabilities
 
-    # Verify Greenhouse Manifest (Type B ATS)
-    greenhouse = PlatformManifestRegistry.get("greenhouse")
-    assert greenhouse is not None
-    assert greenhouse.category == PlatformCategory.ATS_APPLICATION
-    assert greenhouse.is_auth_required is False
-    assert greenhouse.connection_type == ConnectionType.PUBLIC_ACCESS
-
-
-def test_unknown_platform_returns_none():
-    unknown = PlatformManifestRegistry.get("non_existent_portal_123")
-    assert unknown is None
-
-
-def test_linkedin_platform_manifest():
+    # Verify LinkedIn Manifest
     linkedin = PlatformManifestRegistry.get("linkedin")
     assert linkedin is not None
     assert linkedin.platform_id == "linkedin"
@@ -45,20 +32,26 @@ def test_linkedin_platform_manifest():
     assert PlatformCapability.APPLICATION in linkedin.capabilities
 
 
+def test_unknown_platform_returns_none():
+    unknown = PlatformManifestRegistry.get("non_existent_portal_123")
+    assert unknown is None
+
+
 def test_session_state_encryption_and_decryption_roundtrip():
     from app.core.security import session_encryptor
     mock_storage_state = {
         "cookies": [
-            {"name": "li_at", "value": "mock_linkedin_cookie_123", "domain": ".linkedin.com"},
-            {"name": "naukri_auth", "value": "mock_naukri_token_456", "domain": ".naukri.com"},
+            {"name": "li_at", "value": "AQEDAT...secret_linkedin_session", "domain": ".linkedin.com"}
         ],
         "origins": []
     }
-    encrypted = session_encryptor.encrypt_storage_state(mock_storage_state)
-    assert isinstance(encrypted, str)
-    assert encrypted != ""
 
-    decrypted = session_encryptor.decrypt_json(encrypted)
-    assert decrypted == mock_storage_state
-    assert decrypted["cookies"][0]["name"] == "li_at"
-    assert decrypted["cookies"][1]["name"] == "naukri_auth"
+    # Encrypt
+    encrypted_payload = session_encryptor.encrypt(mock_storage_state)
+    assert isinstance(encrypted_payload, str)
+    assert "AQEDAT" not in encrypted_payload  # Plaintext token must not be leaked
+
+    # Decrypt
+    decrypted_state = session_encryptor.decrypt(encrypted_payload)
+    assert decrypted_state == mock_storage_state
+    assert decrypted_state["cookies"][0]["value"] == "AQEDAT...secret_linkedin_session"

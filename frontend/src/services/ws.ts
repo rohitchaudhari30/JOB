@@ -40,6 +40,8 @@ class WebSocketClient {
 
   async connect() {
     this.isExplicitClose = false;
+    const token = getAccessToken();
+    if (!token) return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
 

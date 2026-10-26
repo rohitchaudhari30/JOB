@@ -33,7 +33,7 @@ async def test_campaign_api_lifecycle(client: AsyncClient):
             "target_locations": ["Bangalore", "Remote"],
             "mandatory_skills": ["Python", "FastAPI", "PostgreSQL"],
             "excluded_keywords": ["PHP", "WordPress"],
-            "target_platforms": ["naukri", "greenhouse"],
+            "target_platforms": ["naukri", "linkedin"],
         },
         "safety_policy": {
             "daily_application_limit": 15,

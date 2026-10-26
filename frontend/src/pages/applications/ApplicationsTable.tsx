@@ -4,6 +4,7 @@ import { ChevronDown, ArrowUpDown, Briefcase } from 'lucide-react';
 import type { Application } from '../../types';
 import { Pagination } from '../../components/ui/Pagination';
 import { ApplicationRow } from './ApplicationRow';
+import { Skeleton } from '../../components/ui/Skeleton';
 type RowProps = React.ComponentProps<typeof ApplicationRow>;
 
 interface Props {
@@ -35,11 +36,13 @@ interface Props {
   setSelectedAppForRationale: RowProps['onRationale'];
   setSelectedAppForReconciliation: RowProps['onReconcile'];
   openScreenshotPreview: RowProps['onScreenshot'];
+  selectedAppId?: string | null;
   onNavigate: ((tab: any) => void) | undefined;
 }
 
 export const ApplicationsTable: React.FC<Props> = ({
   loading,
+  selectedAppId,
   applications,
   filteredApplications,
   paginatedApplications,
@@ -152,7 +155,20 @@ export const ApplicationsTable: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
-              {paginatedApplications.length === 0 ? (
+              {loading ? (
+                Array.from({ length: pageSize || 5 }).map((_, idx) => (
+                  <tr key={idx} className="animate-pulse">
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-4 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-36 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-28 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-20 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-5 w-20 rounded-full" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-12 rounded" /></td>
+                    <td className="py-3 px-4"><Skeleton className="h-4 w-16 rounded" /></td>
+                    <td className="py-3 px-4 text-right"><Skeleton className="h-7 w-20 rounded-lg ml-auto" /></td>
+                  </tr>
+                ))
+              ) : paginatedApplications.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-14 px-4 text-center">
                     <div className="max-w-sm mx-auto space-y-3">
@@ -214,6 +230,7 @@ export const ApplicationsTable: React.FC<Props> = ({
                   <ApplicationRow
                     key={app.id}
                     app={app}
+                    isSelected={selectedAppId === app.id}
                     fallbackScore={matchScores.get(app.job_id)}
                     isExpanded={expandedReasonId === app.id}
                     onToggleReason={setExpandedReasonId}

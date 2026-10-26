@@ -17,17 +17,17 @@ async def test_connections_api_lifecycle(client: AsyncClient):
     res = await client.get("/api/v1/connections", headers=headers)
     assert res.status_code == 200
     data = res.json()
-    assert len(data) >= 6
+    assert len(data) == 2
 
     naukri_item = next((item for item in data if item["platform"] == "naukri"), None)
     assert naukri_item is not None
     assert naukri_item["category"] == "PORTAL_DISCOVERY"
     assert naukri_item["is_auth_required"] is True
 
-    greenhouse_item = next((item for item in data if item["platform"] == "greenhouse"), None)
-    assert greenhouse_item is not None
-    assert greenhouse_item["category"] == "ATS_APPLICATION"
-    assert greenhouse_item["status"] == "CONNECTED"  # Type B public access is auto-ready
+    linkedin_item = next((item for item in data if item["platform"] == "linkedin"), None)
+    assert linkedin_item is not None
+    assert linkedin_item["category"] == "PORTAL_DISCOVERY"
+    assert linkedin_item["is_auth_required"] is True
 
     # 2. A platform that was never connected is NOT_CONNECTED (not "reauth required")
     verify_res = await client.post("/api/v1/connections/naukri/verify", headers=headers)

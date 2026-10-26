@@ -47,22 +47,12 @@ class AdapterRegistry:
 
 adapter_registry = AdapterRegistry()
 
-# Register core platform adapters
-from app.infrastructure.browser.adapters.ashby import AshbyAdapter
-from app.infrastructure.browser.adapters.greenhouse import GreenhouseAdapter, GreenhouseApplicationAdapter
-from app.infrastructure.browser.adapters.lever import LeverAdapter
+# Register core platform adapters: Naukri and LinkedIn only
 from app.infrastructure.browser.adapters.linkedin import LinkedInAdapter, LinkedInApplicationAdapter
 from app.infrastructure.browser.adapters.naukri import NaukriAdapter, NaukriApplicationAdapter
-from app.infrastructure.browser.adapters.workday import WorkdayAdapter
 
 adapter_registry.register_source("naukri", NaukriAdapter)
 adapter_registry.register_source("linkedin", LinkedInAdapter)
-adapter_registry.register_source("greenhouse", GreenhouseAdapter)
-adapter_registry.register_source("lever", LeverAdapter)
-adapter_registry.register_source("workday", WorkdayAdapter)
-adapter_registry.register_source("ashby", AshbyAdapter)
 
 adapter_registry.register_application("naukri", NaukriApplicationAdapter)
 adapter_registry.register_application("linkedin", LinkedInApplicationAdapter)
-adapter_registry.register_application("greenhouse", GreenhouseApplicationAdapter)
-

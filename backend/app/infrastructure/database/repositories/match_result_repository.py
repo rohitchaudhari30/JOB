@@ -111,6 +111,8 @@ class SqlAlchemyMatchResultRepository(MatchResultRepository):
             location=job.location if job else None,
             apply_url=job.apply_url if job else None,
             raw_posted_text=job.raw_posted_text if job else None,
+            min_experience_years=getattr(job, "min_experience_years", None) if job else None,
+            max_experience_years=getattr(job, "max_experience_years", None) if job else None,
         )
 
     async def get_by_user_and_job(self, user_id: str, job_id: str) -> MatchResult | None:
@@ -266,6 +268,8 @@ class SqlAlchemyMatchResultRepository(MatchResultRepository):
                     entity.location = match.location
                     entity.apply_url = match.apply_url
                     entity.raw_posted_text = match.raw_posted_text
+                    entity.min_experience_years = match.min_experience_years
+                    entity.max_experience_years = match.max_experience_years
                 return entity
             raise
 
@@ -276,6 +280,8 @@ class SqlAlchemyMatchResultRepository(MatchResultRepository):
             entity.location = match.location
             entity.apply_url = match.apply_url
             entity.raw_posted_text = match.raw_posted_text
+            entity.min_experience_years = match.min_experience_years
+            entity.max_experience_years = match.max_experience_years
         return entity
 
     @staticmethod

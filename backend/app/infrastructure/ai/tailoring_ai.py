@@ -36,7 +36,7 @@ Rules you must follow:
 - Only change lines marked EDITABLE. Never touch names, contact details, dates, employers, job titles or degrees.
 - Only use skills, tools, numbers and achievements that already appear in the resume lines or in the confirmed facts. Never add a \
 skill just because the job asks for it. Never invent or change a number.
-- Reword to make something the resume ALREADY says clearer or more prominent for this job. Keep each line about the same length.
+- Reword to make something the resume ALREADY says clearer or more prominent for this job. Keep each line about the same length (within +/- 5% characters). Never add extra lines or filler that causes page overflow. Retain the candidate's authentic arrangement and phrasing, only weaving in target job keywords where they naturally fit.
 - Category "A" = wording of something already in the resume. Category "B" = uses a confirmed fact (cite its fact_id).
 - Every REWORD needs evidence: an exact quote from a resume line, or a confirmed fact id.
 - Propose at most 12 edits, only ones that clearly help for this job. Fewer good edits are better than many weak ones. If nothing \

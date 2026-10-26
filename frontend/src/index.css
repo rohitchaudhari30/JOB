@@ -1,9 +1,9 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /* Design tokens (redesign §16). New components use these; existing pages
+  /* Design tokens (redesign Â§16). New components use these; existing pages
      migrate incrementally. Text tokens are chosen to stay >=4.5:1 on surface. */
   :root {
     color-scheme: light;
@@ -272,4 +272,13 @@
   width: max(100%, 2rem);
   height: max(100%, 2rem);
   transform: translate(-50%, -50%);
+}
+
+@keyframes shimmerWave {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer {
+  animation: shimmerWave 1.6s ease-in-out infinite;
 }

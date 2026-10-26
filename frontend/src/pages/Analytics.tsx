@@ -17,6 +17,7 @@ import { CampaignsSection } from './analytics/CampaignsSection';
 import { SkillsSection } from './analytics/SkillsSection';
 import { ScoringSection } from './analytics/ScoringSection';
 import { InsightsFilterBar, describeRange, type DateRangePreset } from './analytics/InsightsFilterBar';
+import { TopProgressBar } from '../components/ui/Skeleton';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Tabs, TabPanel } from '../components/ui/Tabs';
 
@@ -153,7 +154,8 @@ export const Analytics: React.FC<AnalyticsProps> = ({ onNavigate }) => {
   }, [resumes]);
 
   return (
-    <div className="space-y-4 animate-fadeIn pb-16">
+    <div className="space-y-4 animate-fadeIn pb-16 relative">
+      <TopProgressBar active={refreshing} className="rounded-full" />
       {/* Clean, standard SaaS page header without cluttering subtitle */}
       <PageHeader title="Insights" />
 

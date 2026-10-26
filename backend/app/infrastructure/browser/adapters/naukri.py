@@ -40,6 +40,116 @@ class NaukriAdapter(BaseJobSourceAdapter):
             if page and not page.is_closed():
                 await page.close()
 
+    @staticmethod
+    def parse_naukri_json_ld(raw_json_strings: list[str]) -> list[dict]:
+        """Parses Schema.org JobPosting structured data from application/ld+json scripts.
+        Handles valid, malformed, empty, array, @graph, and duplicate entries safely.
+        """
+        import json
+        results = []
+        seen_keys = set()
+
+        for raw in raw_json_strings:
+            if not raw or not raw.strip():
+                continue
+            try:
+                data = json.loads(raw.strip())
+            except Exception:
+                continue
+
+            items = []
+            if isinstance(data, list):
+                items = data
+            elif isinstance(data, dict):
+                if "@graph" in data and isinstance(data["@graph"], list):
+                    items = data["@graph"]
+                else:
+                    items = [data]
+
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                type_val = item.get("@type") or item.get("type")
+                if type_val != "JobPosting":
+                    continue
+
+                title = (item.get("title") or item.get("name") or "").strip()
+                if not title:
+                    continue
+
+                url = item.get("url") or item.get("sameAs") or ""
+
+                ident = item.get("identifier")
+                card_job_id = ""
+                if isinstance(ident, dict):
+                    card_job_id = str(ident.get("value", "")).strip()
+                elif ident:
+                    card_job_id = str(ident).strip()
+
+                dedup_key = card_job_id or url or title
+                if dedup_key in seen_keys:
+                    continue
+                seen_keys.add(dedup_key)
+
+                org = item.get("hiringOrganization")
+                company = "Confidential Company"
+                if isinstance(org, dict):
+                    company = (org.get("name") or "Confidential Company").strip()
+                elif isinstance(org, str) and org.strip():
+                    company = org.strip()
+
+                loc_val = item.get("jobLocation")
+                location = "Any Location"
+                if isinstance(loc_val, str) and loc_val.strip():
+                    location = loc_val.strip()
+                elif isinstance(loc_val, dict):
+                    addr = loc_val.get("address")
+                    if isinstance(addr, str) and addr.strip():
+                        location = addr.strip()
+                    elif isinstance(addr, dict):
+                        locality = addr.get("addressLocality") or addr.get("addressRegion") or ""
+                        country = addr.get("addressCountry") or ""
+                        parts = [p.strip() for p in (locality, country) if p and str(p).strip()]
+                        if parts:
+                            location = ", ".join(parts)
+
+                exp_req = item.get("experienceRequirements") or item.get("occupationalCategory") or ""
+                exp_text = str(exp_req).strip() if exp_req else ""
+
+                sal_text = ""
+                sal_obj = item.get("baseSalary")
+                if isinstance(sal_obj, str):
+                    sal_text = sal_obj
+                elif isinstance(sal_obj, dict):
+                    val = sal_obj.get("value")
+                    if isinstance(val, dict):
+                        min_v = val.get("minValue")
+                        max_v = val.get("maxValue")
+                        if min_v and max_v:
+                            sal_text = f"{min_v}-{max_v}"
+                        elif min_v:
+                            sal_text = str(min_v)
+                    elif val:
+                        sal_text = str(val)
+
+                posted_text = item.get("datePosted") or ""
+                desc = item.get("description") or ""
+
+                results.append({
+                    "title": title,
+                    "href": url,
+                    "cardJobId": card_job_id,
+                    "company": company,
+                    "location": location,
+                    "description": desc,
+                    "postedText": posted_text,
+                    "cardText": f"{title} {company} {desc}",
+                    "expText": exp_text,
+                    "salText": sal_text,
+                })
+
+        return results
+
     def _build_search_url(self, filters: SearchQueryFilter, page_num: int = 1) -> str:
         # Sanitize role keywords
         roles = [re.sub(r'[^a-zA-Z0-9\s]', '', r).strip() for r in (filters.roles or ["software engineer"]) if r.strip()]
@@ -71,7 +181,7 @@ class NaukriAdapter(BaseJobSourceAdapter):
         if exp_target is not None:
             params["experience"] = exp_target
 
-        # Freshness filter (jobAge parameter in Naukri)
+        # Freshness filter (days posted mapped to Naukri jobAge)
         if filters.max_days_posted:
             if filters.max_days_posted <= 1:
                 params["jobAge"] = 1
@@ -221,6 +331,52 @@ class NaukriAdapter(BaseJobSourceAdapter):
                 if page.is_closed() or "closed" in str(extract_err).lower():
                     raise RuntimeError(f"Target page, context or browser has been closed: {extract_err}") from extract_err
                 raise extract_err
+
+            if len(raw_cards_data) == 0 and not page.is_closed():
+                try:
+                    json_ld_scripts = await page.evaluate('''
+                        () => Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+                            .map(s => s.innerText || s.textContent || "")
+                    ''')
+                    if json_ld_scripts:
+                        raw_cards_data = self.parse_naukri_json_ld(json_ld_scripts)
+                        if raw_cards_data:
+                            logger.info("Extracted %d jobs from Naukri JSON-LD structured data fallback", len(raw_cards_data))
+                except Exception as json_ld_err:
+                    logger.debug("Naukri JSON-LD fallback skipped: %s", json_ld_err)
+
+            if len(raw_cards_data) == 0 and not page.is_closed():
+                is_challenge = False
+                try:
+                    p_title = await page.title()
+                    p_url = page.url
+                    is_challenge = (
+                        "captcha" in p_url.lower()
+                        or "challenge" in p_title.lower()
+                        or "blocked" in p_title.lower()
+                        or "access denied" in p_title.lower()
+                        or "forbidden" in p_title.lower()
+                        or "security check" in p_title.lower()
+                        or "attention required" in p_title.lower()
+                    )
+                    has_zero_msg = await page.evaluate("() => document.body.innerText.includes('find any jobs') || document.body.innerText.includes('No jobs found')")
+                    if is_challenge:
+                        logger.warning(
+                            "Naukri discovery blocked by platform anti-bot / WAF challenge: title='%s', url='%s', anti_bot_challenge=True. Session authentication or manual login required.",
+                            p_title, p_url
+                        )
+                        raise RuntimeError(
+                            f"Naukri blocked discovery with anti-bot challenge (title='{p_title}'). Please connect or re-authenticate your Naukri account in Settings/Connections."
+                        )
+                    else:
+                        logger.warning(
+                            "Naukri discovery returned 0 cards. Diagnostic: url='%s', title='%s', anti_bot_challenge=%s, zero_msg_in_dom=%s",
+                            p_url, p_title, is_challenge, has_zero_msg
+                        )
+                except Exception as diag_err:
+                    if is_challenge or "blocked discovery" in str(diag_err):
+                        raise
+                    logger.debug("Diagnostic inspect skipped: %s", diag_err)
 
             logger.info("search_completed", extra={"platform": "naukri", "run_id": run_id, "cards_count": len(raw_cards_data)})
 

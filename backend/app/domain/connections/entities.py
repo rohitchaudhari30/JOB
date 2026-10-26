@@ -31,8 +31,8 @@ class PlatformCapability(str, Enum):
 
 
 class PlatformCategory(str, Enum):
-    PORTAL_DISCOVERY = "PORTAL_DISCOVERY"  # Type A: Naukri, LinkedIn, Indeed
-    ATS_APPLICATION = "ATS_APPLICATION"    # Type B: Greenhouse, Lever, Workday, Ashby
+    PORTAL_DISCOVERY = "PORTAL_DISCOVERY"  # Naukri, LinkedIn
+    ATS_APPLICATION = "ATS_APPLICATION"
 
 
 class PlatformManifest(BaseModel):

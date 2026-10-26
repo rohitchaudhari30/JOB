@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.applications.entities import Application, WorkflowStateEnum, ApplicationOutcomeStatus
 from app.infrastructure.browser.adapters.naukri import NaukriApplicationAdapter
 from app.infrastructure.browser.adapters.linkedin import LinkedInApplicationAdapter
-from app.infrastructure.browser.adapters.greenhouse import GreenhouseApplicationAdapter
 from app.application.applications.use_cases import ExecuteApplicationUseCase
 from app.infrastructure.browser.dom_analyzer import DOMAnalyzer
 
@@ -204,61 +203,6 @@ async def test_linkedin_adapter_misleading_buttons_inconclusive():
         await page.set_content(html)
         adapter = LinkedInApplicationAdapter()
         res = await adapter.verify_submission(page, original_url="https://www.linkedin.com/jobs/view/1")
-        assert res is None
-        await browser.close()
-
-
-# =========================================================================
-# 3. GREENHOUSE ATS HTML FIXTURE TESTS
-# =========================================================================
-
-@pytest.mark.asyncio
-async def test_greenhouse_adapter_positive_url_confirmation():
-    """Greenhouse redirect to /thanks page."""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        html = """
-        <!DOCTYPE html>
-        <html>
-        <body>
-            <h1>Thank You!</h1>
-            <p>Your application has been received by our hiring team.</p>
-        </body>
-        </html>
-        """
-        await page.set_content(html)
-        # Simulate /thanks URL
-        adapter = GreenhouseApplicationAdapter()
-        # Page url in playwright set_content is 'about:blank' unless navigated, test text check:
-        res = await adapter.verify_submission(page, original_url="https://boards.greenhouse.io/stripe/jobs/1")
-        assert res is not None
-        confirmed, message = res
-        assert confirmed is True
-        assert "Greenhouse confirmation text detected" in message
-        await browser.close()
-
-
-@pytest.mark.asyncio
-async def test_greenhouse_adapter_inconclusive_on_unchanged_page():
-    """Greenhouse form remaining on apply page without confirmation text is inconclusive."""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        html = """
-        <!DOCTYPE html>
-        <html>
-        <body>
-            <form id="application_form">
-                <input type="text" id="first_name" value="Jane" />
-                <button type="submit" id="submit_app">Submit Application</button>
-            </form>
-        </body>
-        </html>
-        """
-        await page.set_content(html)
-        adapter = GreenhouseApplicationAdapter()
-        res = await adapter.verify_submission(page, original_url="https://boards.greenhouse.io/stripe/jobs/1")
         assert res is None
         await browser.close()
 

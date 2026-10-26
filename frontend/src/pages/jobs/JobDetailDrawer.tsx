@@ -1,15 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ExternalLink,
-  Sparkles,
-  MapPin,
-  Briefcase,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  FileText,
-  Send,
-} from 'lucide-react';
+import { ExternalLink, Sparkles, MapPin, Briefcase, Clock, CheckCircle2, XCircle, FileText, Send } from 'lucide-react';
 import { Drawer } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
 import { StatusChip } from '../../components/ui/StatusChip';
@@ -358,9 +348,24 @@ export const JobDetailDrawer: React.FC<JobDetailDrawerProps> = ({
               <Button variant="secondary" size="sm" loading={evaluating} onClick={() => onEvaluate(model.jobId)} className="rounded-xl">
                 <span>{m ? 'Re-evaluate' : 'Evaluate fit'}</span>
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => setTailorOpen(true)} className="rounded-xl">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600 mr-1" />
-                <span>Optimize Resume</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setTailorOpen(true)}
+                className={`rounded-xl ${savedCopy ? "bg-violet-50 hover:bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/60 dark:text-violet-200 dark:border-violet-800" : ""}`}
+                title={savedCopy ? "View the tailored resume saved for this job" : "Optimize resume for this job"}
+              >
+                {savedCopy ? (
+                  <>
+                    <FileText className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 mr-1" />
+                    <span>View Tailored Resume</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600 mr-1" />
+                    <span>Optimize Resume</span>
+                  </>
+                )}
               </Button>
               <Button variant="primary" size="sm" loading={queueing} onClick={() => onQueue(model.jobId)} className="rounded-xl">
                 <Send className="w-3.5 h-3.5 mr-1" />

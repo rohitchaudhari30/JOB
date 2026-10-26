@@ -78,4 +78,6 @@ export interface MatchResult {
   location?: string;
   apply_url?: string;
   raw_posted_text?: string | null;
+  min_experience_years?: number | null;
+  max_experience_years?: number | null;
 }

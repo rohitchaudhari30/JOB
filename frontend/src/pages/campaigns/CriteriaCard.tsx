@@ -157,15 +157,11 @@ export const CriteriaCard: React.FC<CriteriaCardProps> = ({
             <Globe className="w-3.5 h-3.5 text-indigo-500" />
             <span>Job Sources &amp; Platforms</span>
           </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {[
               { id: 'naukri', label: 'Naukri.com', type: 'Portal' },
               { id: 'linkedin', label: 'LinkedIn', type: 'Portal' },
-              { id: 'greenhouse', label: 'Greenhouse', type: 'ATS' },
-              { id: 'lever', label: 'Lever ATS', type: 'ATS' },
-              { id: 'workday', label: 'Workday', type: 'ATS' },
-              { id: 'ashby', label: 'Ashby ATS', type: 'ATS' },
-            ].map((src) => {
+                          ].map((src) => {
               const isSelected = selectedSources.includes(src.id);
               return (
                 <button

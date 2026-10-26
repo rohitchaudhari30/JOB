@@ -19,9 +19,10 @@ export const NextRaiseStep3: React.FC<Props> = ({ item, onBack, onSave, onDownlo
   const [textSize, setTextSize] = useState<'Small' | 'Normal' | 'Large'>('Normal');
   const [pageMargin, setPageMargin] = useState<'Narrow' | 'Normal' | 'Wide'>('Normal');
   const [gapSize, setGapSize] = useState<'Tight' | 'Normal' | 'Airy'>('Normal');
-  const [isOnePage, setIsOnePage] = useState<boolean>(false);
-
   const nr = item.analysis?.nextraise;
+  const originalPageCount = nr?.original_page_count || 1;
+  const [isOnePage, setIsOnePage] = useState<boolean>(originalPageCount === 1);
+
   const structured = nr?.structured_resume;
 
   // Editor states (live editable)
@@ -270,6 +271,7 @@ export const NextRaiseStep3: React.FC<Props> = ({ item, onBack, onSave, onDownlo
             gapSize={gapSize}
             isOnePage={isOnePage}
             onToggleOnePage={handleToggleOnePage}
+            originalPageCount={originalPageCount}
             fileName={item.file_name || `${personal.firstName}_${personal.lastName}_Resume.pdf`}
           />
         </div>

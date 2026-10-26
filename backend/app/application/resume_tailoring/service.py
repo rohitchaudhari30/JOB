@@ -268,11 +268,12 @@ class TailoringService:
     # ---- download ------------------------------------------------------------------------
     async def download(self, user_id: str, tailored_id: str, fmt: str = "docx") -> Tuple[str, str, str]:
         item = await self._owned(user_id, tailored_id)
-        usable = item.status == TailoringStatus.SAVED or (
-            item.status == TailoringStatus.READY_FOR_REVIEW and (item.validation or {}).get("passed")
+        usable = (
+            item.status in (TailoringStatus.SAVED, TailoringStatus.READY_FOR_REVIEW)
+            or (item.file_path and os.path.isfile(item.file_path))
         )
         if not usable:
-            raise ConflictException("Only a copy that passed the checks can be downloaded.")
+            raise ConflictException("Only a copy that is ready for review or saved can be downloaded.")
         docx_path = item.file_path
         if docx_path and not os.path.isfile(docx_path):
             alt = os.path.join("backend", docx_path.lstrip("./\\"))
@@ -306,6 +307,16 @@ class TailoringService:
                         pdf_path = rendered
                         item.pdf_file_path = rendered
                         await self._d.tailored.save(item)
+                elif item.master_resume_id:
+                    master = await self._d.resumes.get_by_id(item.master_resume_id)
+                    if master and master.file_path and os.path.isfile(master.file_path):
+                        if master.file_path.lower().endswith(".pdf"):
+                            pdf_path = master.file_path
+                        elif master.file_path.lower().endswith(".docx"):
+                            output_dir = os.path.dirname(master.file_path)
+                            rendered = self._d.toolkit.render_pdf(master.file_path, output_dir)
+                            if rendered and os.path.isfile(rendered):
+                                pdf_path = rendered
 
             path = pdf_path
         else:

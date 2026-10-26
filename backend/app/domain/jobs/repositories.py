@@ -26,11 +26,15 @@ class JobRepository(ABC):
         skip: int = 0,
         limit: int = 50,
         search: str | None = None,
+        role: str | None = None,
+        min_experience: float | None = None,
+        max_experience: float | None = None,
         location: str | None = None,
         source_id: str | None = None,
         posted_within: str | None = None,
         freshness_bucket: str | None = None,
         sort_by: str | None = "newest",
+        exclude_job_ids: list[str] | None = None,
     ) -> List[Job]:
         pass
 
@@ -38,10 +42,14 @@ class JobRepository(ABC):
     async def count_jobs(
         self,
         search: str | None = None,
+        role: str | None = None,
+        min_experience: float | None = None,
+        max_experience: float | None = None,
         location: str | None = None,
         source_id: str | None = None,
         posted_within: str | None = None,
         freshness_bucket: str | None = None,
+        exclude_job_ids: list[str] | None = None,
     ) -> int:
         pass
 

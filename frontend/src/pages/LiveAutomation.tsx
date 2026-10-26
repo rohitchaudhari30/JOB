@@ -50,6 +50,13 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
   useEffect(() => {
     // Clear legacy desktop window toggle to ensure pure in-UI streaming
     localStorage.removeItem('show_desktop_browser');
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get('action');
+      if (action === 'captcha' || action === 'otp') {
+        setOtpModalOpen(true);
+      }
+    }
   }, []);
 
 
@@ -136,15 +143,29 @@ export const LiveAutomation: React.FC<LiveAutomationProps> = ({
   };
 
   const handleResume = async () => {
-    if (!activeRun) return;
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const appId = searchParams?.get('app_id');
+    const runId = activeRun?.run_id || searchParams?.get('run_id');
+
+    if (!runId && !appId) {
+      showError('No active automation run or application found to resume.');
+      return;
+    }
+
     try {
-      await api.resumeRun(activeRun.run_id, otpValue || undefined);
-      wsClient.sendCommand('RESUME', activeRun.run_id, otpValue || undefined);
+      if (runId) {
+        await api.resumeRun(runId, otpValue || undefined);
+        wsClient.sendCommand('RESUME', runId, otpValue || undefined);
+      }
+      if (appId) {
+        await api.resumeApplication(appId, otpValue || undefined);
+      }
+      showSuccess('Verification submitted! Resuming automation...');
       setOtpModalOpen(false);
       setOtpValue('');
       onRefreshStatus();
     } catch (e: any) {
-      showError(`Could not resume the run: ${e.response?.data?.detail || e.message}`);
+      showError(`Could not resume: ${e.response?.data?.detail || e.message}`);
     }
   };
 

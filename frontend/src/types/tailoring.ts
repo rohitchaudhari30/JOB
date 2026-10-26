@@ -103,6 +103,7 @@ export interface StructuredResumeData {
   education?: StructuredEducation[];
   certifications?: string[];
   raw_text?: string;
+  section_order?: string[];
 }
 
 export interface NextRaiseComparison {
@@ -126,6 +127,7 @@ export interface NextRaiseComparison {
   missing_keywords: { name: string; category: string; selected: boolean }[];
   structured_resume: StructuredResumeData;
   scored_resume_name: string;
+  original_page_count?: number;
 }
 
 export interface TailoredResume {

@@ -188,7 +188,7 @@ class DashboardService:
                         title=f"OTP Verification Required: {comp_text}",
                         description=f"Job application for '{title_text}' is paused waiting for OTP input.",
                         action_label="Solve OTP",
-                        action_url="/applications",
+                        action_url=f"/live-console?app_id={b_app.id}&action=otp",
                         severity="CRITICAL",
                     )
                 )
@@ -200,7 +200,7 @@ class DashboardService:
                         title=f"CAPTCHA Challenge: {comp_text}",
                         description=f"Interactive CAPTCHA detected for '{title_text}'. Requires manual resolution.",
                         action_label="Solve CAPTCHA",
-                        action_url="/applications",
+                        action_url=f"/live-console?app_id={b_app.id}&action=captcha",
                         severity="CRITICAL",
                     )
                 )
@@ -212,7 +212,7 @@ class DashboardService:
                         title=f"Review Pending: {comp_text}",
                         description=f"Application for '{title_text}' requires your review before submission.",
                         action_label="Review & Approve",
-                        action_url="/applications",
+                        action_url=f"/applications/{b_app.id}?action=approve",
                         severity="HIGH",
                     )
                 )

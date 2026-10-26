@@ -1,3 +1,4 @@
+import re
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,46 @@ logger = logging.getLogger("app.application.jobs")
 
 
 class DiscoverJobsUseCase:
+    @staticmethod
+    def _is_relevant_job(job: Job, filters: SearchQueryFilter) -> tuple[bool, str]:
+        """Hard constraint gatekeeper: validates title relevance and experience boundaries."""
+        # 1. Title Relevance Gate
+        if filters.roles and len(filters.roles) > 0 and getattr(filters, "strict_role_match", True):
+            job_title_lower = (job.title or "").lower().strip()
+            matched_role = False
+            for target_role in filters.roles:
+                role_lower = target_role.lower().strip()
+                if not role_lower:
+                    continue
+                if role_lower in job_title_lower:
+                    matched_role = True
+                    break
+                role_tokens = set(re.findall(r'\b[a-z]{3,}\b', role_lower))
+                title_tokens = set(re.findall(r'\b[a-z]{3,}\b', job_title_lower))
+                if role_tokens and len(role_tokens & title_tokens) / len(role_tokens) >= 0.5:
+                    matched_role = True
+                    break
+
+            if not matched_role:
+                return False, f"Title '{job.title}' does not match requested roles: {filters.roles}"
+
+        # 2. Seniority / Experience Range Gate
+        target_exp = filters.experience if filters.experience is not None else filters.min_experience
+        if target_exp is not None and getattr(filters, "strict_experience_match", True):
+            if job.min_experience_years and job.min_experience_years > (target_exp + 2.5):
+                return False, f"Experience mismatch: job requires min {job.min_experience_years} yrs, target is {target_exp} yrs"
+            if job.max_experience_years and job.max_experience_years < (target_exp - 3.0) and job.max_experience_years > 0:
+                return False, f"Experience mismatch: job capped at {job.max_experience_years} yrs, target is {target_exp} yrs"
+
+            if target_exp <= 3.0:
+                senior_markers = ["director", "vice president", "vp", "head of", "principal", "staff engineer", "chief"]
+                title_lower = (job.title or "").lower()
+                for marker in senior_markers:
+                    if marker in title_lower:
+                        return False, f"Seniority mismatch: '{job.title}' requires senior leadership level, target exp is {target_exp} yrs"
+
+        return True, "OK"
+
     """Orchestrates automated job discovery using platform adapters and database deduplication."""
 
     def __init__(
@@ -61,6 +102,7 @@ class DiscoverJobsUseCase:
         new_saved = 0
         duplicates = 0
         enqueued_count = 0
+        filtered_out_count = 0
         saved_jobs: List[Job] = []
 
         try:
@@ -145,6 +187,7 @@ class DiscoverJobsUseCase:
             "source": source_type,
             "discovered_total": discovered_total,
             "new_jobs_count": new_saved,
+            "filtered_out_count": filtered_out_count,
             "skipped_duplicates": duplicates,
             "enqueued_count": enqueued_count,
             "evaluation_status": "ENQUEUED" if enqueued_count > 0 else "SKIPPED",
@@ -179,28 +222,40 @@ class ListJobsUseCase:
         skip: int = 0,
         limit: int = 50,
         search: Optional[str] = None,
+        role: Optional[str] = None,
+        min_experience: Optional[float] = None,
+        max_experience: Optional[float] = None,
         location: Optional[str] = None,
         source_id: Optional[str] = None,
         posted_within: Optional[str] = None,
         freshness_bucket: Optional[str] = None,
         sort_by: Optional[str] = "newest",
+        exclude_job_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         jobs = await self._job_repo.list_jobs(
             skip=skip,
             limit=limit,
             search=search,
+            role=role,
+            min_experience=min_experience,
+            max_experience=max_experience,
             location=location,
             source_id=source_id,
             posted_within=posted_within,
             freshness_bucket=freshness_bucket,
             sort_by=sort_by,
+            exclude_job_ids=exclude_job_ids,
         )
         total_count = await self._job_repo.count_jobs(
             search=search,
+            role=role,
+            min_experience=min_experience,
+            max_experience=max_experience,
             location=location,
             source_id=source_id,
             posted_within=posted_within,
             freshness_bucket=freshness_bucket,
+            exclude_job_ids=exclude_job_ids,
         )
         return {
             "total": total_count,

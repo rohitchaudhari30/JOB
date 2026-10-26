@@ -9,7 +9,7 @@ class BaseJobSourceAdapter(ABC):
     @property
     @abstractmethod
     def source_type(self) -> str:
-        """Returns unique platform identifier, e.g. 'naukri', 'linkedin', 'greenhouse'."""
+        """Returns unique platform identifier, e.g. 'naukri', 'linkedin'."""
         pass
 
     @property

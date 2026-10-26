@@ -426,7 +426,7 @@ class PlatformConnectionModel(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    platform = Column(String(64), nullable=False, index=True)  # 'naukri', 'linkedin', 'greenhouse', etc.
+    platform = Column(String(64), nullable=False, index=True)  # 'naukri', 'linkedin'
     connection_type = Column(String(32), default="BROWSER_SESSION", nullable=False)
     status = Column(String(32), default="NOT_CONNECTED", nullable=False, index=True)
     external_account_reference = Column(String(255), nullable=True)

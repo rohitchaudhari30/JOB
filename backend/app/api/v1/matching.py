@@ -79,6 +79,8 @@ class MatchResultResponse(BaseModel):
     location: Optional[str] = None
     apply_url: Optional[str] = None
     raw_posted_text: Optional[str] = None
+    min_experience_years: Optional[float] = None
+    max_experience_years: Optional[float] = None
 
 
 class EvaluateMatchRequest(BaseModel):
@@ -129,6 +131,8 @@ def _to_response_dto(m: Any) -> MatchResultResponse:
         location=m.location,
         apply_url=m.apply_url,
         raw_posted_text=m.raw_posted_text,
+        min_experience_years=getattr(m, "min_experience_years", None),
+        max_experience_years=getattr(m, "max_experience_years", None),
     )
 
 

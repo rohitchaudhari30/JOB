@@ -19,6 +19,7 @@ import {
 
 import { isUuidString, resolvePlatformName } from '../utils/applicationHelpers';
 import { ApplicationsHeader } from './applications/ApplicationsHeader';
+import { TopProgressBar } from '../components/ui/Skeleton';
 import { ApplicationsToolbar } from './applications/ApplicationsToolbar';
 import { SecondaryFilterBar } from './applications/SecondaryFilterBar';
 import { ApplicationsTable } from './applications/ApplicationsTable';
@@ -251,7 +252,8 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
   const hasActiveSecondaryFilters = Boolean(companyFilter || minMatchFilter > 0 || fromDate || toDate);
 
   return (
-    <div className="space-y-5 animate-fadeIn">
+    <div className="space-y-5 animate-fadeIn relative">
+      <TopProgressBar active={loading} className="rounded-full" />
       <ApplicationsHeader loadData={loadData} loading={loading} stats={stats} />
 
       <ApplicationKpis
@@ -270,7 +272,7 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
 
         <SecondaryFilterBar showFilterPanel={showFilterPanel} hasActiveSecondaryFilters={hasActiveSecondaryFilters} companyFilter={companyFilter} setCompanyFilter={setCompanyFilter} minMatchFilter={minMatchFilter} setMinMatchFilter={setMinMatchFilter} fromDate={fromDate} setFromDate={setFromDate} toDate={toDate} setToDate={setToDate} />
 
-        <ApplicationsTable loading={loading} applications={applications} filteredApplications={filteredApplications} paginatedApplications={paginatedApplications} matchScores={matchScores} expandedReasonId={expandedReasonId} setExpandedReasonId={setExpandedReasonId} sortColumn={sortColumn} setSortColumn={setSortColumn} sortDirection={sortDirection} setSortDirection={setSortDirection} currentPage={currentPage} setCurrentPage={setCurrentPage} pageSize={pageSize} setPageSize={setPageSize} setSelectedFilter={setSelectedFilter} setSearchQuery={setSearchQuery} setCompanyFilter={setCompanyFilter} setMinMatchFilter={setMinMatchFilter} setFromDate={setFromDate} setToDate={setToDate} openDrawer={openDrawer} handleApprove={handleApprove} handleReject={handleReject} handleRetry={handleRetry} setSelectedAppForRationale={setSelectedAppForRationale} setSelectedAppForReconciliation={setSelectedAppForReconciliation} openScreenshotPreview={openScreenshotPreview} onNavigate={onNavigate} />
+        <ApplicationsTable loading={loading} selectedAppId={drawerAppId} applications={applications} filteredApplications={filteredApplications} paginatedApplications={paginatedApplications} matchScores={matchScores} expandedReasonId={expandedReasonId} setExpandedReasonId={setExpandedReasonId} sortColumn={sortColumn} setSortColumn={setSortColumn} sortDirection={sortDirection} setSortDirection={setSortDirection} currentPage={currentPage} setCurrentPage={setCurrentPage} pageSize={pageSize} setPageSize={setPageSize} setSelectedFilter={setSelectedFilter} setSearchQuery={setSearchQuery} setCompanyFilter={setCompanyFilter} setMinMatchFilter={setMinMatchFilter} setFromDate={setFromDate} setToDate={setToDate} openDrawer={openDrawer} handleApprove={handleApprove} handleReject={handleReject} handleRetry={handleRetry} setSelectedAppForRationale={setSelectedAppForRationale} setSelectedAppForReconciliation={setSelectedAppForReconciliation} openScreenshotPreview={openScreenshotPreview} onNavigate={onNavigate} />
       </div>
 
       {(() => {
@@ -304,6 +306,9 @@ export const ApplicationCRM: React.FC<ApplicationCRMProps> = ({ onNavigate }) =>
               closeDrawer();
               setSelectedAppForReconciliation(a);
             }}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onNavigate={onNavigate}
             onResumeChoice={async (a, useTailored) => {
               try {
                 const updated = await api.setResumeChoice(a.id, useTailored);

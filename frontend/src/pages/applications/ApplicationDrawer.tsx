@@ -26,6 +26,9 @@ interface ApplicationDrawerProps {
   onReconcile: (app: Application) => void;
   /** Switch this application between the saved tailored copy and the master resume. */
   onResumeChoice?: (app: Application, useTailored: boolean) => void;
+  onApprove?: (id: string) => void;
+  onReject?: (id: string) => void;
+  onNavigate?: (tab: any) => void;
 }
 
 const fmt = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '—');
@@ -50,6 +53,9 @@ export const ApplicationDrawer: React.FC<ApplicationDrawerProps> = ({
   onScreenshot,
   onReconcile,
   onResumeChoice,
+  onApprove,
+  onReject,
+  onNavigate,
 }) => {
   const open = Boolean(app && view);
   const hasSaved = useHasSavedTailored(app?.job_id ?? '');
@@ -112,6 +118,48 @@ export const ApplicationDrawer: React.FC<ApplicationDrawerProps> = ({
             <div role="note" className="p-3 rounded-lg bg-amber-50 border border-amber-300 text-sm text-amber-900 dark:bg-amber-950/30 dark:border-amber-700/50 dark:text-amber-200">
               The submission outcome is uncertain. Confirm on the portal whether it was sent before retrying, to
               avoid a duplicate application.
+            </div>
+          )}
+
+          {app.workflow_state === 'APPROVAL_REQUIRED' && (
+            <div role="alert" className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <span className="font-semibold text-amber-900 dark:text-amber-200">
+                This application requires your review before submission.
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {onApprove && (
+                  <Button variant="primary" size="sm" onClick={() => { onApprove(app.id); onClose(); }}>
+                    Approve & Submit
+                  </Button>
+                )}
+                {onReject && (
+                  <Button size="sm" onClick={() => { onReject(app.id); onClose(); }}>
+                    Dismiss
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {(app.workflow_state === 'PAUSED_CAPTCHA' || app.workflow_state === 'PAUSED_OTP') && (
+            <div role="alert" className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <span className="font-semibold text-rose-900 dark:text-rose-200">
+                {app.workflow_state === 'PAUSED_CAPTCHA'
+                  ? 'Interactive CAPTCHA challenge is active.'
+                  : 'OTP verification is required to resume.'}
+              </span>
+              {onNavigate && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    onClose();
+                    onNavigate(`/live-console?app_id=${app.id}&action=${app.workflow_state === 'PAUSED_CAPTCHA' ? 'captcha' : 'otp'}`);
+                  }}
+                >
+                  Solve in Live Console
+                </Button>
+              )}
             </div>
           )}
 

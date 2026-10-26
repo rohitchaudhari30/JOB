@@ -14,7 +14,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
   const [connections, setConnections] = useState<PlatformConnectionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [filterCategory, setFilterCategory] = useState<'ALL' | 'PORTAL' | 'ATS' | 'CONNECTED'>('ALL');
+  const [filterCategory, setFilterCategory] = useState<'ALL' | 'CONNECTED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeModal, setActiveModal] = useState<{ platform: string; name: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -107,16 +107,11 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
       conn.platform.toLowerCase().includes(searchQuery.toLowerCase());
 
     if (!matchesSearch) return false;
-
-    if (filterCategory === 'PORTAL') return conn.category === 'PORTAL_DISCOVERY';
-    if (filterCategory === 'ATS') return conn.category === 'ATS_APPLICATION';
     if (filterCategory === 'CONNECTED') return conn.status === 'CONNECTED';
     return true;
   });
 
-  const portalCount = connections.filter((c) => c.category === 'PORTAL_DISCOVERY').length;
-  const atsCount = connections.filter((c) => c.category === 'ATS_APPLICATION').length;
-  // ATS boards need no login, so only count platforms that really have a saved login (CON-02).
+    // ATS boards need no login, so only count platforms that really have a saved login (CON-02).
   const connectedCount = connections.filter((c) => c.is_auth_required && c.status === 'CONNECTED').length;
 
   return (
@@ -134,7 +129,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Connect search portals with zero-password session sync and manage direct ATS application adapters.
+            Connect Naukri and LinkedIn job portals with zero-password session sync.
           </p>
         </div>
 
@@ -188,26 +183,7 @@ export const PlatformConnections: React.FC<PlatformConnectionsProps> = ({ onNavi
           >
             All ({connections.length})
           </button>
-          <button type="button"
-            onClick={() => setFilterCategory('PORTAL')}
-            className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              filterCategory === 'PORTAL'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            Job Portals ({portalCount})
-          </button>
-          <button type="button"
-            onClick={() => setFilterCategory('ATS')}
-            className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              filterCategory === 'ATS'
-                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            Company ATS ({atsCount})
-          </button>
+          
           <button type="button"
             onClick={() => setFilterCategory('CONNECTED')}
             className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${

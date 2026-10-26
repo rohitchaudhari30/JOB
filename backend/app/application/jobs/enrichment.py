@@ -16,7 +16,7 @@ def detect_job_source_type(job: Job) -> Optional[str]:
     try:
         supported = adapter_registry.list_supported_sources()
     except Exception:
-        supported = ["naukri", "linkedin", "greenhouse", "lever", "ashby", "workday"]
+        supported = ["naukri", "linkedin"]
 
     candidate = (job.source_type or job.source_id or "").lower().strip()
     if candidate in supported:

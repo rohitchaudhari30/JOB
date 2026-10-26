@@ -6,6 +6,7 @@ import { getDerivedStatus, needsAttention, formatExperience, formatSalary, forma
 
 interface Props {
   app: Application;
+  isSelected?: boolean;
   fallbackScore?: number;
   isExpanded: boolean;
   onToggleReason: (id: string | null) => void;
@@ -20,7 +21,7 @@ interface Props {
 
 /** One pipeline row plus its expandable failure/diagnostics row. */
 export const ApplicationRow: React.FC<Props> = ({
-  app, fallbackScore, isExpanded, onToggleReason, onOpen, onApprove, onReject, onRetry, onRationale, onReconcile, onScreenshot,
+  app, fallbackScore, isExpanded, onToggleReason, onOpen, onApprove, onReject, onRetry, onRationale, onReconcile, onScreenshot, isSelected,
 }) => {
     const statusObj = getDerivedStatus(app);
   const matchScore = app.match_score ?? fallbackScore;
@@ -40,7 +41,7 @@ export const ApplicationRow: React.FC<Props> = ({
 
   return (
     <React.Fragment key={app.id}>
-      <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors group">
+      <tr className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors group ${isSelected ? 'bg-indigo-50/80 dark:bg-indigo-950/40 ring-1 ring-inset ring-indigo-500/60' : ''}`}>
         {/* Position (Job title + Company & portal subtitle) */}
         <td className="py-3.5 px-4 align-top max-w-[280px]">
           <button
